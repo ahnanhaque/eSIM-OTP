@@ -1,7 +1,7 @@
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
-const path = require("path"); // পাথ মডিউল অ্যাড করা হয়েছে
+const path = require("path"); // পাথ মডিউল অ্যাড করা হয়েছে
 const iva = require("./iva"); // Import the updated iva.js
 
 // ==============================================================================
@@ -33,7 +33,7 @@ bot.getMe().then(info => botInfo = info).catch(console.error);
 // ==============================================================================
 // =================   2. DATABASE & BOT HELPERS             ====================
 // ==============================================================================
-// পাথ আপডেট করা হয়েছে যাতে PM2 সবসময় সঠিক ফোল্ডারে সেভ করে
+// পাথ আপডেট করা হয়েছে যাতে PM2 সবসময় সঠিক ফোল্ডারে সেভ করে
 const DB_FILE = path.join(__dirname, "database.json"); 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 
@@ -58,7 +58,7 @@ if (db.cookies && db.cookies["XSRF-TOKEN"]) {
     iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
 }
 
-// সিঙ্ক্রোনাস সেভ ফাংশন অ্যাড করা হয়েছে যাতে ডাটা মিস না হয়
+// সিঙ্ক্রোনাস সেভ ফাংশন অ্যাড করা হয়েছে যাতে ডাটা মিস না হয়
 function saveDB() {
   try {
     const tempFile = DB_FILE + ".tmp";
@@ -590,6 +590,15 @@ async function checkAllOTP() {
 
   isHeavyChecking = false;
 }
+
+// ==============================================================================
+// =================    7. WEB SERVER PING ROUTE             ====================
+// ==============================================================================
+
+// 🟢 এই অংশটুকু যোগ করা হয়েছে cron-job.org এর 200 OK রেসপন্স এর জন্য
+app.get('/', (req, res) => {
+  res.status(200).send('Bot is running perfectly!');
+});
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
