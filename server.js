@@ -12,11 +12,9 @@ const ADMIN_ID = 8278612952;
 const GROUP_CHAT_ID = -1003852968469; 
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 
-// 🟢 MONGODB URL 
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
-
-// 🟢 PORT for Render
 const PORT = process.env.PORT || 3000;
+
 const app = express();
 app.use(express.json());
 
@@ -34,9 +32,8 @@ bot.getMe().then(info => botInfo = info).catch(console.error);
 const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: { "XSRF-TOKEN": "", "ivas_sms_session": "" } };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 
-// ডাটাবেস সেভ ফাংশন (সরাসরি ক্লাউডে সেভ করবে)
 function saveDB() { BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error("DB Save Error:", err)); }
 
 function getBalance(chatId) { return db.balances[chatId] || 0; }
@@ -58,7 +55,6 @@ function sendStockAlert(rangeName, count) {
 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, cachedToken = null;
 
-// Keep Session Active Trigger
 setInterval(async () => {
   try {
     const token = await iva.fetchToken();
@@ -153,11 +149,22 @@ bot.on('message', async (msg) => {
     else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated!\nUsers will now get **${limit} numbers** at a time.`); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }); delete userStates[chatId]; }
   }
   else if (userStates[chatId] === "WAITING_FOR_COOKIES" && isAdmin(chatId, username)) {
-    const cookieStr = text.trim(), xsrfMatch = cookieStr.match(/XSRF-TOKEN=([^;]+)/), sessionMatch = cookieStr.match(/ivas_sms_session=([^;]+)/);
-    if (!sessionMatch) { bot.sendMessage(chatId, "❌ **ivas_sms_session** cookie string এ পাওয়া যায়নি! আবার পাঠান।", { parse_mode: "Markdown" }); return; }
-    db.cookies["XSRF-TOKEN"] = xsrfMatch ? xsrfMatch[1].trim() : ""; db.cookies["ivas_sms_session"] = sessionMatch[1].trim();
-    saveDB(); iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]); cachedToken = null;
-    bot.sendMessage(chatId, "✅ **Cookies have been successfully updated directly to MongoDB!**", { parse_mode: "Markdown" }); 
+    const cookieStr = text.trim();
+    // XSRF-TOKEN টা বের করে নেওয়া হচ্ছে headers এ বসানোর জন্য
+    const xsrfMatch = cookieStr.match(/XSRF-TOKEN=([^;]+)/);
+    if (!xsrfMatch) { 
+        bot.sendMessage(chatId, "❌ XSRF-TOKEN cookie string এ পাওয়া যায়নি! পুরো কুকি ঠিকমতো কপি করে আবার দিন।", { parse_mode: "Markdown" }); 
+        return; 
+    }
+    
+    db.cookies["XSRF-TOKEN"] = xsrfMatch[1].trim();
+    db.cookies["raw_cookie"] = cookieStr; // পুরো স্ট্রিংটা (Cf_clearance সহ) ডাটাবেসে সেভ হচ্ছে
+    saveDB(); 
+
+    iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["raw_cookie"]); 
+    cachedToken = null;
+
+    bot.sendMessage(chatId, "✅ **Cookies (including Cloudflare clearance) have been successfully updated!**", { parse_mode: "Markdown" }); 
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
     delete userStates[chatId];
   }
@@ -199,8 +206,7 @@ bot.on('callback_query', async (query) => {
   if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_")) && !isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_update_cookies") { userStates[chatId] = "WAITING_FOR_COOKIES"; bot.sendMessage(chatId, "🍪 **Update iVAS Cookies (Manual):**\n\nপুরো cookie string পাঠান:", { parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
-  
+  else if (data === "admin_update_cookies") { userStates[chatId] = "WAITING_FOR_COOKIES"; bot.sendMessage(chatId, "🍪 **Update iVAS Cookies:**\n\nব্রাউজার থেকে কপি করা পুরো cookie string পাঠান:", { parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Number Limit Setup:**\n\nSend new limit (e.g., 2, 5, 10):`); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Broadcast Mode:**\n\nType the message you want to send to all users."); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { bot.answerCallbackQuery(query.id); bot.deleteMessage(chatId, messageId).catch(()=>{}); bot.sendMessage(chatId, "💸 **Withdrawal Request**\n\nEnter your 11-digit bKash or Nagad number:"); userStates[chatId] = "WAITING_FOR_BKASH"; }
@@ -231,7 +237,7 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id, { text: "🔄 Refreshing list..." });
     try {
       let token = cachedToken || await iva.fetchToken();
-      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nPlease update cookies manually from the Admin Panel.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
+      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nCloudflare block or invalid cookie. Please provide your latest raw cookie.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
       const resData = await iva.getNumbers(token); let grouped = {}; 
       if (resData.aaData) resData.aaData.forEach(row => { const range = row[0]; const num = row[2]; if (!inUseNumbers[num]) { if (!grouped[range]) grouped[range] = []; grouped[range].push(num); } });
       for (const r in db.availableNumbers) if (!grouped[r]) grouped[r] = db.availableNumbers[r];
@@ -324,7 +330,6 @@ async function checkAllOTP() {
 
 app.get('/', (req, res) => res.status(200).send('Bot is running perfectly!'));
 
-// 🟢 MONGODB CONNECT & START SERVER
 mongoose.connect(MONGODB_URI).then(async () => {
   console.log("✅ MongoDB Connected!");
   
@@ -332,10 +337,14 @@ mongoose.connect(MONGODB_URI).then(async () => {
   if (data) db = { ...db, ...data.toObject() };
   else await BotDB.create(db);
 
-  // Load cookies from MongoDB on startup
-  if (db.cookies && db.cookies["XSRF-TOKEN"]) {
-      iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
-      console.log("✅ Loaded saved cookies from MongoDB!");
+  // 🟢 Load new raw cookies on startup
+  if (db.cookies && db.cookies["raw_cookie"]) {
+      iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["raw_cookie"]);
+      console.log("✅ Loaded saved raw cookies from MongoDB!");
+  } else if (db.cookies && db.cookies["ivas_sms_session"]) {
+      // Fallback for older cookie format
+      const fallbackCookie = `XSRF-TOKEN=${db.cookies["XSRF-TOKEN"]}; ivas_sms_session=${db.cookies["ivas_sms_session"]}`;
+      iva.setCookies(db.cookies["XSRF-TOKEN"], fallbackCookie);
   }
 
   app.listen(PORT, () => {
