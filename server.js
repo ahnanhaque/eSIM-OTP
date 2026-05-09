@@ -7,13 +7,11 @@ const iva = require("./iva");
 // =================        1. CONFIGURATION & SETUP         ====================
 // ==============================================================================
 
-// ⚠️ YOUR BOT CONFIGURATION HERE
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
 const GROUP_CHAT_ID = -1003852968469; 
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 
-// 🟢 MongoDB URL এবং iVAS Login Details
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com";
 const IVAS_PASSWORD = "@ahnan5566";
@@ -38,24 +36,13 @@ const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: { "XSRF-TOKEN": "", "ivas_sms_session": "" } };
 
-// ডাটাবেস সেভ ফাংশন (এখন এটি সরাসরি ক্লাউডে সেভ করবে)
-function saveDB() {
-  BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error("DB Save Error:", err));
-}
-
+function saveDB() { BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error("DB Save Error:", err)); }
 function getBalance(chatId) { return db.balances[chatId] || 0; }
 function addBalance(chatId, amount) { if (!db.balances[chatId]) db.balances[chatId] = 0; db.balances[chatId] += amount; saveDB(); }
 function isSuperAdmin(chatId) { return chatId === ADMIN_ID; }
-function isAdmin(chatId, username) {
-  if (isSuperAdmin(chatId)) return true;
-  let un = username ? "@" + username.replace('@', '').toLowerCase() : null;
-  return un && db.adminUsernames.includes(un);
-}
+function isAdmin(chatId, username) { if (isSuperAdmin(chatId)) return true; let un = username ? "@" + username.replace('@', '').toLowerCase() : null; return un && db.adminUsernames.includes(un); }
 
-async function isUserMember(userId) {
-  if (isSuperAdmin(userId)) return true; 
-  try { const member = await bot.getChatMember(GROUP_CHAT_ID, userId); return ['creator', 'administrator', 'member', 'restricted'].includes(member.status); } catch (err) { return false; }
-}
+async function isUserMember(userId) { if (isSuperAdmin(userId)) return true; try { const member = await bot.getChatMember(GROUP_CHAT_ID, userId); return ['creator', 'administrator', 'member', 'restricted'].includes(member.status); } catch (err) { return false; } }
 
 function sendJoinPrompt(chatId) {
   const joinMenu = { inline_keyboard: [[{ text: "📢 Join Group", url: GROUP_INVITE_LINK }], [{ text: "🔄 Check Again", callback_data: "check_join" }]] };
@@ -63,27 +50,18 @@ function sendJoinPrompt(chatId) {
 }
 
 function sendStockAlert(rangeName, count) {
-  if (count <= 0) return;
-  const info = getCountryInfo(rangeName);
+  if (count <= 0) return; const info = getCountryInfo(rangeName);
   bot.sendMessage(GROUP_CHAT_ID, `🚀 **NEW STOCK ALERT** 🚀\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📦 **Available:** ${count} Numbers\n🔵 **Service:** FACEBOOK OTP\n\n☎️ [Order Now - Click Here](https://t.me/${botInfo.username || "eSIM_OTP_Bot"})`, { parse_mode: "Markdown", disable_web_page_preview: true }).catch(()=>{});
 }
 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, cachedToken = null;
 
-// Keep Session Active + Auto Login Trigger
+// Keep Session Active Trigger (No Auto-Login Here)
 setInterval(async () => {
   try {
     const token = await iva.fetchToken();
     if (token) { cachedToken = token; console.log(`[Keep-Alive] Session active.`); }
-    else {
-      console.log(`[Keep-Alive] Session Expired! Triggering Auto-Login...`);
-      const loggedIn = await iva.autoLogin(IVAS_EMAIL, IVAS_PASSWORD);
-      if (loggedIn) {
-        db.cookies = iva.getCookies();
-        saveDB();
-        cachedToken = await iva.fetchToken();
-      }
-    }
+    else console.log(`[Keep-Alive] Session Expired! Waiting for Admin to login via CAPTCHA.`);
   } catch (error) {}
 }, 3 * 60 * 1000); 
 
@@ -119,7 +97,7 @@ function getReplyMenu(chatId, username) {
 const platformMenu = { inline_keyboard: [[{ text: "📘 Facebook", callback_data: "menu_country_fb" }], [{ text: "❌ Close Menu", callback_data: "close_menu" }]] };
 
 function getAdminMenu(chatId) {
-  let menu = [ [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], [{ text: "⚙️ Manage Ranges", callback_data: "admin_manage_ranges" }, { text: "➕ Add Number", callback_data: "admin_add_number" }], [{ text: "🍪 Auto-Login (Force)", callback_data: "admin_force_login" }, { text: "🍪 Update Cookies (Manual)", callback_data: "admin_update_cookies" }] ];
+  let menu = [ [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], [{ text: "⚙️ Manage Ranges", callback_data: "admin_manage_ranges" }, { text: "➕ Add Number", callback_data: "admin_add_number" }], [{ text: "🔐 Login with CAPTCHA", callback_data: "admin_captcha_login" }, { text: "🍪 Update Cookies (Manual)", callback_data: "admin_update_cookies" }] ];
   if (isSuperAdmin(chatId)) menu.push([{ text: "👑 Manage Admins", callback_data: "admin_manage_admins" }, { text: "❌ Close Menu", callback_data: "close_menu" }]); else menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
   return { inline_keyboard: menu };
 }
@@ -165,6 +143,25 @@ bot.on('message', async (msg) => {
   else if (text === "👤 Profile") bot.sendMessage(chatId, `👤 **Profile Info:**\n\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Balance:** ${getBalance(chatId).toFixed(2)} BDT\n\n🔗 **Your Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { parse_mode: "Markdown" });
   else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nContact our admin for any assistance.\n(Contact: @Excellentzqlt)", { parse_mode: "Markdown" });
   else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); }
+  
+  // 🟢 CAPTCHA SUBMISSION HANDLING
+  else if (userStates[chatId] === "WAITING_FOR_CAPTCHA" && isAdmin(chatId, username)) {
+    const captchaText = text.trim();
+    const setup = tempAdminData[chatId]?.loginSetup;
+    if (!setup) { delete userStates[chatId]; return; }
+    
+    bot.sendMessage(chatId, "⏳ **Submitting Login with CAPTCHA...**", { parse_mode: "Markdown" });
+    const success = await iva.submitCaptchaLogin(IVAS_EMAIL, IVAS_PASSWORD, captchaText, setup);
+    
+    if (success) {
+      db.cookies = iva.getCookies(); saveDB(); cachedToken = null;
+      bot.sendMessage(chatId, "✅ **Login Successful! Fresh cookies saved to MongoDB.**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" });
+    } else {
+      bot.sendMessage(chatId, "❌ **Login Failed! Wrong CAPTCHA or Credentials. Try again.**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" });
+    }
+    delete userStates[chatId]; delete tempAdminData[chatId];
+  }
+
   else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
     const limit = parseInt(text);
     if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Please enter a valid number between 1 and 20.");
@@ -217,13 +214,22 @@ bot.on('callback_query', async (query) => {
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
   else if (data === "admin_update_cookies") { userStates[chatId] = "WAITING_FOR_COOKIES"; bot.sendMessage(chatId, "🍪 **Update iVAS Cookies (Manual):**\n\nপুরো cookie string পাঠান:", { parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_force_login") { 
-    bot.editMessageText("⏳ **Logging in to iVAS automatically...**", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
-    const success = await iva.autoLogin(IVAS_EMAIL, IVAS_PASSWORD);
-    if (success) { db.cookies = iva.getCookies(); saveDB(); cachedToken = null; bot.editMessageText("✅ **Auto-Login Successful! Fresh cookies acquired.**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
-    else { bot.editMessageText("❌ **Auto-Login Failed! Please check your Email/Password in server.js.**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
+  
+  // 🟢 CAPTCHA LOGIN TRIGGER
+  else if (data === "admin_captcha_login") { 
+    bot.editMessageText("⏳ **Fetching CAPTCHA from iVAS...**", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+    const setup = await iva.getCaptchaSetup();
+    if (setup && setup.image) {
+      tempAdminData[chatId] = { loginSetup: setup };
+      userStates[chatId] = "WAITING_FOR_CAPTCHA";
+      bot.deleteMessage(chatId, messageId).catch(()=>{});
+      bot.sendPhoto(chatId, setup.image, { caption: "🖼️ **Please type the CAPTCHA text you see in the image above:**", parse_mode: "Markdown" });
+    } else {
+      bot.editMessageText("❌ **Failed to fetch CAPTCHA! Please use Manual Cookies Update.**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{});
+    }
     bot.answerCallbackQuery(query.id);
   }
+
   else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Number Limit Setup:**\n\nSend new limit (e.g., 2, 5, 10):`); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Broadcast Mode:**\n\nType the message you want to send to all users."); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { bot.answerCallbackQuery(query.id); bot.deleteMessage(chatId, messageId).catch(()=>{}); bot.sendMessage(chatId, "💸 **Withdrawal Request**\n\nEnter your 11-digit bKash or Nagad number:"); userStates[chatId] = "WAITING_FOR_BKASH"; }
@@ -254,7 +260,7 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id, { text: "🔄 Refreshing list..." });
     try {
       let token = cachedToken || await iva.fetchToken();
-      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nPlease update cookies manually from the Admin Panel.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
+      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nPlease click **"🔐 Login with CAPTCHA"** or update cookies manually.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
       const resData = await iva.getNumbers(token); let grouped = {}; 
       if (resData.aaData) resData.aaData.forEach(row => { const range = row[0]; const num = row[2]; if (!inUseNumbers[num]) { if (!grouped[range]) grouped[range] = []; grouped[range].push(num); } });
       for (const r in db.availableNumbers) if (!grouped[r]) grouped[r] = db.availableNumbers[r];
