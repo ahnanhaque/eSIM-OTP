@@ -13,7 +13,7 @@ const ADMIN_ID = 8278612952;
 const GROUP_CHAT_ID = -1003852968469; 
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 
-// 🟢 NEW: MongoDB URL এবং iVAS Login Details এখানে বসান!
+// 🟢 MongoDB URL এবং iVAS Login Details
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com";
 const IVAS_PASSWORD = "@ahnan5566";
@@ -164,7 +164,7 @@ bot.on('message', async (msg) => {
   else if (text === "💰 Balance") bot.sendMessage(chatId, `💰 **Your Current Balance:** ${getBalance(chatId).toFixed(2)} BDT\n(Minimum withdrawal 50 BDT)`, { reply_markup: { inline_keyboard: [[{ text: "💸 Withdraw", callback_data: "withdraw_funds" }]] }, parse_mode: "Markdown" });
   else if (text === "👤 Profile") bot.sendMessage(chatId, `👤 **Profile Info:**\n\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Balance:** ${getBalance(chatId).toFixed(2)} BDT\n\n🔗 **Your Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { parse_mode: "Markdown" });
   else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nContact our admin for any assistance.\n(Contact: @Excellentzqlt)", { parse_mode: "Markdown" });
-  else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" });
+  else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); }
   else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
     const limit = parseInt(text);
     if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Please enter a valid number between 1 and 20.");
@@ -175,7 +175,7 @@ bot.on('message', async (msg) => {
     if (!sessionMatch) { bot.sendMessage(chatId, "❌ **ivas_sms_session** cookie string এ পাওয়া যায়নি! আবার পাঠান।", { parse_mode: "Markdown" }); return; }
     db.cookies["XSRF-TOKEN"] = xsrfMatch ? xsrfMatch[1].trim() : ""; db.cookies["ivas_sms_session"] = sessionMatch[1].trim();
     saveDB(); iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]); cachedToken = null;
-    bot.sendMessage(chatId, "✅ **Cookies have been successfully updated!**"); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
+    bot.sendMessage(chatId, "✅ **Cookies have been successfully updated directly to MongoDB!**"); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
     delete userStates[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
@@ -254,10 +254,7 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id, { text: "🔄 Refreshing list..." });
     try {
       let token = cachedToken || await iva.fetchToken();
-      if (!token) {
-         await iva.autoLogin(IVAS_EMAIL, IVAS_PASSWORD); db.cookies = iva.getCookies(); saveDB(); token = await iva.fetchToken();
-         if (!token) return bot.editMessageText(`❌ **Session Expired! Auto-Login Failed.**\n\nPlease click **"🍪 Auto-Login (Force)"** or update cookies manually.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
-      }
+      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nPlease update cookies manually from the Admin Panel.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
       const resData = await iva.getNumbers(token); let grouped = {}; 
       if (resData.aaData) resData.aaData.forEach(row => { const range = row[0]; const num = row[2]; if (!inUseNumbers[num]) { if (!grouped[range]) grouped[range] = []; grouped[range].push(num); } });
       for (const r in db.availableNumbers) if (!grouped[r]) grouped[r] = db.availableNumbers[r];
@@ -358,7 +355,11 @@ mongoose.connect(MONGODB_URI).then(async () => {
   if (data) db = { ...db, ...data.toObject() };
   else await BotDB.create(db);
 
-  if (db.cookies && db.cookies["XSRF-TOKEN"]) iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
+  // Load cookies from MongoDB on startup
+  if (db.cookies && db.cookies["XSRF-TOKEN"]) {
+      iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
+      console.log("✅ Loaded saved cookies from MongoDB!");
+  }
 
   app.listen(PORT, () => {
     console.log(`Server is running at http://localhost:${PORT}`);
