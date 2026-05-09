@@ -81,38 +81,66 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   });
 }
 
-/* ================= AUTO LOGIN (NEW) ================= */
-async function autoLogin(email, password) {
+/* ================= CAPTCHA LOGIN SYSTEM (NEW) ================= */
+async function getCaptchaSetup() {
   try {
     const res1 = await makeRequest("GET", "/login", null, null, { "Accept": "text/html" });
     const tokenMatch = res1.body.match(/name="_token"\s+value="([^"]+)"/);
-    if (!tokenMatch) return false;
+    const captchaMatch = res1.body.match(/<img[^>]+src="([^"]*captcha[^"]*)"/i);
     
+    if (!tokenMatch || !captchaMatch) return null;
+
     let sessionCookie = '', xsrfCookie = '';
     (res1.headers['set-cookie'] || []).forEach(c => {
       if (c.includes('ivas_sms_session=')) sessionCookie = c.split(';')[0].split('=')[1];
       if (c.includes('XSRF-TOKEN=')) xsrfCookie = c.split(';')[0].split('=')[1];
     });
 
-    const postData = new URLSearchParams({ _token: tokenMatch[1], email: email, password: password }).toString();
+    let cUrl = captchaMatch[1];
+    if (!cUrl.startsWith('http')) cUrl = BASE_URL + (cUrl.startsWith('/') ? cUrl : '/' + cUrl);
+
+    const imgBuffer = await new Promise((resolve, reject) => {
+      https.get(cUrl, { headers: { "Cookie": `ivas_sms_session=${sessionCookie}; XSRF-TOKEN=${xsrfCookie}` } }, (res) => {
+        const data = [];
+        res.on('data', chunk => data.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(data)));
+      }).on('error', reject);
+    });
+
+    return { _token: tokenMatch[1], session: sessionCookie, xsrf: xsrfCookie, image: imgBuffer };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function submitCaptchaLogin(email, password, captchaText, setup) {
+  try {
+    const postData = new URLSearchParams({
+      _token: setup._token,
+      email: email,
+      password: password,
+      captcha: captchaText
+    }).toString();
 
     const res2 = await makeRequest("POST", "/login", postData, "application/x-www-form-urlencoded", {
-      "Cookie": `ivas_sms_session=${sessionCookie}; XSRF-TOKEN=${xsrfCookie}`,
+      "Cookie": `ivas_sms_session=${setup.session}; XSRF-TOKEN=${setup.xsrf}`,
       "Referer": BASE_URL + "/login"
     });
 
     let success = false;
+    let newSession = setup.session, newXsrf = setup.xsrf;
+
     (res2.headers['set-cookie'] || []).forEach(c => {
-      if (c.includes('ivas_sms_session=')) { COOKIES['ivas_sms_session'] = c.split(';')[0].split('=')[1]; success = true; }
-      if (c.includes('XSRF-TOKEN=')) COOKIES['XSRF-TOKEN'] = c.split(';')[0].split('=')[1];
+      if (c.includes('ivas_sms_session=')) { newSession = c.split(';')[0].split('=')[1]; success = true; }
+      if (c.includes('XSRF-TOKEN=')) newXsrf = c.split(';')[0].split('=')[1];
     });
 
     if (res2.status === 302 && success) {
-      console.log("✅ [IVA] Auto-Login Successful!");
+      setCookies(newXsrf, newSession);
       return true;
     }
     return false;
-  } catch (err) { return false; }
+  } catch (e) { return false; }
 }
 
 /* ================= FETCH _token ================= */
@@ -171,4 +199,4 @@ function parseSMSMessages(html, range, number, date) {
   return rows;
 }
 
-module.exports = { router, setCookies, getCookies, fetchToken, autoLogin, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL };
+module.exports = { router, setCookies, getCookies, fetchToken, getCaptchaSetup, submitCaptchaLogin, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL };
