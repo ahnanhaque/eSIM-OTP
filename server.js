@@ -14,7 +14,7 @@ const GROUP_CHAT_ID = -1003852968469;
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 
 // 🟢 NEW: MongoDB URL এবং iVAS Login Details এখানে বসান!
-const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:<db_password>@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
+const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com";
 const IVAS_PASSWORD = "@ahnan5566";
 
