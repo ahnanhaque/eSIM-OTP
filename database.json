@@ -1,0 +1,35 @@
+{
+  "balances": {
+    "1295260035": 1,
+    "8278612952": 6.5,
+    "8265422599": 10
+  },
+  "lastAssigned": {},
+  "adminUsernames": [
+    "@wizardd6t9"
+  ],
+  "users": [
+    8278612952,
+    8265422599,
+    7581363767,
+    1295260035,
+    1797947489,
+    -1003852968469
+  ],
+  "referred": {
+    "7581363767": 8265422599
+  },
+  "settings": {
+    "maxNumbers": 4
+  },
+  "availableNumbers": {},
+  "cookies": {
+    "XSRF-TOKEN": "",
+    "ivas_sms_session": ""
+  },
+  "totalOtps": {},
+  "todayHits": {
+    "date": "2026-4-11",
+    "count": 73
+  }
+}
