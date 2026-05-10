@@ -161,22 +161,22 @@ bot.on('message', async (msg) => {
     const sessionMatch = cookieStr.match(/ivas_sms_session=([^;]+)/);
 
     if (!xsrfMatch || !sessionMatch) { 
-        bot.sendMessage(chatId, "**XSRF-TOKEN** or **ivas_sms_session** is not found, please try again! ", { parse_mode: "Markdown" }); 
+        bot.sendMessage(chatId, "❌ **XSRF-TOKEN** অথবা **ivas_sms_session** খুঁজে পাওয়া যায়নি! পুরো কুকি ঠিকমতো কপি করে আবার দিন।", { parse_mode: "Markdown" }); 
         return; 
     }
     
     db.cookies["XSRF-TOKEN"] = xsrfMatch[1].trim();
     db.cookies["ivas_sms_session"] = sessionMatch[1].trim();
     
-    
+    // আমরা আর raw_cookie সেভ করছি না, ডাটাবেস একদম ক্লিন থাকবে
     
     saveDB(); 
 
-  ে
+    // মেমরিতে শুধু এই ক্লিন দুটো জিনিস যাচ্ছে
     iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]); 
     cachedToken = null;
 
-    bot.sendMessage(chatId, "**Cookies Updated Successfully!✅**", { parse_mode: "Markdown" }); 
+    bot.sendMessage(chatId, "✅ **Clean Cookies Updated!**\n\n`cf_clearance` বাদ দিয়ে শুধু `ivas_sms_session` এবং `XSRF-TOKEN` সেট করা হয়েছে।", { parse_mode: "Markdown" }); 
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
     delete userStates[chatId];
   }
@@ -249,14 +249,14 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id, { text: "🔄 Refreshing list..." });
     try {
       let token = cachedToken || await iva.fetchToken();
-      if (!token) return bot.editMessageText(`**Session Expired!**\n\nCloudflare block or invalid cookie. Please provide your latest cookie.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
+      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nCloudflare block or invalid cookie. Please provide your latest raw cookie.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
       const resData = await iva.getNumbers(token); let grouped = {}; 
       if (resData.aaData) resData.aaData.forEach(row => { const range = row[0]; const num = row[2]; if (!inUseNumbers[num]) { if (!grouped[range]) grouped[range] = []; grouped[range].push(num); } });
       for (const r in db.availableNumbers) if (!grouped[r]) grouped[r] = db.availableNumbers[r];
       tempAdminData[chatId] = Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] }));
       if (tempAdminData[chatId].length === 0) return bot.editMessageText("📭 No ranges found in iVAS.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] } });
       renderManageRangesMenu(chatId, messageId);
-    } catch (e) { bot.editMessageText("Failed to fetch numbers! Try again later.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] } }); }
+    } catch (e) { bot.editMessageText("❌ Failed to fetch numbers! Try again later.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] } }); }
   }
   else if (data.startsWith("togglerng_")) {
     const action = data.replace("togglerng_", ""); if (!tempAdminData[chatId]) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Fetch again.", show_alert: true });
@@ -343,7 +343,7 @@ async function checkAllOTP() {
 app.get('/', (req, res) => res.status(200).send('Bot is running perfectly!'));
 
 mongoose.connect(MONGODB_URI).then(async () => {
-  console.log("MongoDB Connected!");
+  console.log("✅ MongoDB Connected!");
   
   const data = await BotDB.findOne();
   if (data) db = { ...db, ...data.toObject() };
@@ -351,10 +351,10 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
   isDbLoaded = true; 
 
-  
+  // এখন ডাটাবেস থেকে শুধু ওই ক্লিন দুটো ডাটা নিয়ে মেমরিতে বসাবে
   if (db.cookies && db.cookies["XSRF-TOKEN"] && db.cookies["ivas_sms_session"]) {
       iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
-      console.log("Loaded cookies from MongoDB!");
+      console.log("✅ Loaded clean cookies from MongoDB!");
   }
 
   app.listen(PORT, () => {
@@ -362,4 +362,4 @@ mongoose.connect(MONGODB_URI).then(async () => {
     setInterval(fastPendingOTPCheck, 2000);
     setInterval(checkAllOTP, 15000); 
   });
-}).catch(err => console.log("MongoDB Connection Error:", err));
+}).catch(err => console.log("❌ MongoDB Connection Error:", err));
