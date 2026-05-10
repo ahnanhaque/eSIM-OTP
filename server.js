@@ -34,11 +34,11 @@ const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 
-// 🟢 SAFETY LOCK ADDED HERE
+// 🟢 SAFETY LOCK: ডাটাবেস লোড না হওয়া পর্যন্ত সেভ হবে না
 let isDbLoaded = false; 
 
 function saveDB() { 
-  if (!isDbLoaded) return; // ডাটাবেস লোড না হওয়া পর্যন্ত সেভ করা বন্ধ থাকবে!
+  if (!isDbLoaded) return; 
   BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error("DB Save Error:", err)); 
 }
 
@@ -156,20 +156,25 @@ bot.on('message', async (msg) => {
   }
   else if (userStates[chatId] === "WAITING_FOR_COOKIES" && isAdmin(chatId, username)) {
     const cookieStr = text.trim();
+    
     const xsrfMatch = cookieStr.match(/XSRF-TOKEN=([^;]+)/);
-    if (!xsrfMatch) { 
-        bot.sendMessage(chatId, "❌ XSRF-TOKEN cookie string এ পাওয়া যায়নি! পুরো কুকি ঠিকমতো কপি করে আবার দিন।", { parse_mode: "Markdown" }); 
+    const sessionMatch = cookieStr.match(/ivas_sms_session=([^;]+)/);
+
+    if (!xsrfMatch || !sessionMatch) { 
+        bot.sendMessage(chatId, "❌ **XSRF-TOKEN** অথবা **ivas_sms_session** খুঁজে পাওয়া যায়নি! পুরো কুকি ঠিকমতো কপি করে আবার দিন।", { parse_mode: "Markdown" }); 
         return; 
     }
     
     db.cookies["XSRF-TOKEN"] = xsrfMatch[1].trim();
+    db.cookies["ivas_sms_session"] = sessionMatch[1].trim();
     db.cookies["raw_cookie"] = cookieStr; 
+    
     saveDB(); 
 
     iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["raw_cookie"]); 
     cachedToken = null;
 
-    bot.sendMessage(chatId, "✅ **Cookies have been successfully updated directly to MongoDB!**", { parse_mode: "Markdown" }); 
+    bot.sendMessage(chatId, "✅ **Database Updated!**\n\n`ivas_sms_session` এবং `XSRF-TOKEN` সফলভাবে MongoDB-তে সেভ হয়েছে।", { parse_mode: "Markdown" }); 
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
     delete userStates[chatId];
   }
