@@ -156,7 +156,7 @@ bot.on('message', async (msg) => {
   else if (userStates[chatId] === "WAITING_FOR_COOKIES" && isAdmin(chatId, username)) {
     const cookieStr = text.trim();
     
-    // শুধু এই দুটো কাটবে, বাকি সব বাদ!
+    // এক্সট্রাক্ট করা হচ্ছে
     const xsrfMatch = cookieStr.match(/XSRF-TOKEN=([^;]+)/);
     const sessionMatch = cookieStr.match(/ivas_sms_session=([^;]+)/);
 
@@ -165,18 +165,21 @@ bot.on('message', async (msg) => {
         return; 
     }
     
+    // 🟢 নতুন লজিক: মেমোরি থেকে পুরানো raw_cookie চিরতরে মুছে ফেলা হচ্ছে
+    if (db.cookies["raw_cookie"]) {
+        delete db.cookies["raw_cookie"];
+    }
+    
+    // শুধু ক্লিন দুটো কুকি সেট করা হচ্ছে
     db.cookies["XSRF-TOKEN"] = xsrfMatch[1].trim();
     db.cookies["ivas_sms_session"] = sessionMatch[1].trim();
     
-    // আমরা আর raw_cookie সেভ করছি না, ডাটাবেস একদম ক্লিন থাকবে
-    
-    saveDB(); 
+    saveDB(); // এখন সেভ হলে raw_cookie ডাটাবেস থেকেও ডিলিট হয়ে যাবে
 
-    // মেমরিতে শুধু এই ক্লিন দুটো জিনিস যাচ্ছে
     iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]); 
     cachedToken = null;
 
-    bot.sendMessage(chatId, "✅ **Clean Cookies Updated!**\n\n`cf_clearance` বাদ দিয়ে শুধু `ivas_sms_session` এবং `XSRF-TOKEN` সেট করা হয়েছে।", { parse_mode: "Markdown" }); 
+    bot.sendMessage(chatId, "✅ **Clean Cookies Updated!**\n\n`raw_cookie` মুছে ফেলা হয়েছে এবং শুধু ক্লিন কুকি সেভ হয়েছে।", { parse_mode: "Markdown" }); 
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
     delete userStates[chatId];
   }
@@ -351,7 +354,6 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
   isDbLoaded = true; 
 
-  // এখন ডাটাবেস থেকে শুধু ওই ক্লিন দুটো ডাটা নিয়ে মেমরিতে বসাবে
   if (db.cookies && db.cookies["XSRF-TOKEN"] && db.cookies["ivas_sms_session"]) {
       iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
       console.log("✅ Loaded clean cookies from MongoDB!");
