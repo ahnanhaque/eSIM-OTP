@@ -34,7 +34,13 @@ const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 
-function saveDB() { BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error("DB Save Error:", err)); }
+// 🟢 SAFETY LOCK ADDED HERE
+let isDbLoaded = false; 
+
+function saveDB() { 
+  if (!isDbLoaded) return; // ডাটাবেস লোড না হওয়া পর্যন্ত সেভ করা বন্ধ থাকবে!
+  BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error("DB Save Error:", err)); 
+}
 
 function getBalance(chatId) { return db.balances[chatId] || 0; }
 function addBalance(chatId, amount) { if (!db.balances[chatId]) db.balances[chatId] = 0; db.balances[chatId] += amount; saveDB(); }
@@ -150,7 +156,6 @@ bot.on('message', async (msg) => {
   }
   else if (userStates[chatId] === "WAITING_FOR_COOKIES" && isAdmin(chatId, username)) {
     const cookieStr = text.trim();
-    // XSRF-TOKEN টা বের করে নেওয়া হচ্ছে headers এ বসানোর জন্য
     const xsrfMatch = cookieStr.match(/XSRF-TOKEN=([^;]+)/);
     if (!xsrfMatch) { 
         bot.sendMessage(chatId, "❌ XSRF-TOKEN cookie string এ পাওয়া যায়নি! পুরো কুকি ঠিকমতো কপি করে আবার দিন।", { parse_mode: "Markdown" }); 
@@ -158,13 +163,13 @@ bot.on('message', async (msg) => {
     }
     
     db.cookies["XSRF-TOKEN"] = xsrfMatch[1].trim();
-    db.cookies["raw_cookie"] = cookieStr; // পুরো স্ট্রিংটা (Cf_clearance সহ) ডাটাবেসে সেভ হচ্ছে
+    db.cookies["raw_cookie"] = cookieStr; 
     saveDB(); 
 
     iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["raw_cookie"]); 
     cachedToken = null;
 
-    bot.sendMessage(chatId, "✅ **Cookies (including Cloudflare clearance) have been successfully updated!**", { parse_mode: "Markdown" }); 
+    bot.sendMessage(chatId, "✅ **Cookies have been successfully updated directly to MongoDB!**", { parse_mode: "Markdown" }); 
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
     delete userStates[chatId];
   }
@@ -337,12 +342,13 @@ mongoose.connect(MONGODB_URI).then(async () => {
   if (data) db = { ...db, ...data.toObject() };
   else await BotDB.create(db);
 
-  // 🟢 Load new raw cookies on startup
+  // 🟢 SETTING SAFETY LOCK TRUE
+  isDbLoaded = true; 
+
   if (db.cookies && db.cookies["raw_cookie"]) {
       iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["raw_cookie"]);
       console.log("✅ Loaded saved raw cookies from MongoDB!");
   } else if (db.cookies && db.cookies["ivas_sms_session"]) {
-      // Fallback for older cookie format
       const fallbackCookie = `XSRF-TOKEN=${db.cookies["XSRF-TOKEN"]}; ivas_sms_session=${db.cookies["ivas_sms_session"]}`;
       iva.setCookies(db.cookies["XSRF-TOKEN"], fallbackCookie);
   }
