@@ -12,11 +12,10 @@ const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/53
 let XSRF_TOKEN = "";
 let IVAS_SESSION = "";
 
-// এখন শুধু xsrf আর session রিসিভ করবে
 function setCookies(xsrf, session) {
   XSRF_TOKEN = xsrf;
   IVAS_SESSION = session;
-  console.log("Cookies successfully updated in memory! ✅");
+  console.log("✅ [IVA] Clean Cookies successfully updated in memory!");
 }
 
 function getCookies() {
@@ -43,6 +42,7 @@ function safeJSON(text) {
 function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     
+    // শুধু দুটো কুকি দিয়ে ক্লিন স্ট্রিং তৈরি
     const cleanCookieString = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
 
     const headers = {
