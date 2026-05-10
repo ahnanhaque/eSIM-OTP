@@ -6,7 +6,6 @@ const router = express.Router();
 
 /* ================= CONFIG ================= */
 const BASE_URL       = "https://www.ivasms.com";
-// আধুনিক Chrome এর User-Agent দেওয়া হলো যাতে Cloudflare ব্লক না করে
 const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /* ================= COOKIES IN MEMORY ================= */
@@ -16,7 +15,11 @@ let XSRF_TOKEN = "";
 function setCookies(xsrf, rawCookieStr) {
   XSRF_TOKEN = xsrf;
   RAW_COOKIE = rawCookieStr;
-  console.log("✅ [IVA] Full Raw Cookies successfully updated in memory!");
+  console.log("✅ [IVA] Cookies successfully updated in memory!");
+}
+
+function getCookies() {
+  return { xsrf: XSRF_TOKEN, raw: RAW_COOKIE };
 }
 
 /* ================= HELPERS ================= */
@@ -43,7 +46,7 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
       "Accept":           "*/*",
       "Accept-Encoding":  "gzip, deflate, br",
       "Accept-Language":  "en-US,en;q=0.9",
-      "Cookie":           RAW_COOKIE, // পুরো কুকি একসাথে পাঠানো হচ্ছে (cf_clearance সহ)
+      "Cookie":           RAW_COOKIE, // পুরো কুকি (cf_clearance সহ)
       "X-Requested-With": "XMLHttpRequest",
       "X-XSRF-TOKEN":     getXsrf(),
       "X-CSRF-TOKEN":     getXsrf(),
@@ -198,5 +201,5 @@ function parseSMSMessages(html, range, number, date) {
 }
 
 module.exports = {
-  router, setCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL
+  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL
 };
