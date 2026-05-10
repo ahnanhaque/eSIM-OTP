@@ -9,17 +9,18 @@ const BASE_URL       = "https://www.ivasms.com";
 const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /* ================= COOKIES IN MEMORY ================= */
-let RAW_COOKIE = "";
 let XSRF_TOKEN = "";
+let IVAS_SESSION = "";
 
-function setCookies(xsrf, rawCookieStr) {
+// এখন শুধু xsrf আর session রিসিভ করবে
+function setCookies(xsrf, session) {
   XSRF_TOKEN = xsrf;
-  RAW_COOKIE = rawCookieStr;
-  console.log("✅ [IVA] Cookies successfully updated in memory!");
+  IVAS_SESSION = session;
+  console.log("Cookies successfully updated in memory! ✅");
 }
 
 function getCookies() {
-  return { xsrf: XSRF_TOKEN, raw: RAW_COOKIE };
+  return { xsrf: XSRF_TOKEN, session: IVAS_SESSION };
 }
 
 /* ================= HELPERS ================= */
@@ -41,12 +42,15 @@ function safeJSON(text) {
 /* ================= HTTP REQUEST ================= */
 function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
+    
+    const cleanCookieString = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
+
     const headers = {
       "User-Agent":       USER_AGENT,
       "Accept":           "*/*",
       "Accept-Encoding":  "gzip, deflate, br",
       "Accept-Language":  "en-US,en;q=0.9",
-      "Cookie":           RAW_COOKIE, // পুরো কুকি (cf_clearance সহ)
+      "Cookie":           cleanCookieString, 
       "X-Requested-With": "XMLHttpRequest",
       "X-XSRF-TOKEN":     getXsrf(),
       "X-CSRF-TOKEN":     getXsrf(),
