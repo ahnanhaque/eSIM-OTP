@@ -1,7 +1,7 @@
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
-const iva = require("./iva"); 
+const iva = require("./iva"); // iva.js ফাইলটি থাকুক, তবে আমরা এর নেটওয়ার্ক রিকোয়েস্ট আর ব্যবহার করবো না
 
 // ==============================================================================
 // =================        1. CONFIGURATION & SETUP         ====================
@@ -17,6 +17,13 @@ const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(express.json());
+
+// 🟢 NOTUN: CORS Header যুক্ত করা হলো যাতে ক্রোম এক্সটেনশন ডাটা পাঠাতে পারে
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+});
 
 const bot = new TelegramBot(botToken, { polling: true });
 bot.on("polling_error", (msg) => console.log("\n[Telegram Polling Error]", msg.message));
@@ -35,6 +42,9 @@ const BotDB = mongoose.model("BotData", dbSchema);
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 
 let isDbLoaded = false; 
+
+// 🟢 NOTUN: এক্সটেনশন থেকে আসা ডাটা মেমোরিতে ধরে রাখার জন্য ভেরিয়েবল
+let latestRangesFromExtension = {}; 
 
 function saveDB() { 
   if (!isDbLoaded) return; 
@@ -58,15 +68,7 @@ function sendStockAlert(rangeName, count) {
   bot.sendMessage(GROUP_CHAT_ID, `🚀 **NEW STOCK ALERT** 🚀\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📦 **Available:** ${count} Numbers\n🔵 **Service:** FACEBOOK OTP\n\n☎️ [Order Now - Click Here](https://t.me/${botInfo.username || "eSIM_OTP_Bot"})`, { parse_mode: "Markdown", disable_web_page_preview: true }).catch(()=>{});
 }
 
-let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, cachedToken = null;
-
-setInterval(async () => {
-  try {
-    const token = await iva.fetchToken();
-    if (token) { cachedToken = token; console.log(`[Keep-Alive] Session active.`); }
-    else console.log(`[Keep-Alive] Session Expired! Please update cookies manually from Admin Panel.`);
-  } catch (error) {}
-}, 3 * 60 * 1000); 
+let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {};
 
 // ==============================================================================
 // =================   3. BOT DESIGN & COMPREHENSIVE COUNTRY DATA ================
@@ -100,7 +102,7 @@ function getReplyMenu(chatId, username) {
 const platformMenu = { inline_keyboard: [[{ text: "📘 Facebook", callback_data: "menu_country_fb" }], [{ text: "❌ Close Menu", callback_data: "close_menu" }]] };
 
 function getAdminMenu(chatId) {
-  let menu = [ [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], [{ text: "⚙️ Manage Ranges", callback_data: "admin_manage_ranges" }, { text: "➕ Add Number", callback_data: "admin_add_number" }], [{ text: "🍪 Update Cookies", callback_data: "admin_update_cookies" }] ];
+  let menu = [ [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], [{ text: "⚙️ Manage Ranges", callback_data: "admin_manage_ranges" }, { text: "➕ Add Number", callback_data: "admin_add_number" }] ];
   if (isSuperAdmin(chatId)) menu.push([{ text: "👑 Manage Admins", callback_data: "admin_manage_admins" }, { text: "❌ Close Menu", callback_data: "close_menu" }]); else menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
   return { inline_keyboard: menu };
 }
@@ -153,36 +155,6 @@ bot.on('message', async (msg) => {
     if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Please enter a valid number between 1 and 20.");
     else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated!\nUsers will now get **${limit} numbers** at a time.`); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }); delete userStates[chatId]; }
   }
-  else if (userStates[chatId] === "WAITING_FOR_COOKIES" && isAdmin(chatId, username)) {
-    const cookieStr = text.trim();
-    
-    // এক্সট্রাক্ট করা হচ্ছে
-    const xsrfMatch = cookieStr.match(/XSRF-TOKEN=([^;]+)/);
-    const sessionMatch = cookieStr.match(/ivas_sms_session=([^;]+)/);
-
-    if (!xsrfMatch || !sessionMatch) { 
-        bot.sendMessage(chatId, "❌ **XSRF-TOKEN** অথবা **ivas_sms_session** খুঁজে পাওয়া যায়নি! পুরো কুকি ঠিকমতো কপি করে আবার দিন।", { parse_mode: "Markdown" }); 
-        return; 
-    }
-    
-    // 🟢 নতুন লজিক: মেমোরি থেকে পুরানো raw_cookie চিরতরে মুছে ফেলা হচ্ছে
-    if (db.cookies["raw_cookie"]) {
-        delete db.cookies["raw_cookie"];
-    }
-    
-    // শুধু ক্লিন দুটো কুকি সেট করা হচ্ছে
-    db.cookies["XSRF-TOKEN"] = xsrfMatch[1].trim();
-    db.cookies["ivas_sms_session"] = sessionMatch[1].trim();
-    
-    saveDB(); // এখন সেভ হলে raw_cookie ডাটাবেস থেকেও ডিলিট হয়ে যাবে
-
-    iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]); 
-    cachedToken = null;
-
-    bot.sendMessage(chatId, "✅ **Clean Cookies Updated!**\n\n`raw_cookie` মুছে ফেলা হয়েছে এবং শুধু ক্লিন কুকি সেভ হয়েছে।", { parse_mode: "Markdown" }); 
-    bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
-    delete userStates[chatId];
-  }
   else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
     const country = tempAdminData[chatId]?.addNumberCountry; if (!country) { delete userStates[chatId]; return; }
     const numbers = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
@@ -221,7 +193,6 @@ bot.on('callback_query', async (query) => {
   if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_")) && !isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_update_cookies") { userStates[chatId] = "WAITING_FOR_COOKIES"; bot.sendMessage(chatId, "🍪 **Update iVAS Cookies:**\n\nব্রাউজার থেকে কপি করা পুরো cookie string পাঠান:", { parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Number Limit Setup:**\n\nSend new limit (e.g., 2, 5, 10):`); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Broadcast Mode:**\n\nType the message you want to send to all users."); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { bot.answerCallbackQuery(query.id); bot.deleteMessage(chatId, messageId).catch(()=>{}); bot.sendMessage(chatId, "💸 **Withdrawal Request**\n\nEnter your 11-digit bKash or Nagad number:"); userStates[chatId] = "WAITING_FOR_BKASH"; }
@@ -248,18 +219,21 @@ bot.on('callback_query', async (query) => {
   }
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
-    if (data === "admin_manage_ranges") bot.editMessageText("⏳ Fetching ranges from iVAS...", { chat_id: chatId, message_id: messageId }).catch(()=>{});
-    bot.answerCallbackQuery(query.id, { text: "🔄 Refreshing list..." });
-    try {
-      let token = cachedToken || await iva.fetchToken();
-      if (!token) return bot.editMessageText(`❌ **Session Expired!**\n\nCloudflare block or invalid cookie. Please provide your latest raw cookie.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
-      const resData = await iva.getNumbers(token); let grouped = {}; 
-      if (resData.aaData) resData.aaData.forEach(row => { const range = row[0]; const num = row[2]; if (!inUseNumbers[num]) { if (!grouped[range]) grouped[range] = []; grouped[range].push(num); } });
-      for (const r in db.availableNumbers) if (!grouped[r]) grouped[r] = db.availableNumbers[r];
-      tempAdminData[chatId] = Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] }));
-      if (tempAdminData[chatId].length === 0) return bot.editMessageText("📭 No ranges found in iVAS.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] } });
-      renderManageRangesMenu(chatId, messageId);
-    } catch (e) { bot.editMessageText("❌ Failed to fetch numbers! Try again later.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] } }); }
+    // 🟢 NOTUN: iVAS থেকে নয়, বরং এক্সটেনশন থেকে পাওয়া মেমোরি ডাটা দিয়ে রেঞ্জ রেন্ডার করবে
+    bot.answerCallbackQuery(query.id, { text: "🔄 Loading from Extension data..." });
+    let grouped = { ...latestRangesFromExtension };
+    
+    // ডাটাবেসে আগে থেকে থাকা রেঞ্জগুলোও অ্যাড করে দিচ্ছি
+    for (const r in db.availableNumbers) {
+      if (!grouped[r]) grouped[r] = db.availableNumbers[r];
+    }
+    
+    tempAdminData[chatId] = Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] }));
+    
+    if (tempAdminData[chatId].length === 0) {
+      return bot.editMessageText("📭 **No data found!**\n\nPlease ensure your browser extension is running and iVAS tab is open.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
+    }
+    renderManageRangesMenu(chatId, messageId);
   }
   else if (data.startsWith("togglerng_")) {
     const action = data.replace("togglerng_", ""); if (!tempAdminData[chatId]) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Fetch again.", show_alert: true });
@@ -304,46 +278,41 @@ function processFoundOTP(number, time, message, range) {
 }
 
 // ==============================================================================
-// =================      6. FAST OTP CHECKER SYSTEM         ====================
+// =================    6. EXTENSION API RECEIVER (NEW)      ====================
 // ==============================================================================
 
-let isFastChecking = false, isHeavyChecking = false;
+// 🟢 NOTUN: এক্সটেনশন থেকে আসা লাইভ ডাটা এই লিংকে রিসিভ হবে
+app.post('/api/ivas-data', (req, res) => {
+  const { type, payload } = req.body;
 
-async function fastPendingOTPCheck() {
-  if (isFastChecking) return; const pNums = Object.keys(pendingRequests); if (pNums.length === 0) return; 
-  isFastChecking = true;
-  try {
-    const token = cachedToken || await iva.fetchToken();
-    if (token) {
-      const today = iva.getToday(), boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
-      await iva.makeRequest("POST", "/portal/sms/received/getsms", [`--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`, `--${boundary}\r\nContent-Disposition: form-data; name="to"\r\n\r\n${today}`, `--${boundary}\r\nContent-Disposition: form-data; name="_token"\r\n\r\n${token}`, `--${boundary}--`].join("\r\n"), `multipart/form-data; boundary=${boundary}`, { "Referer": `${iva.BASE_URL}/portal/sms/received` });
-      const rangesToCheck = [...new Set(pNums.map(n => pendingRequests[n].country))];
-      for (const range of rangesToCheck) {
-        await iva.makeRequest("POST", "/portal/sms/received/getsms/number", new URLSearchParams({ _token: token, start: today, end: today, range }).toString(), "application/x-www-form-urlencoded", { "Referer": `${iva.BASE_URL}/portal/sms/received` });
-        await Promise.all(pNums.filter(n => pendingRequests[n].country === range).map(async (number) => {
-          const r3 = await iva.makeRequest("POST", "/portal/sms/received/getsms/number/sms", new URLSearchParams({ _token: token, start: today, end: today, Number: number, Range: range }).toString(), "application/x-www-form-urlencoded", { "Referer": `${iva.BASE_URL}/portal/sms/received` }).catch(() => null);
-          if (r3) iva.parseSMSMessages(r3.body, range, number, today).forEach(msg => processFoundOTP(number, msg[0], msg[4], range));
-        }));
-      }
+  if (type === 'RANGES') {
+    // payload = { "BANGLADESH": ["123", "456"], "USA": ["789"] }
+    latestRangesFromExtension = payload;
+    console.log(`📥 Received ${Object.keys(payload).length} active ranges from browser extension!`);
+    return res.status(200).json({ success: true, message: "Ranges updated" });
+  } 
+  
+  else if (type === 'SMS_LOG') {
+    // payload = [ { number: "123", time: "...", message: "...", range: "BANGLADESH" }, ... ]
+    let processedCount = 0;
+    if (Array.isArray(payload)) {
+      payload.forEach(sms => {
+        processFoundOTP(sms.number, sms.time, sms.message, sms.range);
+        processedCount++;
+      });
     }
-  } catch (err) {}
-  isFastChecking = false;
-}
+    console.log(`📥 Received & checked ${processedCount} SMS logs from extension!`);
+    return res.status(200).json({ success: true, message: "SMS checked" });
+  }
 
-async function checkAllOTP() {
-  if (isHeavyChecking) return; isHeavyChecking = true;
-  try {
-    const token = cachedToken || await iva.fetchToken();
-    if (token) { const resData = await iva.getSMS(token); if (resData.aaData) resData.aaData.forEach(row => processFoundOTP(row[2], row[0], row[4], row[1])); }
-  } catch (err) {}
-  isHeavyChecking = false;
-}
+  res.status(400).json({ success: false, error: "Invalid payload type" });
+});
 
 // ==============================================================================
 // =================    7. WEB SERVER & MONGODB INIT         ====================
 // ==============================================================================
 
-app.get('/', (req, res) => res.status(200).send('Bot is running perfectly!'));
+app.get('/', (req, res) => res.status(200).send('Bot is running perfectly on Hybrid Mode!'));
 
 mongoose.connect(MONGODB_URI).then(async () => {
   console.log("✅ MongoDB Connected!");
@@ -354,14 +323,8 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
   isDbLoaded = true; 
 
-  if (db.cookies && db.cookies["XSRF-TOKEN"] && db.cookies["ivas_sms_session"]) {
-      iva.setCookies(db.cookies["XSRF-TOKEN"], db.cookies["ivas_sms_session"]);
-      console.log("✅ Loaded clean cookies from MongoDB!");
-  }
-
   app.listen(PORT, () => {
-    console.log(`Server is running at http://localhost:${PORT}`);
-    setInterval(fastPendingOTPCheck, 2000);
-    setInterval(checkAllOTP, 15000); 
+    console.log(`🚀 Server is running on Hybrid Mode at port ${PORT}`);
+    console.log(`📡 Ready to receive data from Chrome Extension via /api/ivas-data`);
   });
 }).catch(err => console.log("❌ MongoDB Connection Error:", err));
