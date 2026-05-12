@@ -197,9 +197,8 @@ bot.on('message', async (msg) => {
                         activeTempMails[chatId].lastId = mailId;
                         activeTempMails[chatId].otpReceived = true; 
                         
-                        // 🟢 ADVANCED OTP & HTML DEEP SCANNING
                         const fullText = `${latest.subject} ${latest.body || ''} ${latest.html || ''}`;
-                        const plainText = fullText.replace(/<[^>]+>/g, ' '); // Strip HTML tags for clean reading
+                        const plainText = fullText.replace(/<[^>]+>/g, ' '); 
                         
                         let otpMatch = plainText.match(/\b\d{4,8}\b/);
                         if (!otpMatch) otpMatch = plainText.match(/\b[A-Z0-9]{5,10}\b/i);
@@ -219,9 +218,10 @@ bot.on('message', async (msg) => {
                         let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n🌐 **Platform:** ${platformName}\n📝 **Message:** ${cleanMessage}`;
                         let markup = { inline_keyboard: [] };
                         
+                        // 🟢 Native Copy Button Logic
                         if (otp) {
                             replyText += `\n\n🔑 **Code:** \`${otp}\``;
-                            markup.inline_keyboard.push([{ text: `📋 Copy Code: ${otp}`, callback_data: `dummy_copy` }]);
+                            markup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otp } }]);
                         } else if (link) {
                             replyText += `\n\n🔗 **Action Required:** This email contains a verification link.`;
                             markup.inline_keyboard.push([{ text: `🌐 Open Link`, url: link }]);
@@ -318,10 +318,6 @@ bot.on('callback_query', async (query) => {
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
-  
-  else if (data === "dummy_copy") {
-      bot.answerCallbackQuery(query.id, { text: "Tap the code in the message above to copy it automatically!", show_alert: true });
-  }
   
   else if (data === "refresh_2fa") {
     const secret = tempAdminData[chatId]?.active2FAKey;
