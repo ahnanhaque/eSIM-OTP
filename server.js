@@ -18,32 +18,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🟢 BUG FIX: Polling Error and AggregateError Fix
 const bot = new TelegramBot(botToken, { 
-    polling: {
-        interval: 300,
-        autoStart: true,
-        params: {
-            timeout: 10
-        }
-    },
-    request: {
-        agentOptions: {
-            keepAlive: true,
-            family: 4 // Force IPv4 to prevent connection drops on some servers
-        }
-    }
+    polling: { interval: 300, autoStart: true, params: { timeout: 10 } },
+    request: { agentOptions: { keepAlive: true, family: 4 } }
 });
 
 bot.on("polling_error", (err) => {
-    if (err && err.message && !err.message.includes("message is not modified")) {
-        console.log("\n[Telegram Polling Error]", err.message);
-    }
+    if (err && err.message && !err.message.includes("message is not modified")) console.log("\n[Telegram Polling Error]", err.message);
 });
 bot.on("error", (err) => {
-    if (err && err.message && !err.message.includes("message is not modified")) {
-        console.log("\n[Telegram Bot Error]", err.message);
-    }
+    if (err && err.message && !err.message.includes("message is not modified")) console.log("\n[Telegram Bot Error]", err.message);
 });
 
 bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { command: 'admin', description: 'Open admin panel' }]);
@@ -128,11 +112,13 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
+// 🟢 আপডেটেড অ্যাডমিন প্ল্যাটফর্ম মেনু (Remove Number যুক্ত করা হয়েছে)
 const adminPlatformMenu = {
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
     [{ text: "ⓘ Instagram", callback_data: "admin_sel_plat_ig" }],
     [{ text: "✆ WhatsApp", callback_data: "admin_sel_plat_wa" }],
+    [{ text: "🗑️ Remove Number", callback_data: "admin_remove_number_menu" }], 
     [{ text: "⬅️ Back", callback_data: "admin_panel" }]
   ]
 };
@@ -334,7 +320,8 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
-  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk"];
+  // 🟢 যুক্ত করা হলো 'delnumrng_' পারমিশন চেকে
+  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk", "delnumrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
@@ -352,6 +339,49 @@ bot.on('callback_query', async (query) => {
     bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
+  
+  // 🟢 Remove Number Logic Start
+  else if (data === "admin_remove_number_menu") {
+    const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
+    if (activeRanges.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers to remove.", show_alert: true });
+    
+    let btns = [];
+    activeRanges.forEach(r => {
+        const info = getCountryInfo(r);
+        btns.push([{ text: `🗑️ Remove ${info.flag} ${info.cleanName} (${db.availableNumbers[r].length})`, callback_data: `delnumrng_${r}` }]);
+    });
+    btns.push([{ text: "🗑️ Remove All Numbers", callback_data: "delnumrng_ALL" }]);
+    btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
+    
+    bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
+  }
+  else if (data.startsWith("delnumrng_")) {
+    const target = data.replace("delnumrng_", "");
+    if (target === "ALL") {
+        db.availableNumbers = {}; saveDB();
+        bot.answerCallbackQuery(query.id, { text: "✅ All numbers removed successfully!", show_alert: true });
+    } else {
+        delete db.availableNumbers[target]; saveDB();
+        bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed successfully!` });
+    }
+    
+    const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
+    if (activeRanges.length === 0) {
+        bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(()=>{});
+        return;
+    }
+    let btns = [];
+    activeRanges.forEach(r => {
+        const info = getCountryInfo(r);
+        btns.push([{ text: `🗑️ Remove ${info.flag} ${info.cleanName} (${db.availableNumbers[r].length})`, callback_data: `delnumrng_${r}` }]);
+    });
+    btns.push([{ text: "🗑️ Remove All Numbers", callback_data: "delnumrng_ALL" }]);
+    btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
+    bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
+  }
+  // 🟢 Remove Number Logic End
+
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
     bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
