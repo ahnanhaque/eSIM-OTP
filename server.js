@@ -2,6 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
+const iva = require("./iva"); 
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -50,8 +51,6 @@ function getCountryInfo(countryName) {
   if (flag === "🌍") cleanName = cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
   return { flag, cleanName };
 }
-
-const countryData = { "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
 
 function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `${numStr.slice(0, 4)}****${numStr.slice(-4)}`; }
 function buildAssignedMessageText(country, numsList, statuses) {
@@ -143,16 +142,13 @@ bot.on('message', async (msg) => {
   } 
   else if (text === "📧 Temp Mail") {
     try {
-        const reqHeaders = { 
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "application/json"
-        };
-        
-        const res = await fetch("https://www.1secmail.com/api/v1/?action=genRandomMailbox&count=1", { headers: reqHeaders });
-        if (!res.ok) throw new Error("API Blocked by Security");
+        // 🟢 BUG FIX: Switched to TempMail.lol V2 API (No Cloudflare Blocks)
+        const res = await fetch("https://api.tempmail.lol/v2/inbox/create");
+        if (!res.ok) throw new Error("API Server is currently unreachable.");
 
-        const [email] = await res.json();
-        const [login, domain] = email.split('@');
+        const data = await res.json();
+        const email = data.address;
+        const token = data.token;
 
         if (activeTempMails[chatId]?.interval) clearInterval(activeTempMails[chatId].interval);
         if (activeTempMails[chatId]?.timeout) clearTimeout(activeTempMails[chatId].timeout);
@@ -161,20 +157,20 @@ bot.on('message', async (msg) => {
 
         const interval = setInterval(async () => {
             try {
-                const inboxRes = await fetch(`https://www.1secmail.com/api/v1/?action=getMessages&login=${login}&domain=${domain}`, { headers: reqHeaders });
-                const inbox = await inboxRes.json();
+                const inboxRes = await fetch(`https://api.tempmail.lol/v2/inbox?token=${token}`);
+                const inboxData = await inboxRes.json();
                 
-                if (inbox.length > 0) {
-                    const latest = inbox[0];
-                    if (activeTempMails[chatId].lastId !== latest.id) {
-                        activeTempMails[chatId].lastId = latest.id;
-                        const msgRes = await fetch(`https://www.1secmail.com/api/v1/?action=readMessage&login=${login}&domain=${domain}&id=${latest.id}`, { headers: reqHeaders });
-                        const msgData = await msgRes.json();
+                if (inboxData.emails && inboxData.emails.length > 0) {
+                    const latest = inboxData.emails[0];
+                    const mailId = latest.date + latest.subject; // Unique identifier fallback
+                    
+                    if (activeTempMails[chatId].lastId !== mailId) {
+                        activeTempMails[chatId].lastId = mailId;
                         
-                        const otpMatch = msgData.textBody.match(/\b\d{4,8}\b/);
+                        const otpMatch = latest.body.match(/\b\d{4,8}\b/);
                         const otp = otpMatch ? otpMatch[0] : "N/A";
                         
-                        let replyText = `📬 **New Email Received!**\n\n**From:** ${msgData.from}\n**Subject:** ${msgData.subject}\n\n**Message:**\n${msgData.textBody.trim().substring(0, 300)}...`;
+                        let replyText = `📬 **New Email Received!**\n\n**From:** ${latest.from}\n**Subject:** ${latest.subject}\n\n**Message:**\n${latest.body.trim().substring(0, 300)}...`;
                         let markup = null;
                         
                         if (otp !== "N/A") {
@@ -195,7 +191,7 @@ bot.on('message', async (msg) => {
             bot.sendMessage(chatId, "⚠️ **Temp Mail Expired.**\nYour 15-minute session has ended. Request a new mail if needed.", { parse_mode: "Markdown" });
         }, 15 * 60 * 1000);
 
-        activeTempMails[chatId] = { email, login, domain, lastId: 0, interval, timeout };
+        activeTempMails[chatId] = { email, token, lastId: null, interval, timeout };
     } catch (e) {
         bot.sendMessage(chatId, `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`, { parse_mode: "Markdown" });
     }
