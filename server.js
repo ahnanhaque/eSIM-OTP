@@ -100,7 +100,16 @@ function get2FAMessage(code) {
   return `🔐 **2FA Authenticator**\n━━━━━━━━━━━━━━━━━━━━\n🔑 **Your Code:** \`${code}\`\n🕒 **Refreshes in:** 30 seconds\n━━━━━━━━━━━━━━━━━━━━\n_(Copy the code above and use it.)_`;
 }
 
-const platformMenu = { inline_keyboard: [[{ text: "📘 Facebook", callback_data: "menu_country_fb" }], [{ text: "❌ Close Menu", callback_data: "close_menu" }]] };
+// 🟢 NOTUN: Platform Menu-তে স্পেশাল ইউনিকোড আইকন ব্যবহার করা হয়েছে
+const platformMenu = { 
+  inline_keyboard: [
+    [{ text: "ⓕ Facebook", callback_data: "menu_country_fb" }],
+    [{ text: "ⓘ Instagram", callback_data: "placeholder_ig" }],
+    [{ text: "ⓣ TikTok", callback_data: "placeholder_tiktok" }],
+    [{ text: "✆ WhatsApp", callback_data: "placeholder_wa" }],
+    [{ text: "✖ Close Menu", callback_data: "close_menu" }]
+  ] 
+};
 
 function getAdminMenu(chatId) {
   let menu = [ 
@@ -113,10 +122,10 @@ function getAdminMenu(chatId) {
 
 const manageNumberPanel = {
   inline_keyboard: [
-    [{ text: "1. IVA SMS 📨", callback_data: "admin_manage_ranges" }],
-    [{ text: "2. Stex SMS 📩", callback_data: "placeholder_stex" }],
-    [{ text: "3. MK SMS 💬", callback_data: "placeholder_mk" }],
-    [{ text: "4. Add Number ➕", callback_data: "admin_add_number_manual" }],
+    [{ text: "📨 1. IVA SMS", callback_data: "admin_manage_ranges" }],
+    [{ text: "📩 2. Stex SMS", callback_data: "placeholder_stex" }],
+    [{ text: "💬 3. MK SMS", callback_data: "placeholder_mk" }],
+    [{ text: "➕ 4. Add Number", callback_data: "admin_add_number_manual" }],
     [{ text: "⬅️ Back", callback_data: "admin_panel" }]
   ]
 };
@@ -126,7 +135,7 @@ function renderManageRangesMenu(chatId, messageId) {
   rangesArray.forEach((r, index) => { let isAdded = db.availableNumbers[r.name] && db.availableNumbers[r.name].length > 0; rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); });
   rangeButtons.push([{ text: "📥 Add All", callback_data: "togglerng_addall" }, { text: "🗑️ Remove All", callback_data: "togglerng_delall" }]);
   rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back to Admin", callback_data: "admin_manage_numbers_panel" }]);
-  bot.editMessageText("⚙️ iVAS Manage Ranges:\n\nClick a range to toggle (✅ Added / ❌ Removed):", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
+  bot.editMessageText("⚙️ **iVAS Manage Ranges:**\n\nClick a range to toggle (✅ Added / ❌ Removed):", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
 }
 
 // ==============================================================================
@@ -158,12 +167,11 @@ bot.on('message', async (msg) => {
   
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
 
-  // 🟢 মেনুর বাটনে ক্লিক করলে আগের ওয়েটিং স্টেট ক্যানসেল হবে
   if (triggerWords.includes(text)) {
       delete userStates[chatId];
   }
 
-  if (text === "☎️ Get Number") { clearPendingForChat(chatId); bot.sendMessage(chatId, `🛠 Choose the platform you want a number for:`, { reply_markup: platformMenu }); } 
+  if (text === "☎️ Get Number") { clearPendingForChat(chatId); bot.sendMessage(chatId, `🛠 Select a service below to receive an OTP:`, { reply_markup: platformMenu }); } 
   
   else if (text === "👤 Profile") {
       bot.sendMessage(chatId, `👤 **Profile Info:**\n\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Your Current Balance:** ${getBalance(chatId).toFixed(2)} BDT\n_(Minimum withdrawal 50 BDT)_\n\n🔗 **Your Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { 
@@ -179,8 +187,6 @@ bot.on('message', async (msg) => {
   else if (userStates[chatId] === "WAITING_FOR_2FA_KEY") {
       try {
           const secret = text.replace(/\s+/g, '').toUpperCase();
-          
-          // 🟢 BUG FIX: Base32 String এবং মিনিমাম লেংথ চেক করা হচ্ছে
           const isValidBase32 = /^[A-Z2-7]+=*$/.test(secret);
           if (!isValidBase32 || secret.length < 10) {
               throw new Error("Invalid format");
@@ -253,7 +259,12 @@ bot.on('callback_query', async (query) => {
     else return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined yet!", show_alert: true });
   }
   if (!await isUserMember(query.from.id)) { bot.answerCallbackQuery(query.id, { text: "❌ Join group first!", show_alert: true }); return sendJoinPrompt(chatId); }
-  if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_") || data === "placeholder_stex" || data === "placeholder_mk" || data === "refresh_2fa") && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
+  
+  // Permission checks
+  const adminOnlyActions = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk"];
+  if (adminOnlyActions.some(action => data.startsWith(action)) && !isAdmin(chatId, username)) {
+      return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
+  }
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
   
@@ -283,6 +294,11 @@ bot.on('callback_query', async (query) => {
   else if (data === "placeholder_stex") bot.answerCallbackQuery(query.id, { text: "📩 Stex SMS logic is not added yet.", show_alert: true });
   else if (data === "placeholder_mk") bot.answerCallbackQuery(query.id, { text: "💬 MK SMS logic is not added yet.", show_alert: true });
 
+  // 🟢 NOTUN: New Placeholder handlers for standard menu
+  else if (data === "placeholder_ig") bot.answerCallbackQuery(query.id, { text: "ⓘ Instagram service is not added yet.", show_alert: true });
+  else if (data === "placeholder_tiktok") bot.answerCallbackQuery(query.id, { text: "ⓣ TikTok service is not added yet.", show_alert: true });
+  else if (data === "placeholder_wa") bot.answerCallbackQuery(query.id, { text: "✆ WhatsApp service is not added yet.", show_alert: true });
+
   else if (data === "admin_add_number_manual") {
     userStates[chatId] = "WAITING_FOR_MANUAL_COUNTRY";
     bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(Example: `PAKISTAN`, `TUNISIA`, `USA`)", { parse_mode: "Markdown" });
@@ -298,10 +314,10 @@ bot.on('callback_query', async (query) => {
     let baseCountryCount = {}, currentV = {}, countryButtons = [];
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
     ranges.forEach(range => { let info = getCountryInfo(range), displayName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; displayName += ` V${currentV[info.cleanName]}`; } displayName += ` | 📦: ${db.availableNumbers[range].length}`; countryButtons.push([{ text: displayName, callback_data: `assign_${range}` }]); });
-    countryButtons.push([{ text: "❌ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
+    countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
     bot.editMessageText(`🌍 Select a country for Facebook:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }); bot.answerCallbackQuery(query.id);
   }
-  else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Choose the platform:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }); bot.answerCallbackQuery(query.id); }
+  else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Select a service below to receive an OTP:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }); bot.answerCallbackQuery(query.id); }
   else if (data.startsWith("assign_")) {
     const selectedCountry = data.replace("assign_next_", "").replace("assign_", ""); clearPendingForChat(chatId);
     const nums = db.availableNumbers[selectedCountry] || [];
