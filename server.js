@@ -2,7 +2,6 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
-const iva = require("./iva"); 
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -43,6 +42,28 @@ async function isUserMember(userId) { if (isSuperAdmin(userId)) return true; try
 function sendJoinPrompt(chatId) {
   bot.sendMessage(chatId, `⚠️ **Access Denied!**\n\nYou must join our official group first to use this bot. Once joined, click the check button below.`, { reply_markup: { inline_keyboard: [[{ text: "📢 Join Group", url: GROUP_INVITE_LINK }], [{ text: "🔄 Check Again", callback_data: "check_join" }]] }, parse_mode: "Markdown" });
 }
+
+function detectPlatform(from, subject, body) {
+    let str = (from + " " + subject + " " + (body || "")).toLowerCase();
+    if (str.includes("facebook")) return "Facebook";
+    if (str.includes("instagram")) return "Instagram";
+    if (str.includes("whatsapp")) return "WhatsApp";
+    if (str.includes("tiktok")) return "TikTok";
+    if (str.includes("google")) return "Google";
+    if (str.includes("twitter") || str.includes("x.com")) return "X (Twitter)";
+    if (str.includes("telegram")) return "Telegram";
+    if (str.includes("discord")) return "Discord";
+    
+    let domainMatch = from.match(/@([a-zA-Z0-9.-]+)\./);
+    if (domainMatch) {
+        let domain = domainMatch[1].replace(/mail|security|info|noreply/ig, "");
+        if (domain.length > 2) return domain.charAt(0).toUpperCase() + domain.slice(1);
+        return domainMatch[1].charAt(0).toUpperCase() + domainMatch[1].slice(1);
+    }
+    return "Unknown Platform";
+}
+
+const countryData = { "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
 
 function getCountryInfo(countryName) {
   if (!countryName) return { flag: "🌍", cleanName: "Unknown" };
@@ -142,7 +163,6 @@ bot.on('message', async (msg) => {
   } 
   else if (text === "📧 Temp Mail") {
     try {
-        // 🟢 আগের অব্যবহৃত টেম্প মেইলের মেসেজ অটো-ডিলিট লজিক
         if (activeTempMails[chatId]) {
             if (!activeTempMails[chatId].otpReceived && activeTempMails[chatId].messageId) {
                 bot.deleteMessage(chatId, activeTempMails[chatId].messageId).catch(()=>{});
@@ -158,7 +178,6 @@ bot.on('message', async (msg) => {
         const email = data.address;
         const token = data.token;
 
-        // 🟢 মেসেজের আইডি সেভ করা হচ্ছে এডিট করার জন্য
         const sentMsg = await bot.sendMessage(chatId, `📧 **Your Temp Mail:**\n\`${email}\`\n\n📩 **SMS Status:** Waiting... ⏳`, { parse_mode: "Markdown" });
         const messageId = sentMsg.message_id;
 
@@ -175,13 +194,17 @@ bot.on('message', async (msg) => {
                     
                     if (activeTempMails[chatId].lastId !== mailId) {
                         activeTempMails[chatId].lastId = mailId;
-                        activeTempMails[chatId].otpReceived = true; // 🟢 ওটিপি রিসিভড হিসেবে মার্ক করা হলো
+                        activeTempMails[chatId].otpReceived = true; 
                         
-                        const otpMatch = latest.subject.match(/\b\d{4,8}\b/) || latest.body.match(/\b\d{4,8}\b/);
+                        const fullText = `${latest.subject} ${latest.body || ''}`;
+                        let otpMatch = fullText.match(/\b\d{4,8}\b/) || fullText.match(/\b[A-Z0-9]{5,8}\b/);
                         const otp = otpMatch ? otpMatch[0] : "N/A";
                         
-                        // 🟢 নতুন মেসেজ না দিয়ে আগের মেসেজটাই এডিট করা হচ্ছে
-                        let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n📝 **Message:** ${latest.subject}`;
+                        const platformName = detectPlatform(latest.from, latest.subject, latest.body);
+                        let cleanMessage = latest.subject.replace(/[\r\n]+/g, ' ').trim();
+                        if (cleanMessage.length < 5 && latest.body) cleanMessage = latest.body.substring(0, 50).replace(/[\r\n]+/g, ' ').trim() + "...";
+                        
+                        let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n🌐 **Platform:** ${platformName}\n📝 **Message:** ${cleanMessage}`;
                         let markup = null;
                         
                         if (otp !== "N/A") {
