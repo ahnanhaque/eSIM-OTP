@@ -18,16 +18,30 @@ app.use((req, res, next) => {
   next();
 });
 
-const bot = new TelegramBot(botToken, { polling: true });
+// 🟢 BUG FIX: Polling Error and AggregateError Fix
+const bot = new TelegramBot(botToken, { 
+    polling: {
+        interval: 300,
+        autoStart: true,
+        params: {
+            timeout: 10
+        }
+    },
+    request: {
+        agentOptions: {
+            keepAlive: true,
+            family: 4 // Force IPv4 to prevent connection drops on some servers
+        }
+    }
+});
 
-// 🟢 গ্লোবাল এরর ফিল্টার: অপ্রয়োজনীয় editMessageText এরর হাইড করার জন্য
-bot.on("polling_error", (msg) => {
-    if(msg && msg.message && !msg.message.includes("message is not modified")) {
-        console.log("\n[Telegram Error]", msg.message);
+bot.on("polling_error", (err) => {
+    if (err && err.message && !err.message.includes("message is not modified")) {
+        console.log("\n[Telegram Polling Error]", err.message);
     }
 });
 bot.on("error", (err) => {
-    if(err && err.message && !err.message.includes("message is not modified")) {
+    if (err && err.message && !err.message.includes("message is not modified")) {
         console.log("\n[Telegram Bot Error]", err.message);
     }
 });
@@ -133,7 +147,6 @@ const manageNumberPanel = {
   ]
 };
 
-// 🟢 BUG FIX: Ranges Array initialization error fixed here
 function renderManageRangesMenu(chatId, messageId) {
   const rangesArray = tempAdminData[chatId]?.ranges || []; 
   let rangeButtons = [];
