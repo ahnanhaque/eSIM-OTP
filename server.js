@@ -142,7 +142,6 @@ bot.on('message', async (msg) => {
   } 
   else if (text === "📧 Temp Mail") {
     try {
-        // 🟢 BUG FIX: Switched to TempMail.lol V2 API (No Cloudflare Blocks)
         const res = await fetch("https://api.tempmail.lol/v2/inbox/create");
         if (!res.ok) throw new Error("API Server is currently unreachable.");
 
@@ -155,6 +154,7 @@ bot.on('message', async (msg) => {
 
         bot.sendMessage(chatId, `📧 **Your Temp Mail:**\n\`${email}\`\n\n⏳ Auto-checking inbox for new messages...`, { parse_mode: "Markdown" });
 
+        // 🟢 স্পিড বাড়ানো হয়েছে: ৩ সেকেন্ড পর পর চেক করবে
         const interval = setInterval(async () => {
             try {
                 const inboxRes = await fetch(`https://api.tempmail.lol/v2/inbox?token=${token}`);
@@ -162,15 +162,17 @@ bot.on('message', async (msg) => {
                 
                 if (inboxData.emails && inboxData.emails.length > 0) {
                     const latest = inboxData.emails[0];
-                    const mailId = latest.date + latest.subject; // Unique identifier fallback
+                    const mailId = latest.date + latest.subject; 
                     
                     if (activeTempMails[chatId].lastId !== mailId) {
                         activeTempMails[chatId].lastId = mailId;
                         
-                        const otpMatch = latest.body.match(/\b\d{4,8}\b/);
+                        // 🟢 সাবজেক্ট এবং বডি থেকে ওটিপি খোঁজা হচ্ছে
+                        const otpMatch = latest.subject.match(/\b\d{4,8}\b/) || latest.body.match(/\b\d{4,8}\b/);
                         const otp = otpMatch ? otpMatch[0] : "N/A";
                         
-                        let replyText = `📬 **New Email Received!**\n\n**From:** ${latest.from}\n**Subject:** ${latest.subject}\n\n**Message:**\n${latest.body.trim().substring(0, 300)}...`;
+                        // 🟢 মেসেজ ক্লিন করা হয়েছে (শুধু সাবজেক্ট দেখাবে)
+                        let replyText = `📬 **New Email Received!**\n\n📝 **Message:** ${latest.subject}`;
                         let markup = null;
                         
                         if (otp !== "N/A") {
@@ -184,7 +186,7 @@ bot.on('message', async (msg) => {
             } catch (e) {
                 // Ignore silent background errors
             }
-        }, 5000);
+        }, 3000); 
 
         const timeout = setTimeout(() => {
             clearInterval(interval);
