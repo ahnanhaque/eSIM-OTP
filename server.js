@@ -75,11 +75,7 @@ function getCountryInfo(countryName) {
 const countryData = { "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
 
 function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `${numStr.slice(0, 4)}****${numStr.slice(-4)}`; }
-function buildAssignedMessageText(country, numsList, statuses) {
-  const info = getCountryInfo(country); let text = "";
-  numsList.forEach((num, i) => { text += `☁️ **eSIM OTP** ☁️\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n📞 Number: \`${num}\`\n📩 SMS Status: ${statuses[num]}\n`; if (i < numsList.length - 1) text += `━━━━━━━━━━━━━━━━━━━━━━━\n\n`; });
-  return text;
-}
+
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
 function getReplyMenu(chatId, username) {
@@ -218,7 +214,6 @@ bot.on('message', async (msg) => {
                         let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n🌐 **Platform:** ${platformName}\n📝 **Message:** ${cleanMessage}`;
                         let markup = { inline_keyboard: [] };
                         
-                        // 🟢 Native Copy Button Logic
                         if (otp) {
                             replyText += `\n\n🔑 **Code:** \`${otp}\``;
                             markup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otp } }]);
@@ -349,9 +344,10 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Please enter the new number limit:**`); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**"); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**"); bot.answerCallbackQuery(query.id); }
+  
   else if (data === "menu_country_fb") {
     clearPendingForChat(chatId); const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
-    if (ranges.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "close_menu" }]] } });
+    if (ranges.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } });
     let baseCountryCount = {}, currentV = {}, countryButtons = [];
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
     ranges.forEach(range => { let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; } countryButtons.push([{ text: `${dName} | 📦: ${db.availableNumbers[range].length}`, callback_data: `assign_${range}` }]); });
@@ -359,17 +355,38 @@ bot.on('callback_query', async (query) => {
     bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }); bot.answerCallbackQuery(query.id);
   }
   else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }); bot.answerCallbackQuery(query.id); }
+  
   else if (data.startsWith("assign_")) {
     const sel = data.replace("assign_next_", "").replace("assign_", ""); clearPendingForChat(chatId);
     const nums = db.availableNumbers[sel] || [];
     if (nums.length === 0) return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
-    const limit = db.settings.maxNumbers || 4, assignedNums = nums.splice(0, limit); let allStatuses = {};
-    assignedNums.forEach(n => { allStatuses[n] = "Waiting... ⏳"; inUseNumbers[n] = true; });
-    db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums], statuses: { ...allStatuses } }; saveDB();
-    const actionMenu = { inline_keyboard: [[{ text: "📩 OTP GROUP", url: GROUP_INVITE_LINK }], [{ text: `➡️ Next ${limit} Numbers`, callback_data: `assign_next_${sel}` }], [{ text: "⬅️ Back", callback_data: "menu_country_fb" }]] };
-    bot.editMessageText(buildAssignedMessageText(sel, assignedNums, allStatuses), { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => { assignedNums.forEach(num => { pendingRequests[num] = { chatId: chatId, messageId: messageId, country: sel, batchNums: assignedNums, allStatuses: allStatuses }; }); }).catch(()=>{});
+    
+    const limit = db.settings.maxNumbers || 4, assignedNums = nums.splice(0, limit);
+    db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] }; saveDB();
+    
+    assignedNums.forEach(n => {
+        inUseNumbers[n] = true;
+        pendingRequests[n] = { chatId: chatId, country: sel };
+    });
+
+    const info = getCountryInfo(sel);
+    let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n👇 _Click a number below to copy:_`;
+    
+    let actionMenu = { inline_keyboard: [] };
+    assignedNums.forEach(n => {
+        actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]);
+    });
+    
+    actionMenu.inline_keyboard.push([
+        { text: "🔄 Change", callback_data: `assign_next_${sel}` },
+        { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }
+    ]);
+    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: "menu_country_fb" }]);
+    
+    bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
+  
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
     bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
@@ -392,14 +409,36 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }); }
 });
 
+// 🟢 NEW: Separate OTP Message with beautiful formatting and copy buttons
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
+  
+  // 🟢 Group Broadcast with the new format and "Get Number" button
+  const info = getCountryInfo(range || "UNKNOWN");
+  let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
+  let groupMarkup = {
+      inline_keyboard: [[{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]]
+  };
+  bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup }).catch(()=>{});
+
   if (pendingRequests[number]) {
-    const reqData = pendingRequests[number]; reqData.allStatuses[number] = `✅ \`${otpCode || message}\``;
-    if (db.lastAssigned[reqData.chatId] && db.lastAssigned[reqData.chatId].nums.includes(number)) { db.lastAssigned[reqData.chatId].statuses[number] = reqData.allStatuses[number]; saveDB(); }
-    bot.editMessageText(buildAssignedMessageText(reqData.country, reqData.batchNums, reqData.allStatuses), { chat_id: reqData.chatId, message_id: reqData.messageId, reply_markup: { inline_keyboard: [[{ text: "📩 OTP GROUP", url: GROUP_INVITE_LINK }], [{ text: `➡️ Next ${db.settings.maxNumbers || 4} Numbers`, callback_data: `assign_next_${reqData.country}` }], [{ text: "⬅️ Back", callback_data: "menu_country_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
-    addBalance(reqData.chatId, 0.50); delete pendingRequests[number]; delete inUseNumbers[number]; 
+    const reqData = pendingRequests[number];
+    const reqInfo = getCountryInfo(reqData.country);
+    
+    // 🟢 User Direct Message for OTP
+    let userReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
+    let userMarkup = { inline_keyboard: [] };
+    
+    if (otpCode) {
+        userMarkup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otpCode } }]);
+    }
+    
+    bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(()=>{});
+    
+    addBalance(reqData.chatId, 0.50); 
+    delete pendingRequests[number]; 
+    delete inUseNumbers[number]; 
   }
 }
 
