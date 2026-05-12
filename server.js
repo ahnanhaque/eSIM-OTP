@@ -113,10 +113,10 @@ function getAdminMenu(chatId) {
 
 const manageNumberPanel = {
   inline_keyboard: [
-    [{ text: "📨 1. IVA SMS", callback_data: "admin_manage_ranges" }],
-    [{ text: "📩 2. Stex SMS", callback_data: "placeholder_stex" }],
-    [{ text: "💬 3. MK SMS", callback_data: "placeholder_mk" }],
-    [{ text: "➕ 4. Add Number", callback_data: "admin_add_number_manual" }],
+    [{ text: "1. IVA SMS 📨", callback_data: "admin_manage_ranges" }],
+    [{ text: "2. Stex SMS 📩", callback_data: "placeholder_stex" }],
+    [{ text: "3. MK SMS 💬", callback_data: "placeholder_mk" }],
+    [{ text: "4. Add Number ➕", callback_data: "admin_add_number_manual" }],
     [{ text: "⬅️ Back", callback_data: "admin_panel" }]
   ]
 };
@@ -126,7 +126,7 @@ function renderManageRangesMenu(chatId, messageId) {
   rangesArray.forEach((r, index) => { let isAdded = db.availableNumbers[r.name] && db.availableNumbers[r.name].length > 0; rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); });
   rangeButtons.push([{ text: "📥 Add All", callback_data: "togglerng_addall" }, { text: "🗑️ Remove All", callback_data: "togglerng_delall" }]);
   rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back to Admin", callback_data: "admin_manage_numbers_panel" }]);
-  bot.editMessageText("⚙️ **iVAS Manage Ranges:**\n\nClick a range to toggle (✅ Added / ❌ Removed):", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
+  bot.editMessageText("⚙️ iVAS Manage Ranges:\n\nClick a range to toggle (✅ Added / ❌ Removed):", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
 }
 
 // ==============================================================================
@@ -158,7 +158,7 @@ bot.on('message', async (msg) => {
   
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
 
-  // 🟢 BUG FIX: মেনুর বাটনে ক্লিক করলে আগের ওয়েটিং স্টেট ক্যানসেল হবে
+  // 🟢 মেনুর বাটনে ক্লিক করলে আগের ওয়েটিং স্টেট ক্যানসেল হবে
   if (triggerWords.includes(text)) {
       delete userStates[chatId];
   }
@@ -179,6 +179,13 @@ bot.on('message', async (msg) => {
   else if (userStates[chatId] === "WAITING_FOR_2FA_KEY") {
       try {
           const secret = text.replace(/\s+/g, '').toUpperCase();
+          
+          // 🟢 BUG FIX: Base32 String এবং মিনিমাম লেংথ চেক করা হচ্ছে
+          const isValidBase32 = /^[A-Z2-7]+=*$/.test(secret);
+          if (!isValidBase32 || secret.length < 10) {
+              throw new Error("Invalid format");
+          }
+
           const code = authenticator.generate(secret);
           tempAdminData[chatId] = { active2FAKey: secret };
           
@@ -187,7 +194,7 @@ bot.on('message', async (msg) => {
               reply_markup: { inline_keyboard: [[{ text: "🔄 Refresh Code", callback_data: "refresh_2fa" }]] }
           });
       } catch (err) {
-          bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease check and send again.", { parse_mode: "Markdown" });
+          bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid 2FA secret key.", { parse_mode: "Markdown" });
       }
       delete userStates[chatId]; 
   }
