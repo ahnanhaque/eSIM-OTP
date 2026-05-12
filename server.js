@@ -96,9 +96,13 @@ function getReplyMenu(chatId, username) {
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
+// 🟢 2FA Interface Styling Function
+function get2FAMessage(code) {
+  return `🔐 **2FA Authenticator**\n━━━━━━━━━━━━━━━━━━━━\n🔑 **Your Code:** \`${code}\`\n🕒 **Refreshes in:** 30 seconds\n━━━━━━━━━━━━━━━━━━━━\n_(Copy the code above and use it.)_`;
+}
+
 const platformMenu = { inline_keyboard: [[{ text: "📘 Facebook", callback_data: "menu_country_fb" }], [{ text: "❌ Close Menu", callback_data: "close_menu" }]] };
 
-// 🟢 NOTUN: Main Admin Menu theke Add Number bad dewa holo
 function getAdminMenu(chatId) {
   let menu = [ 
     [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], 
@@ -108,12 +112,13 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
-// 🟢 NOTUN: Manage Number Panel Sub-menu
+// 🟢 Manage Number Panel - Vertically Stacked with unique icons
 const manageNumberPanel = {
   inline_keyboard: [
-    [{ text: "1. IVA SMS", callback_data: "admin_manage_ranges" }],
-    [{ text: "2. Stex SMS", callback_data: "placeholder_stex" }, { text: "3. MK SMS", callback_data: "placeholder_mk" }],
-    [{ text: "4. Add Number", callback_data: "admin_add_number_manual" }],
+    [{ text: "📨 1. IVA SMS", callback_data: "admin_manage_ranges" }],
+    [{ text: "📩 2. Stex SMS", callback_data: "placeholder_stex" }],
+    [{ text: "💬 3. MK SMS", callback_data: "placeholder_mk" }],
+    [{ text: "➕ 4. Add Number", callback_data: "admin_add_number_manual" }],
     [{ text: "⬅️ Back", callback_data: "admin_panel" }]
   ]
 };
@@ -171,9 +176,15 @@ bot.on('message', async (msg) => {
       try {
           const secret = text.replace(/\s+/g, '').toUpperCase();
           const code = authenticator.generate(secret);
-          bot.sendMessage(chatId, `🔐 **2FA Code Generated**\n\n🔑 **Your Code:** \`${code}\`\n\n⚠️ This code refreshes every 30 seconds.`, { parse_mode: "Markdown" });
+          // 🟢 2FA কি টা স্টোর করা হচ্ছে যেন রিফ্রেশ করা যায়
+          tempAdminData[chatId] = { active2FAKey: secret };
+          
+          bot.sendMessage(chatId, get2FAMessage(code), { 
+              parse_mode: "Markdown",
+              reply_markup: { inline_keyboard: [[{ text: "🔄 Refresh Code", callback_data: "refresh_2fa" }]] }
+          });
       } catch (err) {
-          bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you copied the correct text.", { parse_mode: "Markdown" });
+          bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease check and send again.", { parse_mode: "Markdown" });
       }
       delete userStates[chatId]; 
   }
@@ -188,7 +199,6 @@ bot.on('message', async (msg) => {
     else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated!\nUsers will now get **${limit} numbers** at a time.`); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }); delete userStates[chatId]; }
   }
 
-  // 🟢 NOTUN: Manual Add Number Logic (Step 1: Get Country Name)
   else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
     const countryName = text.trim().toUpperCase();
     const info = getCountryInfo(countryName);
@@ -233,21 +243,37 @@ bot.on('callback_query', async (query) => {
     else return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined yet!", show_alert: true });
   }
   if (!await isUserMember(query.from.id)) { bot.answerCallbackQuery(query.id, { text: "❌ Join group first!", show_alert: true }); return sendJoinPrompt(chatId); }
-  if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_") || data === "placeholder_stex" || data === "placeholder_mk") && !isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
+  if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_") || data === "placeholder_stex" || data === "placeholder_mk" || data === "refresh_2fa") && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
   
-  // 🟢 NOTUN: Manage Number Panel Trigger
+  // 🟢 2FA Refresh Logic
+  else if (data === "refresh_2fa") {
+    const secret = tempAdminData[chatId]?.active2FAKey;
+    if (!secret) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Send key again.", show_alert: true });
+    
+    try {
+      const code = authenticator.generate(secret);
+      bot.editMessageText(get2FAMessage(code), {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: "Markdown",
+        reply_markup: { inline_keyboard: [[{ text: "🔄 Refresh Code", callback_data: "refresh_2fa" }]] }
+      }).catch(()=>{});
+      bot.answerCallbackQuery(query.id, { text: "🔄 Code Refreshed!" });
+    } catch (e) {
+      bot.answerCallbackQuery(query.id, { text: "❌ Error refreshing code!" });
+    }
+  }
+
   else if (data === "admin_manage_numbers_panel") {
     bot.editMessageText("🛠 **Please select your panel:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel });
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 NOTUN: Placeholder logic for STEX and MK
-  else if (data === "placeholder_stex") bot.answerCallbackQuery(query.id, { text: "🛠 Stex SMS logic is not added yet.", show_alert: true });
-  else if (data === "placeholder_mk") bot.answerCallbackQuery(query.id, { text: "🛠 MK SMS logic is not added yet.", show_alert: true });
+  else if (data === "placeholder_stex") bot.answerCallbackQuery(query.id, { text: "📩 Stex SMS logic is not added yet.", show_alert: true });
+  else if (data === "placeholder_mk") bot.answerCallbackQuery(query.id, { text: "💬 MK SMS logic is not added yet.", show_alert: true });
 
-  // 🟢 NOTUN: Add Number Manual Step 1
   else if (data === "admin_add_number_manual") {
     userStates[chatId] = "WAITING_FOR_MANUAL_COUNTRY";
     bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(Example: `PAKISTAN`, `TUNISIA`, `USA`)", { parse_mode: "Markdown" });
@@ -355,7 +381,7 @@ app.post('/api/ivas-data', (req, res) => {
 // =================    7. WEB SERVER & MONGODB INIT         ====================
 // ==============================================================================
 
-app.get('/', (req, res) => res.status(200).send('Bot is running perfectly on Hybrid Mode with 2FA & New Admin Panel!'));
+app.get('/', (req, res) => res.status(200).send('Bot is running perfectly on Hybrid Mode!'));
 
 mongoose.connect(MONGODB_URI).then(async () => {
   console.log("✅ MongoDB Connected!");
