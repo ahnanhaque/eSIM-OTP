@@ -1,7 +1,8 @@
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
-const iva = require("./iva"); // iva.js ফাইলটি থাকুক, তবে আমরা এর নেটওয়ার্ক রিকোয়েস্ট আর ব্যবহার করবো না
+const { authenticator } = require("otplib"); 
+const iva = require("./iva"); 
 
 // ==============================================================================
 // =================        1. CONFIGURATION & SETUP         ====================
@@ -18,7 +19,6 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(express.json());
 
-// 🟢 NOTUN: CORS Header যুক্ত করা হলো যাতে ক্রোম এক্সটেনশন ডাটা পাঠাতে পারে
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -40,10 +40,7 @@ const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, a
 const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
-
 let isDbLoaded = false; 
-
-// 🟢 NOTUN: এক্সটেনশন থেকে আসা ডাটা মেমোরিতে ধরে রাখার জন্য ভেরিয়েবল
 let latestRangesFromExtension = {}; 
 
 function saveDB() { 
@@ -94,25 +91,39 @@ function buildAssignedMessageText(country, numsList, statuses) {
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
 function getReplyMenu(chatId, username) {
-  let keyboard = [[{ text: "☎️ Get Number" }], [{ text: "💰 Balance" }, { text: "👤 Profile" }]];
+  let keyboard = [[{ text: "☎️ Get Number" }], [{ text: "🔑 2FA" }, { text: "👤 Profile" }]];
   if (isAdmin(chatId, username)) keyboard.push([{ text: "💬 Support" }, { text: "⚙️ Admin Panel" }]); else keyboard.push([{ text: "💬 Support" }]);
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
 const platformMenu = { inline_keyboard: [[{ text: "📘 Facebook", callback_data: "menu_country_fb" }], [{ text: "❌ Close Menu", callback_data: "close_menu" }]] };
 
+// 🟢 NOTUN: Main Admin Menu theke Add Number bad dewa holo
 function getAdminMenu(chatId) {
-  let menu = [ [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], [{ text: "⚙️ Manage Ranges", callback_data: "admin_manage_ranges" }, { text: "➕ Add Number", callback_data: "admin_add_number" }] ];
+  let menu = [ 
+    [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], 
+    [{ text: "⚙️ Manage Number", callback_data: "admin_manage_numbers_panel" }] 
+  ];
   if (isSuperAdmin(chatId)) menu.push([{ text: "👑 Manage Admins", callback_data: "admin_manage_admins" }, { text: "❌ Close Menu", callback_data: "close_menu" }]); else menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
   return { inline_keyboard: menu };
 }
+
+// 🟢 NOTUN: Manage Number Panel Sub-menu
+const manageNumberPanel = {
+  inline_keyboard: [
+    [{ text: "1. IVA SMS", callback_data: "admin_manage_ranges" }],
+    [{ text: "2. Stex SMS", callback_data: "placeholder_stex" }, { text: "3. MK SMS", callback_data: "placeholder_mk" }],
+    [{ text: "4. Add Number", callback_data: "admin_add_number_manual" }],
+    [{ text: "⬅️ Back", callback_data: "admin_panel" }]
+  ]
+};
 
 function renderManageRangesMenu(chatId, messageId) {
   const rangesArray = tempAdminData[chatId] || []; let rangeButtons = [];
   rangesArray.forEach((r, index) => { let isAdded = db.availableNumbers[r.name] && db.availableNumbers[r.name].length > 0; rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); });
   rangeButtons.push([{ text: "📥 Add All", callback_data: "togglerng_addall" }, { text: "🗑️ Remove All", callback_data: "togglerng_delall" }]);
-  rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back to Admin", callback_data: "admin_panel" }]);
-  bot.editMessageText("⚙️ **Manage Ranges:**\n\nClick a range to toggle (✅ Added / ❌ Removed):", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
+  rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back to Admin", callback_data: "admin_manage_numbers_panel" }]);
+  bot.editMessageText("⚙️ **iVAS Manage Ranges:**\n\nClick a range to toggle (✅ Added / ❌ Removed):", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
 }
 
 // ==============================================================================
@@ -132,7 +143,7 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
 
 bot.onText(/\/admin/, async (msg) => {
   if (!isAdmin(msg.chat.id, msg.from.username)) return bot.sendMessage(msg.chat.id, "❌ You don't have admin rights!");
-  bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**\n\nHere you can manage iVAS numbers for the bot.", { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" });
+  bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" });
 });
 
 bot.on('message', async (msg) => {
@@ -140,12 +151,33 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/')) return;
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-  const triggerWords = ["☎️ Get Number", "💰 Balance", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
+  const triggerWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
 
   if (text === "☎️ Get Number") { clearPendingForChat(chatId); bot.sendMessage(chatId, `🛠 Choose the platform you want a number for:`, { reply_markup: platformMenu }); } 
-  else if (text === "💰 Balance") bot.sendMessage(chatId, `💰 **Your Current Balance:** ${getBalance(chatId).toFixed(2)} BDT\n(Minimum withdrawal 50 BDT)`, { reply_markup: { inline_keyboard: [[{ text: "💸 Withdraw", callback_data: "withdraw_funds" }]] }, parse_mode: "Markdown" });
-  else if (text === "👤 Profile") bot.sendMessage(chatId, `👤 **Profile Info:**\n\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Balance:** ${getBalance(chatId).toFixed(2)} BDT\n\n🔗 **Your Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { parse_mode: "Markdown" });
+  
+  else if (text === "👤 Profile") {
+      bot.sendMessage(chatId, `👤 **Profile Info:**\n\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Your Current Balance:** ${getBalance(chatId).toFixed(2)} BDT\n_(Minimum withdrawal 50 BDT)_\n\n🔗 **Your Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { 
+          parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: [[{ text: "💸 Withdraw", callback_data: "withdraw_funds" }]] }
+      });
+  }
+  
+  else if (text === "🔑 2FA") {
+      userStates[chatId] = "WAITING_FOR_2FA_KEY";
+      bot.sendMessage(chatId, "🔐 **Send your secret key:**\n\n(Example: `RTOX IVWV MK7A 5R7C...`)", { parse_mode: "Markdown" });
+  }
+  else if (userStates[chatId] === "WAITING_FOR_2FA_KEY") {
+      try {
+          const secret = text.replace(/\s+/g, '').toUpperCase();
+          const code = authenticator.generate(secret);
+          bot.sendMessage(chatId, `🔐 **2FA Code Generated**\n\n🔑 **Your Code:** \`${code}\`\n\n⚠️ This code refreshes every 30 seconds.`, { parse_mode: "Markdown" });
+      } catch (err) {
+          bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you copied the correct text.", { parse_mode: "Markdown" });
+      }
+      delete userStates[chatId]; 
+  }
+
   else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nContact our admin for any assistance.\n(Contact: @Excellentzqlt)", { parse_mode: "Markdown" });
   else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { 
       bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); 
@@ -155,12 +187,23 @@ bot.on('message', async (msg) => {
     if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Please enter a valid number between 1 and 20.");
     else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated!\nUsers will now get **${limit} numbers** at a time.`); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }); delete userStates[chatId]; }
   }
+
+  // 🟢 NOTUN: Manual Add Number Logic (Step 1: Get Country Name)
+  else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
+    const countryName = text.trim().toUpperCase();
+    const info = getCountryInfo(countryName);
+    tempAdminData[chatId] = { addNumberCountry: countryName }; 
+    userStates[chatId] = "WAITING_FOR_ADD_NUMBERS";
+    bot.sendMessage(chatId, `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nEbar number gulo paste korun (protiti alada line-e):`, { parse_mode: "Markdown" });
+  }
+
   else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
     const country = tempAdminData[chatId]?.addNumberCountry; if (!country) { delete userStates[chatId]; return; }
     const numbers = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
     if (!db.availableNumbers[country]) db.availableNumbers[country] = [];
     let added = 0; numbers.forEach(num => { if (!db.availableNumbers[country].includes(num)) { db.availableNumbers[country].push(num); added++; } }); saveDB();
-    bot.sendMessage(chatId, `✅ **${added}টি নম্বর যোগ হয়েছে** ${getCountryInfo(country).flag} ${country} তে!`, { parse_mode: "Markdown" }); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) });
+    bot.sendMessage(chatId, `✅ **${added}টি নম্বর যোগ হয়েছে** ${getCountryInfo(country).flag} ${country} তে!`, { parse_mode: "Markdown" }); 
+    bot.sendMessage(chatId, "⚙️ **Manage Number Panel:**", { reply_markup: manageNumberPanel });
     delete userStates[chatId]; delete tempAdminData[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
@@ -190,12 +233,30 @@ bot.on('callback_query', async (query) => {
     else return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined yet!", show_alert: true });
   }
   if (!await isUserMember(query.from.id)) { bot.answerCallbackQuery(query.id, { text: "❌ Join group first!", show_alert: true }); return sendJoinPrompt(chatId); }
-  if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_")) && !isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
+  if ((data.startsWith("admin_") || data.startsWith("togglerng_") || data.startsWith("refresh_") || data.startsWith("deladmin_") || data.startsWith("addnum_") || data === "placeholder_stex" || data === "placeholder_mk") && !isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied!", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
+  
+  // 🟢 NOTUN: Manage Number Panel Trigger
+  else if (data === "admin_manage_numbers_panel") {
+    bot.editMessageText("🛠 **Please select your panel:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel });
+    bot.answerCallbackQuery(query.id);
+  }
+  
+  // 🟢 NOTUN: Placeholder logic for STEX and MK
+  else if (data === "placeholder_stex") bot.answerCallbackQuery(query.id, { text: "🛠 Stex SMS logic is not added yet.", show_alert: true });
+  else if (data === "placeholder_mk") bot.answerCallbackQuery(query.id, { text: "🛠 MK SMS logic is not added yet.", show_alert: true });
+
+  // 🟢 NOTUN: Add Number Manual Step 1
+  else if (data === "admin_add_number_manual") {
+    userStates[chatId] = "WAITING_FOR_MANUAL_COUNTRY";
+    bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(Example: `PAKISTAN`, `TUNISIA`, `USA`)", { parse_mode: "Markdown" });
+    bot.answerCallbackQuery(query.id);
+  }
+
   else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Number Limit Setup:**\n\nSend new limit (e.g., 2, 5, 10):`); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Broadcast Mode:**\n\nType the message you want to send to all users."); bot.answerCallbackQuery(query.id); }
-  else if (data === "withdraw_funds") { bot.answerCallbackQuery(query.id); bot.deleteMessage(chatId, messageId).catch(()=>{}); bot.sendMessage(chatId, "💸 **Withdrawal Request**\n\nEnter your 11-digit bKash or Nagad number:"); userStates[chatId] = "WAITING_FOR_BKASH"; }
+  else if (data === "withdraw_funds") { bot.answerCallbackQuery(query.id); bot.sendMessage(chatId, "💸 **Withdrawal Request**\n\nEnter your 11-digit bKash or Nagad number:"); userStates[chatId] = "WAITING_FOR_BKASH"; }
   else if (data === "menu_country_fb") {
     clearPendingForChat(chatId); const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (ranges.length === 0) { bot.answerCallbackQuery(query.id); return bot.editMessageText(`⚠️ Currently, there are no numbers in stock.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "close_menu" }]] } }); }
@@ -219,20 +280,11 @@ bot.on('callback_query', async (query) => {
   }
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
-    // 🟢 NOTUN: iVAS থেকে নয়, বরং এক্সটেনশন থেকে পাওয়া মেমোরি ডাটা দিয়ে রেঞ্জ রেন্ডার করবে
     bot.answerCallbackQuery(query.id, { text: "🔄 Loading from Extension data..." });
     let grouped = { ...latestRangesFromExtension };
-    
-    // ডাটাবেসে আগে থেকে থাকা রেঞ্জগুলোও অ্যাড করে দিচ্ছি
-    for (const r in db.availableNumbers) {
-      if (!grouped[r]) grouped[r] = db.availableNumbers[r];
-    }
-    
+    for (const r in db.availableNumbers) { if (!grouped[r]) grouped[r] = db.availableNumbers[r]; }
     tempAdminData[chatId] = Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] }));
-    
-    if (tempAdminData[chatId].length === 0) {
-      return bot.editMessageText("📭 **No data found!**\n\nPlease ensure your browser extension is running and iVAS tab is open.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" });
-    }
+    if (tempAdminData[chatId].length === 0) { return bot.editMessageText("📭 **No data found!**\n\nPlease ensure your browser extension is running and iVAS tab is open.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_manage_numbers_panel" }]] }, parse_mode: "Markdown" }); }
     renderManageRangesMenu(chatId, messageId);
   }
   else if (data.startsWith("togglerng_")) {
@@ -242,12 +294,6 @@ bot.on('callback_query', async (query) => {
     else { const idx = parseInt(action), selected = tempAdminData[chatId][idx]; if (db.availableNumbers[selected.name]) { delete db.availableNumbers[selected.name]; saveDB(); bot.answerCallbackQuery(query.id, { text: `❌ Removed ${selected.name}` }); } else { db.availableNumbers[selected.name] = []; let added = 0; selected.nums.forEach(num => { if (!inUseNumbers[num]) { db.availableNumbers[selected.name].push(num); added++; } }); saveDB(); sendStockAlert(selected.name, selected.nums.length); bot.answerCallbackQuery(query.id, { text: `✅ Added ${selected.name} (${added})` }); } }
     renderManageRangesMenu(chatId, messageId);
   }
-  else if (data === "admin_add_number") {
-    const countries = Object.keys(countryData), countryBtns = [];
-    for (let i = 0; i < countries.length; i += 2) { const row = [{ text: `${countryData[countries[i]].flag} ${countries[i]}`, callback_data: `addnum_${countries[i]}` }]; if (countries[i+1]) row.push({ text: `${countryData[countries[i+1]].flag} ${countries[i+1]}`, callback_data: `addnum_${countries[i+1]}` }); countryBtns.push(row); }
-    countryBtns.push([{ text: "⬅️ Back to Admin", callback_data: "admin_panel" }]); bot.editMessageText("➕ **Add Numbers:**\n\nCountry select করুন:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryBtns }, parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id);
-  }
-  else if (data.startsWith("addnum_")) { const country = data.replace("addnum_", ""); tempAdminData[chatId] = { addNumberCountry: country }; userStates[chatId] = "WAITING_FOR_ADD_NUMBERS"; const info = getCountryInfo(country); bot.sendMessage(chatId, `➕ **${info.flag} ${country}** তে নম্বর যোগ করুন:\n\nএকটি করে লাইনে নম্বর পাঠান:`, { parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_manage_admins") { if (!isSuperAdmin(chatId)) return; bot.editMessageText("👑 **Admin Management:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove Admin", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_add_admin") { if (!isSuperAdmin(chatId)) return; userStates[chatId] = "WAITING_FOR_ADMIN_USERNAME"; bot.sendMessage(chatId, "👤 **Enter Telegram Username:**"); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_remove_admin") { if (!isSuperAdmin(chatId)) return; if (db.adminUsernames.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No admins found!", show_alert: true }); let btns = db.adminUsernames.map(un => [{ text: `❌ Remove ${un}`, callback_data: `deladmin_${un}` }]); btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_admins" }]); bot.editMessageText("🗑️ **Select admin to remove:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
@@ -278,22 +324,19 @@ function processFoundOTP(number, time, message, range) {
 }
 
 // ==============================================================================
-// =================    6. EXTENSION API RECEIVER (NEW)      ====================
+// =================    6. EXTENSION API RECEIVER            ====================
 // ==============================================================================
 
-// 🟢 NOTUN: এক্সটেনশন থেকে আসা লাইভ ডাটা এই লিংকে রিসিভ হবে
 app.post('/api/ivas-data', (req, res) => {
   const { type, payload } = req.body;
 
   if (type === 'RANGES') {
-    // payload = { "BANGLADESH": ["123", "456"], "USA": ["789"] }
     latestRangesFromExtension = payload;
     console.log(`📥 Received ${Object.keys(payload).length} active ranges from browser extension!`);
     return res.status(200).json({ success: true, message: "Ranges updated" });
   } 
   
   else if (type === 'SMS_LOG') {
-    // payload = [ { number: "123", time: "...", message: "...", range: "BANGLADESH" }, ... ]
     let processedCount = 0;
     if (Array.isArray(payload)) {
       payload.forEach(sms => {
@@ -312,7 +355,7 @@ app.post('/api/ivas-data', (req, res) => {
 // =================    7. WEB SERVER & MONGODB INIT         ====================
 // ==============================================================================
 
-app.get('/', (req, res) => res.status(200).send('Bot is running perfectly on Hybrid Mode!'));
+app.get('/', (req, res) => res.status(200).send('Bot is running perfectly on Hybrid Mode with 2FA & New Admin Panel!'));
 
 mongoose.connect(MONGODB_URI).then(async () => {
   console.log("✅ MongoDB Connected!");
