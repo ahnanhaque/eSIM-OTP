@@ -19,7 +19,19 @@ app.use((req, res, next) => {
 });
 
 const bot = new TelegramBot(botToken, { polling: true });
-bot.on("polling_error", (msg) => console.log("\n[Telegram Error]", msg.message));
+
+// 🟢 গ্লোবাল এরর ফিল্টার: অপ্রয়োজনীয় editMessageText এরর হাইড করার জন্য
+bot.on("polling_error", (msg) => {
+    if(msg && msg.message && !msg.message.includes("message is not modified")) {
+        console.log("\n[Telegram Error]", msg.message);
+    }
+});
+bot.on("error", (err) => {
+    if(err && err.message && !err.message.includes("message is not modified")) {
+        console.log("\n[Telegram Bot Error]", err.message);
+    }
+});
+
 bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { command: 'admin', description: 'Open admin panel' }]);
 
 let botInfo = {};
@@ -32,7 +44,7 @@ let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referr
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 
-function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => console.error(err)); }
+function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => {}); }
 function getBalance(chatId) { return db.balances[chatId] || 0; }
 function addBalance(chatId, amount) { if (!db.balances[chatId]) db.balances[chatId] = 0; db.balances[chatId] += amount; saveDB(); }
 function isSuperAdmin(chatId) { return chatId === ADMIN_ID; }
@@ -40,7 +52,7 @@ function isAdmin(chatId, username) { if (isSuperAdmin(chatId)) return true; let 
 async function isUserMember(userId) { if (isSuperAdmin(userId)) return true; try { const member = await bot.getChatMember(GROUP_CHAT_ID, userId); return ['creator', 'administrator', 'member', 'restricted'].includes(member.status); } catch (e) { return false; } }
 
 function sendJoinPrompt(chatId) {
-  bot.sendMessage(chatId, `⚠️ **Access Denied!**\n\nYou must join our official group first to use this bot. Once joined, click the check button below.`, { reply_markup: { inline_keyboard: [[{ text: "📢 Join Group", url: GROUP_INVITE_LINK }], [{ text: "🔄 Check Again", callback_data: "check_join" }]] }, parse_mode: "Markdown" });
+  bot.sendMessage(chatId, `⚠️ **Access Denied!**\n\nYou must join our official group first to use this bot. Once joined, click the check button below.`, { reply_markup: { inline_keyboard: [[{ text: "📢 Join Group", url: GROUP_INVITE_LINK }], [{ text: "🔄 Check Again", callback_data: "check_join" }]] }, parse_mode: "Markdown" }).catch(()=>{});
 }
 
 function detectPlatform(from, subject, body) {
@@ -121,8 +133,10 @@ const manageNumberPanel = {
   ]
 };
 
+// 🟢 BUG FIX: Ranges Array initialization error fixed here
 function renderManageRangesMenu(chatId, messageId) {
-  const rangesArray = tempAdminData[chatId] || []; let rangeButtons = [];
+  const rangesArray = tempAdminData[chatId]?.ranges || []; 
+  let rangeButtons = [];
   rangesArray.forEach((r, index) => { let isAdded = db.availableNumbers[r.name] && db.availableNumbers[r.name].length > 0; rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); });
   rangeButtons.push([{ text: "📥 Add All", callback_data: "togglerng_addall" }, { text: "🗑️ Remove All", callback_data: "togglerng_delall" }]);
   rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]);
@@ -137,12 +151,12 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
       if (refId && Number(refId) !== chatId && !db.referred[chatId]) { db.referred[chatId] = Number(refId); addBalance(Number(refId), 10.00); bot.sendMessage(Number(refId), `🎉 **Congratulations!**\nA new user just joined using your referral link. 💰 **10.00 BDT** has been added to your balance.`, { parse_mode: "Markdown" }).catch(()=>{}); }
       saveDB();
   }
-  bot.sendMessage(chatId, `Welcome to the bot! 👋\n\nPlease select an option from the menu below to get started:`, { reply_markup: getReplyMenu(chatId, username) });
+  bot.sendMessage(chatId, `Welcome to the bot! 👋\n\nPlease select an option from the menu below to get started:`, { reply_markup: getReplyMenu(chatId, username) }).catch(()=>{});
 });
 
 bot.onText(/\/admin/, async (msg) => {
-  if (!isAdmin(msg.chat.id, msg.from.username)) return bot.sendMessage(msg.chat.id, "❌ Access Denied. You do not have the required admin rights.");
-  bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" });
+  if (!isAdmin(msg.chat.id, msg.from.username)) return bot.sendMessage(msg.chat.id, "❌ Access Denied. You do not have the required admin rights.").catch(()=>{});
+  bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" }).catch(()=>{});
 });
 
 bot.on('message', async (msg) => {
@@ -156,7 +170,7 @@ bot.on('message', async (msg) => {
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
-    bot.sendMessage(chatId, `🛠 Please select the platform you want to receive an OTP for:`, { reply_markup: platformMenu }); 
+    bot.sendMessage(chatId, `🛠 Please select the platform you want to receive an OTP for:`, { reply_markup: platformMenu }).catch(()=>{}); 
   } 
   else if (text === "📧 Temp Mail") {
     try {
@@ -227,9 +241,7 @@ bot.on('message', async (msg) => {
                         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: markup.inline_keyboard.length > 0 ? markup : null }).catch(()=>{});
                     }
                 }
-            } catch (e) {
-                // Ignore silent background errors
-            }
+            } catch (e) {}
         }, 3000);
 
         activeTempMails[chatId].timeout = setTimeout(() => {
@@ -240,63 +252,63 @@ bot.on('message', async (msg) => {
         }, 15 * 60 * 1000);
 
     } catch (e) {
-        bot.sendMessage(chatId, `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`, { parse_mode: "Markdown" });
+        bot.sendMessage(chatId, `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`, { parse_mode: "Markdown" }).catch(()=>{});
     }
   }
   else if (text === "👤 Profile") {
-      bot.sendMessage(chatId, `👤 **Profile Info:**\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Balance:** ${getBalance(chatId).toFixed(2)} BDT\n\n🔗 **Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "💸 Withdraw", callback_data: "withdraw_funds" }]] } });
+      bot.sendMessage(chatId, `👤 **Profile Info:**\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || 'N/A'}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Balance:** ${getBalance(chatId).toFixed(2)} BDT\n\n🔗 **Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "💸 Withdraw", callback_data: "withdraw_funds" }]] } }).catch(()=>{});
   }
   else if (text === "🔑 2FA") {
       userStates[chatId] = "WAITING_FOR_2FA_KEY";
-      bot.sendMessage(chatId, "🔐 **Send your secret key:**\n(For example: `RTOX IVWV MK7A 5R7C...`)", { parse_mode: "Markdown" });
+      bot.sendMessage(chatId, "🔐 **Send your secret key:**\n(For example: `RTOX IVWV MK7A 5R7C...`)", { parse_mode: "Markdown" }).catch(()=>{});
   }
   else if (userStates[chatId] === "WAITING_FOR_2FA_KEY") {
       try {
           const secret = text.replace(/\s+/g, '').toUpperCase();
           if (!/^[A-Z2-7]+=*$/.test(secret) || secret.length < 10) throw new Error("Invalid");
           tempAdminData[chatId] = { active2FAKey: secret };
-          bot.sendMessage(chatId, `🔐 **2FA Authenticator**\n━━━━━━━━━━\n🔑 **Code:** \`${authenticator.generate(secret)}\`\n🕒 **Refreshes in:** 30s\n━━━━━━━━━━\n_(Simply copy the code above and use it.)_`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🔄 Refresh Code", callback_data: "refresh_2fa" }]] } });
-      } catch (err) { bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid format.", { parse_mode: "Markdown" }); }
+          bot.sendMessage(chatId, `🔐 **2FA Authenticator**\n━━━━━━━━━━\n🔑 **Code:** \`${authenticator.generate(secret)}\`\n🕒 **Refreshes in:** 30s\n━━━━━━━━━━\n_(Simply copy the code above and use it.)_`, { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🔄 Refresh Code", callback_data: "refresh_2fa" }]] } }).catch(()=>{});
+      } catch (err) { bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid format.", { parse_mode: "Markdown" }).catch(()=>{}); }
       delete userStates[chatId]; 
   }
-  else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin for any assistance. (@Excellentzqlt)", { parse_mode: "Markdown" });
-  else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); }
+  else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin for any assistance. (@Excellentzqlt)", { parse_mode: "Markdown" }).catch(()=>{});
+  else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); }
   else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
     const limit = parseInt(text);
-    if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Invalid input. Please enter a valid number between 1 and 20.");
-    else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated! Users will now be assigned **${limit}** numbers at a time.`); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }); delete userStates[chatId]; }
+    if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Invalid input. Please enter a valid number between 1 and 20.").catch(()=>{});
+    else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated! Users will now be assigned **${limit}** numbers at a time.`).catch(()=>{}); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }).catch(()=>{}); delete userStates[chatId]; }
   }
   else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
     const info = getCountryInfo(text.trim().toUpperCase());
     tempAdminData[chatId] = { ...tempAdminData[chatId], addNumberCountry: text.trim().toUpperCase() }; 
     userStates[chatId] = "WAITING_FOR_ADD_NUMBERS";
-    bot.sendMessage(chatId, `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the numbers below (each on a new line):`, { parse_mode: "Markdown" });
+    bot.sendMessage(chatId, `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the numbers below (each on a new line):`, { parse_mode: "Markdown" }).catch(()=>{});
   }
   else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
     const country = tempAdminData[chatId]?.addNumberCountry; if (!country) { delete userStates[chatId]; return; }
     const numbers = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
     if (!db.availableNumbers[country]) db.availableNumbers[country] = [];
     let added = 0; numbers.forEach(num => { if (!db.availableNumbers[country].includes(num)) { db.availableNumbers[country].push(num); added++; } }); saveDB();
-    bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to ${country}.`, { parse_mode: "Markdown" }); 
-    bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel });
+    bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to ${country}.`, { parse_mode: "Markdown" }).catch(()=>{}); 
+    bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel }).catch(()=>{});
     delete userStates[chatId]; delete tempAdminData[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
-    bot.sendMessage(chatId, `⏳ Broadcasting your message to all users. Please wait...`); let successCount = 0;
+    bot.sendMessage(chatId, `⏳ Broadcasting your message to all users. Please wait...`).catch(()=>{}); let successCount = 0;
     for (let uId of db.users) { try { await bot.sendMessage(uId, `📢 **Broadcast Message:**\n\n${text}`, { parse_mode: "Markdown" }); successCount++; } catch(e) {} }
-    bot.sendMessage(chatId, `✅ **Broadcast Complete!** Your message was successfully sent to ${successCount} users.`); delete userStates[chatId];
+    bot.sendMessage(chatId, `✅ **Broadcast Complete!** Your message was successfully sent to ${successCount} users.`).catch(()=>{}); delete userStates[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_BKASH") {
     if (/^(01[3-9]\d{8})$/.test(text)) {
-      const currentBalance = getBalance(chatId); if (currentBalance < 50) { bot.sendMessage(chatId, `⚠️ Insufficient balance. You need at least 50 BDT to withdraw.`); delete userStates[chatId]; return; }
-      bot.sendMessage(ADMIN_ID, `💸 **New Withdraw Request!**\n\n👤 **User ID:** \`${chatId}\`\n📞 **Account:** \`${text}\`\n💰 **Amount:** ${currentBalance.toFixed(2)} BDT`, { parse_mode: "Markdown" });
-      bot.sendMessage(chatId, `✅ Your withdrawal request has been submitted successfully and is pending review.`); db.balances[chatId] = 0; saveDB(); delete userStates[chatId]; 
-    } else bot.sendMessage(chatId, "❌ Invalid format. Please enter a valid 11-digit account number.");
+      const currentBalance = getBalance(chatId); if (currentBalance < 50) { bot.sendMessage(chatId, `⚠️ Insufficient balance. You need at least 50 BDT to withdraw.`).catch(()=>{}); delete userStates[chatId]; return; }
+      bot.sendMessage(ADMIN_ID, `💸 **New Withdraw Request!**\n\n👤 **User ID:** \`${chatId}\`\n📞 **Account:** \`${text}\`\n💰 **Amount:** ${currentBalance.toFixed(2)} BDT`, { parse_mode: "Markdown" }).catch(()=>{});
+      bot.sendMessage(chatId, `✅ Your withdrawal request has been submitted successfully and is pending review.`).catch(()=>{}); db.balances[chatId] = 0; saveDB(); delete userStates[chatId]; 
+    } else bot.sendMessage(chatId, "❌ Invalid format. Please enter a valid 11-digit account number.").catch(()=>{});
   }
   else if (userStates[chatId] === "WAITING_FOR_ADMIN_USERNAME" && isSuperAdmin(chatId)) {
     let newAdmin = text.trim().toLowerCase(); if(!newAdmin.startsWith("@")) newAdmin = "@" + newAdmin;
-    if(!db.adminUsernames.includes(newAdmin)) { db.adminUsernames.push(newAdmin); saveDB(); bot.sendMessage(chatId, `✅ **${newAdmin}** has been successfully added as an admin.`); }
-    bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); delete userStates[chatId];
+    if(!db.adminUsernames.includes(newAdmin)) { db.adminUsernames.push(newAdmin); saveDB(); bot.sendMessage(chatId, `✅ **${newAdmin}** has been successfully added as an admin.`).catch(()=>{}); }
+    bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 });
 
@@ -304,7 +316,7 @@ bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id, messageId = query.message.message_id, data = query.data, username = query.from.username;
 
   if (data === "check_join") {
-    if (await isUserMember(query.from.id)) { bot.deleteMessage(chatId, messageId).catch(()=>{}); bot.sendMessage(chatId, `Welcome! 👋`, { reply_markup: getReplyMenu(chatId, username) }); return bot.answerCallbackQuery(query.id, { text: "✅ Thank you for joining! You can now use the bot." }); }
+    if (await isUserMember(query.from.id)) { bot.deleteMessage(chatId, messageId).catch(()=>{}); bot.sendMessage(chatId, `Welcome! 👋`, { reply_markup: getReplyMenu(chatId, username) }).catch(()=>{}); return bot.answerCallbackQuery(query.id, { text: "✅ Thank you for joining! You can now use the bot." }); }
     else return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet. Please join first!", show_alert: true });
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
@@ -324,12 +336,12 @@ bot.on('callback_query', async (query) => {
   }
 
   else if (data === "admin_manage_numbers") {
-    bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu });
+    bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
-    bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel });
+    bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
   else if (data === "placeholder_stex" || data === "placeholder_mk" || data === "placeholder_ig" || data === "placeholder_wa") {
@@ -338,23 +350,23 @@ bot.on('callback_query', async (query) => {
 
   else if (data === "admin_add_number_manual") {
     userStates[chatId] = "WAITING_FOR_MANUAL_COUNTRY";
-    bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(For example: PAKISTAN, USA, BANGLADESH)", { parse_mode: "Markdown" });
+    bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(For example: PAKISTAN, USA, BANGLADESH)", { parse_mode: "Markdown" }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
-  else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Please enter the new number limit:**`); bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**"); bot.answerCallbackQuery(query.id); }
-  else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**"); bot.answerCallbackQuery(query.id); }
+  else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Please enter the new number limit:**`).catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data === "menu_country_fb") {
     clearPendingForChat(chatId); const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
-    if (ranges.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } });
+    if (ranges.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
     let baseCountryCount = {}, currentV = {}, countryButtons = [];
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
     ranges.forEach(range => { let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; } countryButtons.push([{ text: `${dName} | 📦: ${db.availableNumbers[range].length}`, callback_data: `assign_${range}` }]); });
     countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
-    bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }); bot.answerCallbackQuery(query.id);
+    bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }).catch(()=>{}); bot.answerCallbackQuery(query.id);
   }
-  else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }); bot.answerCallbackQuery(query.id); }
+  else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data.startsWith("assign_")) {
     const sel = data.replace("assign_next_", "").replace("assign_", ""); clearPendingForChat(chatId);
@@ -387,13 +399,13 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
+  else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
     bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
     let grouped = { ...latestRangesFromExtension };
     for (const r in db.availableNumbers) { if (!grouped[r]) grouped[r] = db.availableNumbers[r]; }
     tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
-    if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" });
+    if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
     renderManageRangesMenu(chatId, messageId);
   }
   else if (data.startsWith("togglerng_")) {
@@ -403,18 +415,16 @@ bot.on('callback_query', async (query) => {
     else { const idx = parseInt(action), sel = tempAdminData[chatId].ranges[idx]; if (db.availableNumbers[sel.name]) { delete db.availableNumbers[sel.name]; saveDB(); bot.answerCallbackQuery(query.id, { text: `❌ Removed range from active list.` }); } else { db.availableNumbers[sel.name] = []; let a = 0; sel.nums.forEach(num => { if (!inUseNumbers[num]) { db.availableNumbers[sel.name].push(num); a++; } }); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Added range successfully (${a} numbers).` }); } }
     renderManageRangesMenu(chatId, messageId);
   }
-  else if (data === "admin_manage_admins") { if (!isSuperAdmin(chatId)) return; bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_add_admin") { if (!isSuperAdmin(chatId)) return; userStates[chatId] = "WAITING_FOR_ADMIN_USERNAME"; bot.sendMessage(chatId, "👤 **Please enter the Telegram Username you wish to make an admin:**"); bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_remove_admin") { if (!isSuperAdmin(chatId)) return; if (db.adminUsernames.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No admins found in the system.", show_alert: true }); let btns = db.adminUsernames.map(un => [{ text: `❌ Remove ${un}`, callback_data: `deladmin_${un}` }]); btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_admins" }]); bot.editMessageText("🗑️ **Select an administrator to remove:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }); bot.answerCallbackQuery(query.id); }
-  else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }); }
+  else if (data === "admin_manage_admins") { if (!isSuperAdmin(chatId)) return; bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  else if (data === "admin_add_admin") { if (!isSuperAdmin(chatId)) return; userStates[chatId] = "WAITING_FOR_ADMIN_USERNAME"; bot.sendMessage(chatId, "👤 **Please enter the Telegram Username you wish to make an admin:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  else if (data === "admin_remove_admin") { if (!isSuperAdmin(chatId)) return; if (db.adminUsernames.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No admins found in the system.", show_alert: true }); let btns = db.adminUsernames.map(un => [{ text: `❌ Remove ${un}`, callback_data: `deladmin_${un}` }]); btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_admins" }]); bot.editMessageText("🗑️ **Select an administrator to remove:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
 });
 
-// 🟢 NEW: Separate OTP Message with beautiful formatting and copy buttons
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
   
-  // 🟢 Group Broadcast with the new format and "Get Number" button
   const info = getCountryInfo(range || "UNKNOWN");
   let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
   let groupMarkup = {
@@ -426,7 +436,6 @@ function processFoundOTP(number, time, message, range) {
     const reqData = pendingRequests[number];
     const reqInfo = getCountryInfo(reqData.country);
     
-    // 🟢 User Direct Message for OTP
     let userReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
     let userMarkup = { inline_keyboard: [] };
     
