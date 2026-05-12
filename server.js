@@ -96,7 +96,6 @@ function getReplyMenu(chatId, username) {
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
-// 🟢 2FA Interface Styling Function
 function get2FAMessage(code) {
   return `🔐 **2FA Authenticator**\n━━━━━━━━━━━━━━━━━━━━\n🔑 **Your Code:** \`${code}\`\n🕒 **Refreshes in:** 30 seconds\n━━━━━━━━━━━━━━━━━━━━\n_(Copy the code above and use it.)_`;
 }
@@ -112,7 +111,6 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
-// 🟢 Manage Number Panel - Vertically Stacked with unique icons
 const manageNumberPanel = {
   inline_keyboard: [
     [{ text: "📨 1. IVA SMS", callback_data: "admin_manage_ranges" }],
@@ -157,7 +155,13 @@ bot.on('message', async (msg) => {
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
   const triggerWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
+  
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
+
+  // 🟢 BUG FIX: মেনুর বাটনে ক্লিক করলে আগের ওয়েটিং স্টেট ক্যানসেল হবে
+  if (triggerWords.includes(text)) {
+      delete userStates[chatId];
+  }
 
   if (text === "☎️ Get Number") { clearPendingForChat(chatId); bot.sendMessage(chatId, `🛠 Choose the platform you want a number for:`, { reply_markup: platformMenu }); } 
   
@@ -176,7 +180,6 @@ bot.on('message', async (msg) => {
       try {
           const secret = text.replace(/\s+/g, '').toUpperCase();
           const code = authenticator.generate(secret);
-          // 🟢 2FA কি টা স্টোর করা হচ্ছে যেন রিফ্রেশ করা যায়
           tempAdminData[chatId] = { active2FAKey: secret };
           
           bot.sendMessage(chatId, get2FAMessage(code), { 
@@ -247,7 +250,6 @@ bot.on('callback_query', async (query) => {
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
   
-  // 🟢 2FA Refresh Logic
   else if (data === "refresh_2fa") {
     const secret = tempAdminData[chatId]?.active2FAKey;
     if (!secret) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Send key again.", show_alert: true });
