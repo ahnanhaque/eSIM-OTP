@@ -197,22 +197,38 @@ bot.on('message', async (msg) => {
                         activeTempMails[chatId].otpReceived = true; 
                         
                         const fullText = `${latest.subject} ${latest.body || ''}`;
-                        let otpMatch = fullText.match(/\b\d{4,8}\b/) || fullText.match(/\b[A-Z0-9]{5,8}\b/);
-                        const otp = otpMatch ? otpMatch[0] : "N/A";
+                        
+                        // 🟢 OTP অথবা Link খোঁজার লজিক
+                        let otpMatch = fullText.match(/\b\d{4,8}\b/);
+                        if (!otpMatch) otpMatch = fullText.match(/\b[A-Z0-9]{5,8}\b/);
+                        const otp = otpMatch ? otpMatch[0] : null;
+
+                        const linkMatch = fullText.match(/https?:\/\/[^\s"'<>\\]+/);
+                        const link = linkMatch ? linkMatch[0] : null;
                         
                         const platformName = detectPlatform(latest.from, latest.subject, latest.body);
                         let cleanMessage = latest.subject.replace(/[\r\n]+/g, ' ').trim();
                         if (cleanMessage.length < 5 && latest.body) cleanMessage = latest.body.substring(0, 50).replace(/[\r\n]+/g, ' ').trim() + "...";
                         
                         let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n🌐 **Platform:** ${platformName}\n📝 **Message:** ${cleanMessage}`;
-                        let markup = null;
+                        let markup = { inline_keyboard: [] };
                         
-                        if (otp !== "N/A") {
-                            replyText += `\n\n🔑 **OTP Code:** \`${otp}\``;
-                            markup = { inline_keyboard: [[{ text: `📋 Copy Code: ${otp}`, callback_data: `dummy_copy` }]] };
+                        // যদি কোড থাকে
+                        if (otp) {
+                            replyText += `\n\n🔑 **Code:** \`${otp}\``;
+                            markup.inline_keyboard.push([{ text: `📋 Copy Code: ${otp}`, callback_data: `dummy_copy` }]);
+                        } 
+                        // যদি কোড না থেকে কোনো লিংক থাকে
+                        else if (link) {
+                            replyText += `\n\n🔗 **Action Required:** This email contains a verification link.`;
+                            markup.inline_keyboard.push([{ text: `🌐 Open Link`, url: link }]);
+                        } 
+                        // যদি কিছুই না থাকে
+                        else {
+                            replyText += `\n\n⚠️ No verification code or link detected.`;
                         }
                         
-                        bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: markup }).catch(()=>{});
+                        bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: markup.inline_keyboard.length > 0 ? markup : null }).catch(()=>{});
                     }
                 }
             } catch (e) {
