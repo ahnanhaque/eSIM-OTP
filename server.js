@@ -142,6 +142,15 @@ bot.on('message', async (msg) => {
   } 
   else if (text === "📧 Temp Mail") {
     try {
+        // 🟢 আগের অব্যবহৃত টেম্প মেইলের মেসেজ অটো-ডিলিট লজিক
+        if (activeTempMails[chatId]) {
+            if (!activeTempMails[chatId].otpReceived && activeTempMails[chatId].messageId) {
+                bot.deleteMessage(chatId, activeTempMails[chatId].messageId).catch(()=>{});
+            }
+            if (activeTempMails[chatId].interval) clearInterval(activeTempMails[chatId].interval);
+            if (activeTempMails[chatId].timeout) clearTimeout(activeTempMails[chatId].timeout);
+        }
+
         const res = await fetch("https://api.tempmail.lol/v2/inbox/create");
         if (!res.ok) throw new Error("API Server is currently unreachable.");
 
@@ -149,13 +158,13 @@ bot.on('message', async (msg) => {
         const email = data.address;
         const token = data.token;
 
-        if (activeTempMails[chatId]?.interval) clearInterval(activeTempMails[chatId].interval);
-        if (activeTempMails[chatId]?.timeout) clearTimeout(activeTempMails[chatId].timeout);
+        // 🟢 মেসেজের আইডি সেভ করা হচ্ছে এডিট করার জন্য
+        const sentMsg = await bot.sendMessage(chatId, `📧 **Your Temp Mail:**\n\`${email}\`\n\n📩 **SMS Status:** Waiting... ⏳`, { parse_mode: "Markdown" });
+        const messageId = sentMsg.message_id;
 
-        bot.sendMessage(chatId, `📧 **Your Temp Mail:**\n\`${email}\`\n\n⏳ Auto-checking inbox for new messages...`, { parse_mode: "Markdown" });
+        activeTempMails[chatId] = { email, token, lastId: null, messageId: messageId, otpReceived: false };
 
-        // 🟢 স্পিড বাড়ানো হয়েছে: ৩ সেকেন্ড পর পর চেক করবে
-        const interval = setInterval(async () => {
+        activeTempMails[chatId].interval = setInterval(async () => {
             try {
                 const inboxRes = await fetch(`https://api.tempmail.lol/v2/inbox?token=${token}`);
                 const inboxData = await inboxRes.json();
@@ -166,13 +175,13 @@ bot.on('message', async (msg) => {
                     
                     if (activeTempMails[chatId].lastId !== mailId) {
                         activeTempMails[chatId].lastId = mailId;
+                        activeTempMails[chatId].otpReceived = true; // 🟢 ওটিপি রিসিভড হিসেবে মার্ক করা হলো
                         
-                        // 🟢 সাবজেক্ট এবং বডি থেকে ওটিপি খোঁজা হচ্ছে
                         const otpMatch = latest.subject.match(/\b\d{4,8}\b/) || latest.body.match(/\b\d{4,8}\b/);
                         const otp = otpMatch ? otpMatch[0] : "N/A";
                         
-                        // 🟢 মেসেজ ক্লিন করা হয়েছে (শুধু সাবজেক্ট দেখাবে)
-                        let replyText = `📬 **New Email Received!**\n\n📝 **Message:** ${latest.subject}`;
+                        // 🟢 নতুন মেসেজ না দিয়ে আগের মেসেজটাই এডিট করা হচ্ছে
+                        let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n📝 **Message:** ${latest.subject}`;
                         let markup = null;
                         
                         if (otp !== "N/A") {
@@ -180,20 +189,21 @@ bot.on('message', async (msg) => {
                             markup = { inline_keyboard: [[{ text: `📋 Copy Code: ${otp}`, callback_data: `dummy_copy` }]] };
                         }
                         
-                        bot.sendMessage(chatId, replyText, { parse_mode: "Markdown", reply_markup: markup });
+                        bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: markup }).catch(()=>{});
                     }
                 }
             } catch (e) {
                 // Ignore silent background errors
             }
-        }, 3000); 
+        }, 3000);
 
-        const timeout = setTimeout(() => {
-            clearInterval(interval);
-            bot.sendMessage(chatId, "⚠️ **Temp Mail Expired.**\nYour 15-minute session has ended. Request a new mail if needed.", { parse_mode: "Markdown" });
+        activeTempMails[chatId].timeout = setTimeout(() => {
+            clearInterval(activeTempMails[chatId].interval);
+            if (!activeTempMails[chatId].otpReceived) {
+                bot.editMessageText(`📧 **Your Temp Mail:**\n\`${email}\`\n\n⚠️ **Session Expired (15m).**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+            }
         }, 15 * 60 * 1000);
 
-        activeTempMails[chatId] = { email, token, lastId: null, interval, timeout };
     } catch (e) {
         bot.sendMessage(chatId, `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`, { parse_mode: "Markdown" });
     }
