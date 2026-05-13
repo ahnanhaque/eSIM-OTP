@@ -1,28 +1,14 @@
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
-const { authenticator } = require("otplib");
-const iva = require("./iva.js"); // 👈 iva.js ইমপোর্ট করা হলো
+const { authenticator } = require("otplib"); 
 
-// ==========================================
-// ⚙️ BOT & DATABASE SETTINGS
-// ==========================================
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
 const GROUP_CHAT_ID = -1003852968469; 
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const PORT = process.env.PORT || 3000;
-
-// ==========================================
-// 🔐 IVAS & BRIGHT DATA AUTO-LOGIN SETTINGS
-// ==========================================
-const BRIGHT_DATA_API_KEY = "029f54a2-8921-4624-9c0d-ba1d4e1f3d93"; // Your Bright Data Web Unlocker Key
-const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com"; // 👈 আপনার IVAS এর ইমেইল দিন
-const IVAS_PASSWORD = "@ahnan5566"; // 👈 আপনার IVAS এর পাসওয়ার্ড দিন
-
-// iva.js কনফিগার করা
-iva.setConfig(BRIGHT_DATA_API_KEY, IVAS_EMAIL, IVAS_PASSWORD);
 
 const app = express();
 app.use(express.json());
@@ -96,7 +82,7 @@ function getCountryInfo(countryName) {
   return { flag, cleanName };
 }
 
-const countryData = { "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" } };
+const countryData = { "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
 
 function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `${numStr.slice(0, 4)}****${numStr.slice(-4)}`; }
 
@@ -126,6 +112,7 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
+// 🟢 আপডেটেড অ্যাডমিন প্ল্যাটফর্ম মেনু (Remove Number যুক্ত করা হয়েছে)
 const adminPlatformMenu = {
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
@@ -333,6 +320,7 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
+  // 🟢 যুক্ত করা হলো 'delnumrng_' পারমিশন চেকে
   const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk", "delnumrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
@@ -352,6 +340,7 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
+  // 🟢 Remove Number Logic Start
   else if (data === "admin_remove_number_menu") {
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (activeRanges.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers to remove.", show_alert: true });
@@ -391,6 +380,7 @@ bot.on('callback_query', async (query) => {
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
   }
+  // 🟢 Remove Number Logic End
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
@@ -453,14 +443,12 @@ bot.on('callback_query', async (query) => {
   }
   
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
-
-  // 🟢 Updated to use backend data instead of extension data
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
-    bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from auto-fetched lists..." });
+    bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
     let grouped = { ...latestRangesFromExtension };
     for (const r in db.availableNumbers) { if (!grouped[r]) grouped[r] = db.availableNumbers[r]; }
     tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
-    if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** API is waiting for new numbers. Please wait a few seconds and try again.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
+    if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
     renderManageRangesMenu(chatId, messageId);
   }
   else if (data.startsWith("togglerng_")) {
@@ -482,7 +470,9 @@ function processFoundOTP(number, time, message, range) {
   
   const info = getCountryInfo(range || "UNKNOWN");
   let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
-  let groupMarkup = { inline_keyboard: [[{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]] };
+  let groupMarkup = {
+      inline_keyboard: [[{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]]
+  };
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup }).catch(()=>{});
 
   if (pendingRequests[number]) {
@@ -491,50 +481,29 @@ function processFoundOTP(number, time, message, range) {
     
     let userReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
     let userMarkup = { inline_keyboard: [] };
-    if (otpCode) { userMarkup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otpCode } }]); }
+    
+    if (otpCode) {
+        userMarkup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otpCode } }]);
+    }
     
     bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(()=>{});
-    addBalance(reqData.chatId, 0.50); delete pendingRequests[number]; delete inUseNumbers[number]; 
+    
+    addBalance(reqData.chatId, 0.50); 
+    delete pendingRequests[number]; 
+    delete inUseNumbers[number]; 
   }
 }
 
-// ==========================================
-// 🚀 BACKGROUND POLLING SYSTEM (VIA IVA.JS)
-// ==========================================
-async function pollData() {
-    try {
-        // ১. নতুন SMS ফেচ করা
-        const smsData = await iva.getSMS();
-        if (smsData && smsData.length > 0) {
-            smsData.forEach(sms => processFoundOTP(sms.number, sms.time, sms.message, sms.range));
-        }
+app.post('/api/ivas-data', (req, res) => {
+  const { type, payload } = req.body;
+  if (type === 'RANGES') { latestRangesFromExtension = payload; return res.status(200).json({ success: true }); } 
+  else if (type === 'SMS_LOG') { if (Array.isArray(payload)) payload.forEach(sms => processFoundOTP(sms.number, sms.time, sms.message, sms.range)); return res.status(200).json({ success: true }); }
+  res.status(400).json({ success: false });
+});
 
-        // ২. নতুন নাম্বার রেঞ্জ ফেচ করা
-        const newRanges = await iva.getNumbers();
-        if (newRanges) {
-            latestRangesFromExtension = newRanges;
-        }
-    } catch (e) { 
-        console.log("❌ [Polling Error]", e.message); 
-    }
-}
+app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
-app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode with Auto-Login and Bright Data Integration!'));
-
-// ডাটাবেস কানেক্ট করার পর অটো-লগিন শুরু হবে এবং পোলিং চালু হবে
 mongoose.connect(MONGODB_URI).then(async () => {
-  const data = await BotDB.findOne(); 
-  if (data) db = { ...db, ...data.toObject() }; 
-  else await BotDB.create(db);
-  isDbLoaded = true; 
-  
-  app.listen(PORT, async () => {
-      console.log(`🚀 Hybrid Mode running on port ${PORT}`);
-      
-      // বটের সার্ভার স্টার্ট হলেই একবার লগিন করে নিবে
-      await iva.performAutoLogin();
-      
-      // প্রতি ১৫ সেকেন্ড পর পর SMS ও নাম্বার চেক করবে
-      setInterval(pollData, 4000);
-  });
+  const data = await BotDB.findOne(); if (data) db = { ...db, ...data.toObject() }; else await BotDB.create(db);
+  isDbLoaded = true; app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
 }).catch(err => console.log(err));
