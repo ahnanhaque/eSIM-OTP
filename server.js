@@ -16,7 +16,7 @@ const PORT = process.env.PORT || 3000;
 // ==========================================
 // 🔐 IVAS & BRIGHT DATA AUTO-LOGIN SETTINGS
 // ==========================================
-const BRIGHT_DATA_API_KEY = "029f54a2-8821-4624-9c0d-ba1d4e1f3d83"; // Your Bright Data Web Unlocker Key
+const BRIGHT_DATA_API_KEY = "029f54a2-8921-4624-9c0d-ba1d4e1f3d93"; // Your Bright Data Web Unlocker Key
 const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com"; // 👈 আপনার IVAS এর ইমেইল দিন
 const IVAS_PASSWORD = "@ahnan5566"; // 👈 আপনার IVAS এর পাসওয়ার্ড দিন
 const IVAS_LOGIN_URL = "https://www.ivasms.com/login"; // 👈 লগইন লিংক (দরকার হলে পরিবর্তন করুন)
