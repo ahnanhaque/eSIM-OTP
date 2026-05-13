@@ -20,6 +20,8 @@ function setConfig(apiKey, email, password) {
 
 /* ================= BRIGHT DATA API REQUESTER ================= */
 async function fetchViaBrightData(targetUrl, method = "GET", bodyData = null, contentType = null, extraHeaders = {}) {
+  // ⚠️ 'web_unlocker1' আপনার Bright Data-এর জোন নেমের সাথে মিলতে হবে। 
+  // যদি আপনার জোন নেম অন্য কিছু হয়, তাহলে সেটা এখানে বসিয়ে দিন।
   const bdPayload = { zone: "web_unlocker1", url: targetUrl, method: method };
 
   if (bodyData) bdPayload.body = bodyData;
@@ -52,9 +54,19 @@ async function performAutoLogin() {
     const res1 = await fetchViaBrightData(`${BASE_URL}/portal/login`, "GET");
     const html1 = await res1.text();
 
+    if (!res1.ok) {
+        console.log(`⚠️ [DEBUG] Bright Data HTTP Status: ${res1.status}`);
+    }
+
     const tokenMatch = html1.match(/name="_token"\s+value="([^"]+)"/) || html1.match(/"csrf-token"\s+content="([^"]+)"/);
-    if (tokenMatch) CSRF_TOKEN = tokenMatch[1];
-    else throw new Error("CSRF Token not found on login page.");
+    
+    if (tokenMatch) {
+        CSRF_TOKEN = tokenMatch[1];
+    } else {
+        // টোকেন না পেলে Bright Data কী পাঠাচ্ছে সেটা লগে দেখাবে
+        console.log("❌ [DEBUG] Bright Data Response Snippet:\n", html1.substring(0, 500)); 
+        throw new Error("CSRF Token not found. (Check Render logs to see what Bright Data returned)");
+    }
 
     let cookies = [];
     const cookieHeader1 = res1.headers.get("set-cookie");
