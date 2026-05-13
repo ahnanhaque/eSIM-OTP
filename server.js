@@ -1,7 +1,8 @@
 const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
-const { authenticator } = require("otplib"); 
+const { authenticator } = require("otplib");
+const iva = require("./iva.js"); // 👈 iva.js ইমপোর্ট করা হলো
 
 // ==========================================
 // ⚙️ BOT & DATABASE SETTINGS
@@ -20,10 +21,8 @@ const BRIGHT_DATA_API_KEY = "029f54a2-8921-4624-9c0d-ba1d4e1f3d93"; // Your Brig
 const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com"; // 👈 আপনার IVAS এর ইমেইল দিন
 const IVAS_PASSWORD = "@ahnan5566"; // 👈 আপনার IVAS এর পাসওয়ার্ড দিন
 
-// 🔗 IVAS URLs
-const IVAS_LOGIN_URL = "https://www.ivasms.com/portal/login"; 
-const IVAS_SMS_URL = "https://www.ivasms.com/portal/sms/received/getsms"; 
-const IVAS_RANGES_URL = "https://www.ivasms.com/portal/numbers?draw=1"; // 👈 এভেইলেবল নাম্বার লোড হওয়ার API/URL
+// iva.js কনফিগার করা
+iva.setConfig(BRIGHT_DATA_API_KEY, IVAS_EMAIL, IVAS_PASSWORD);
 
 const app = express();
 app.use(express.json());
@@ -56,7 +55,6 @@ const BotDB = mongoose.model("BotData", dbSchema);
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
-let ivasSessionCookie = ""; // To store the logged-in cookie
 
 function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => {}); }
 function getBalance(chatId) { return db.balances[chatId] || 0; }
@@ -455,7 +453,7 @@ bot.on('callback_query', async (query) => {
   }
   
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
-  
+
   // 🟢 Updated to use backend data instead of extension data
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
     bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from auto-fetched lists..." });
@@ -501,91 +499,42 @@ function processFoundOTP(number, time, message, range) {
 }
 
 // ==========================================
-// 🚀 BRIGHT DATA AUTO-LOGIN & POLLING SYSTEM
+// 🚀 BACKGROUND POLLING SYSTEM (VIA IVA.JS)
 // ==========================================
-async function fetchViaBrightData(targetUrl, method = "GET", bodyData = null, extraHeaders = {}) {
-    const bdPayload = { zone: "web_unlocker1", url: targetUrl, method: method };
-    if (bodyData) bdPayload.body = new URLSearchParams(bodyData).toString();
-    if (ivasSessionCookie) extraHeaders["Cookie"] = ivasSessionCookie;
-    
-    bdPayload.headers = { ...extraHeaders, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" };
-
-    const res = await fetch("https://api.brightdata.com/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${BRIGHT_DATA_API_KEY}` },
-        body: JSON.stringify(bdPayload)
-    });
-    return res;
-}
-
-async function performAutoLogin() {
+async function pollData() {
     try {
-        console.log("🔄 Attempting to Auto-Login to IVAS via Bright Data...");
-        const loginData = { email: IVAS_EMAIL, password: IVAS_PASSWORD }; 
-        const response = await fetchViaBrightData(IVAS_LOGIN_URL, "POST", loginData, { "Content-Type": "application/x-www-form-urlencoded" });
-        if (response.ok) {
-            const setCookieHeader = response.headers.get("set-cookie");
-            if (setCookieHeader) {
-                ivasSessionCookie = setCookieHeader.split(';')[0];
-                console.log("✅ Auto-Login Successful! New Cookie acquired.");
-            }
+        // ১. নতুন SMS ফেচ করা
+        const smsData = await iva.getSMS();
+        if (smsData && smsData.length > 0) {
+            smsData.forEach(sms => processFoundOTP(sms.number, sms.time, sms.message, sms.range));
         }
-    } catch (e) { console.log("❌ Auto-Login Failed:", e.message); }
-}
 
-async function pollIVASSMS() {
-    try {
-        if (!ivasSessionCookie) await performAutoLogin(); 
-        const response = await fetchViaBrightData(IVAS_SMS_URL, "GET");
-        if (response.status === 403 || response.status === 401) { ivasSessionCookie = ""; return; }
-
-        const data = await response.json(); 
-        if (data && Array.isArray(data)) {
-            data.forEach(sms => processFoundOTP(sms.number, sms.time, sms.message, sms.range));
-        }
-    } catch (e) {}
-}
-
-// 🟢 NEW: Auto-Fetch Ranges (Available Numbers)
-async function pollIVASRanges() {
-    try {
-        if (!ivasSessionCookie) return; 
-
-        const response = await fetchViaBrightData(IVAS_RANGES_URL, "GET");
-        if (response.status === 403 || response.status === 401) return;
-
-        const data = await response.json();
-        let newRanges = {};
-
-        // Parse DataTables or Array structure
-        let records = data.data || data; 
-        if (Array.isArray(records)) {
-            records.forEach(item => {
-                let country = item.country || item.Country || item[1] || "UNKNOWN";
-                let number = item.number || item.Number || item[2] || item[0] || "";
-
-                if (number && typeof number === 'string') {
-                    country = country.toUpperCase().trim();
-                    if (!newRanges[country]) newRanges[country] = [];
-                    newRanges[country].push(number.replace(/\D/g, ''));
-                }
-            });
+        // ২. নতুন নাম্বার রেঞ্জ ফেচ করা
+        const newRanges = await iva.getNumbers();
+        if (newRanges) {
             latestRangesFromExtension = newRanges;
         }
-    } catch (e) {
-        // Data format might need adjustment based on exact IVAS response
+    } catch (e) { 
+        console.log("❌ [Polling Error]", e.message); 
     }
 }
 
-// 🟢 Start Background Polling every 15 seconds
-setInterval(() => {
-    pollIVASSMS();
-    pollIVASRanges();
-}, 15000);
+app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode with Auto-Login and Bright Data Integration!'));
 
-app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode with Auto-Login and Range Polling!'));
-
+// ডাটাবেস কানেক্ট করার পর অটো-লগিন শুরু হবে এবং পোলিং চালু হবে
 mongoose.connect(MONGODB_URI).then(async () => {
-  const data = await BotDB.findOne(); if (data) db = { ...db, ...data.toObject() }; else await BotDB.create(db);
-  isDbLoaded = true; app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
+  const data = await BotDB.findOne(); 
+  if (data) db = { ...db, ...data.toObject() }; 
+  else await BotDB.create(db);
+  isDbLoaded = true; 
+  
+  app.listen(PORT, async () => {
+      console.log(`🚀 Hybrid Mode running on port ${PORT}`);
+      
+      // বটের সার্ভার স্টার্ট হলেই একবার লগিন করে নিবে
+      await iva.performAutoLogin();
+      
+      // প্রতি ১৫ সেকেন্ড পর পর SMS ও নাম্বার চেক করবে
+      setInterval(pollData, 4000);
+  });
 }).catch(err => console.log(err));
