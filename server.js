@@ -21,7 +21,7 @@ const IVAS_EMAIL = "ahnan.haque.mahi@gmail.com"; // 👈 আপনার IVAS �
 const IVAS_PASSWORD = "@ahnan5566"; // 👈 আপনার IVAS এর পাসওয়ার্ড দিন
 
 // 🔗 IVAS URLs
-const IVAS_LOGIN_URL = "https://www.ivasms.com/login"; 
+const IVAS_LOGIN_URL = "https://www.ivasms.com/portal/login"; 
 const IVAS_SMS_URL = "https://www.ivasms.com/portal/sms/received/getsms"; 
 const IVAS_RANGES_URL = "https://www.ivasms.com/portal/numbers?draw=1"; // 👈 এভেইলেবল নাম্বার লোড হওয়ার API/URL
 
