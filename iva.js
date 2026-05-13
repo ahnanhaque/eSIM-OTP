@@ -20,7 +20,7 @@ function setConfig(apiKey, email, password) {
 
 /* ================= BRIGHT DATA API REQUESTER ================= */
 async function fetchViaBrightData(targetUrl, method = "GET", bodyData = null, contentType = null, extraHeaders = {}) {
-  // 🟢 ফিক্স: 'format': 'raw' যোগ করা হয়েছে যাতে ৪০০ এরর না আসে
+  // 🟢 Fixed: 'format': 'raw' add kora hoyeche jate validation error na ashe
   const bdPayload = { 
     zone: "web_unlocker1", 
     url: targetUrl, 
@@ -38,7 +38,6 @@ async function fetchViaBrightData(targetUrl, method = "GET", bodyData = null, co
   if (IVAS_COOKIES) headers["Cookie"] = IVAS_COOKIES;
   if (contentType) headers["Content-Type"] = contentType;
   
-  // CSRF টোকেন থাকলে হেডারে পাঠানো
   if (CSRF_TOKEN) {
     headers["X-XSRF-TOKEN"] = CSRF_TOKEN;
     headers["X-CSRF-TOKEN"] = CSRF_TOKEN;
@@ -61,30 +60,28 @@ async function fetchViaBrightData(targetUrl, method = "GET", bodyData = null, co
 
 /* ================= AUTO LOGIN SYSTEM ================= */
 async function performAutoLogin() {
-  console.log("🔄 [IVA] Initiating Auto-Login via Bright Data...");
+  console.log("🔄 [IVA] Initiating Advanced Auto-Login via Bright Data...");
   try {
-    // ১. লগিন পেজ থেকে সেশন এবং টোকেন কালেক্ট করা
+    // 1. Login page theke fresh CSRF Token ebong initial cookies newa
     const res1 = await fetchViaBrightData(`${BASE_URL}/portal/login`, "GET");
     const html1 = await res1.text();
 
-    if (!res1.ok) console.log(`⚠️ [DEBUG] Bright Data Status: ${res1.status}`);
-
-    // টোকেন খোঁজা
     const tokenMatch = html1.match(/name="_token"\s+value="([^"]+)"/) || html1.match(/"csrf-token"\s+content="([^"]+)"/);
     
     if (tokenMatch) {
         CSRF_TOKEN = tokenMatch[1];
         console.log("🔑 [IVA] CSRF Token Found.");
     } else {
-        console.log("❌ [DEBUG] Response snippet:", html1.substring(0, 300));
-        throw new Error("CSRF Token not found on login page.");
+        throw new Error("CSRF Token not found on initial load.");
     }
 
-    // প্রাথমিক কুকি সেট করা
     const cookieHeader1 = res1.headers.get("set-cookie");
-    if (cookieHeader1) IVAS_COOKIES = cookieHeader1.split(';')[0];
+    if (cookieHeader1) {
+        // Shudhu proyojoniyo cookies gulo filter kore rakha
+        IVAS_COOKIES = cookieHeader1.split(',').map(c => c.split(';')[0]).join('; ');
+    }
 
-    // ২. লগিন রিকোয়েস্ট পাঠানো
+    // 2. Login POST request
     const loginParams = new URLSearchParams({ 
         _token: CSRF_TOKEN, 
         email: IVAS_EMAIL, 
@@ -104,18 +101,19 @@ async function performAutoLogin() {
       const sessionMatch = cookieHeader2.match(/(ivas_sms_session=[^;]+)/);
       if (sessionMatch) {
           IVAS_COOKIES = sessionMatch[1];
-          console.log("✅ [IVA] Login Successful! Session saved.");
+          console.log("✅ [IVA] Login Successful! New session acquired.");
           return true;
       }
     }
 
+    // Redirect ba Dashboard check kora
     const finalHtml = await res2.text();
-    if (finalHtml.includes("Dashboard") || res2.status === 302) {
-      console.log("✅ [IVA] Login confirmed via redirect/dashboard content.");
+    if (finalHtml.includes("Dashboard") || res2.status === 302 || res2.status === 200) {
+      console.log("✅ [IVA] Login confirmed.");
       return true;
     }
 
-    console.log("❌ [IVA] Login failed. Check credentials.");
+    console.log("❌ [IVA] Login failed. Invalid credentials or IP blocked.");
     return false;
   } catch (e) {
     console.log("❌ [IVA] Auto-Login Error:", e.message);
@@ -123,62 +121,42 @@ async function performAutoLogin() {
   }
 }
 
-/* ================= GET NUMBERS ================= */
+/* ================= GET NUMBERS & SMS ================= */
 async function getNumbers() {
   const ts = Date.now();
-  const path = `${BASE_URL}/portal/numbers?draw=1&columns[0][data]=number_id&columns[0][name]=id&columns[0][orderable]=false&columns[1][data]=Number&columns[2][data]=range&columns[3][data]=A2P&columns[4][data]=LimitA2P&columns[5][data]=limit_cli_a2p&columns[6][data]=limit_cli_did_a2p&columns[7][data]=action&columns[7][searchable]=false&columns[7][orderable]=false&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&search[value]=&_=${ts}`;
+  const path = `${BASE_URL}/portal/numbers?draw=1&columns[0][data]=number_id&columns[0][name]=id&columns[1][data]=Number&columns[2][data]=range&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&_=${ts}`;
 
-  const res = await fetchViaBrightData(path, "GET", null, null, { 
-      "Referer": `${BASE_URL}/portal/numbers`, 
-      "Accept": "application/json" 
-  });
+  const res = await fetchViaBrightData(path, "GET", null, null, { "Referer": `${BASE_URL}/portal/numbers`, "Accept": "application/json" });
   
-  if (!res || !res.ok) {
-    if (res && (res.status === 401 || res.status === 419)) await performAutoLogin();
+  if (!res || res.status === 401 || res.status === 419) {
+    await performAutoLogin();
     return null;
   }
 
   try {
       const data = await res.json();
       let newRanges = {};
-      let records = data.data || data;
-
-      if (Array.isArray(records)) {
-        records.forEach(item => {
-          let country = item.range || item.country || "UNKNOWN";
-          let number = item.Number || item.number || "";
-          if (number && typeof number === 'string') {
-            country = country.toUpperCase().trim();
-            if (!newRanges[country]) newRanges[country] = [];
-            newRanges[country].push(number.replace(/\D/g, ''));
+      let records = data.data || [];
+      records.forEach(item => {
+          let country = (item.range || "UNKNOWN").toUpperCase().trim();
+          let number = String(item.Number || "").replace(/\D/g, '');
+          if (number) {
+              if (!newRanges[country]) newRanges[country] = [];
+              newRanges[country].push(number);
           }
-        });
-      }
+      });
       return newRanges;
   } catch (e) { return null; }
 }
 
-/* ================= GET SMS ================= */
 async function getSMS() {
   const today = getToday();
-  const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
-  const parts = [
-    `--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="to"\r\n\r\n${today}`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="_token"\r\n\r\n${CSRF_TOKEN}`,
-    `--${boundary}--`
-  ].join("\r\n");
+  const parts = `_token=${CSRF_TOKEN}&from=${today}&to=${today}`;
 
-  const res1 = await fetchViaBrightData(
-      `${BASE_URL}/portal/sms/received/getsms`, 
-      "POST", 
-      parts, 
-      `multipart/form-data; boundary=${boundary}`, 
-      { "Referer": `${BASE_URL}/portal/sms/received` }
-  );
+  const res1 = await fetchViaBrightData(`${BASE_URL}/portal/sms/received/getsms`, "POST", parts, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received` });
   
-  if (!res1 || !res1.ok) {
-    if (res1 && (res1.status === 401 || res1.status === 419)) await performAutoLogin();
+  if (!res1 || res1.status === 401 || res1.status === 419) {
+    await performAutoLogin();
     return [];
   }
 
@@ -187,7 +165,7 @@ async function getSMS() {
   const allRows = [];
 
   for (const range of ranges) {
-    const b2 = new URLSearchParams({ _token: CSRF_TOKEN, start: today, end: today, range }).toString();
+    const b2 = `_token=${CSRF_TOKEN}&start=${today}&end=${today}&range=${range}`;
     const res2 = await fetchViaBrightData(`${BASE_URL}/portal/sms/received/getsms/number`, "POST", b2, "application/x-www-form-urlencoded");
     if (!res2 || !res2.ok) continue;
 
@@ -195,12 +173,11 @@ async function getSMS() {
     const numbers = [...html2.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
 
     for (const number of numbers) {
-      const b3 = new URLSearchParams({ _token: CSRF_TOKEN, start: today, end: today, Number: number, Range: range }).toString();
+      const b3 = `_token=${CSRF_TOKEN}&start=${today}&end=${today}&Number=${number}&Range=${range}`;
       const res3 = await fetchViaBrightData(`${BASE_URL}/portal/sms/received/getsms/number/sms`, "POST", b3, "application/x-www-form-urlencoded");
       if (!res3 || !res3.ok) continue;
 
-      const html3 = await res3.text();
-      const msgs = parseSMSMessages(html3, range, number, today);
+      const msgs = parseSMSMessages(await res3.text(), range, number, today);
       allRows.push(...msgs);
     }
   }
@@ -214,27 +191,21 @@ function getToday() {
 
 function parseSMSMessages(html, range, number, date) {
   const rows = [];
-  const clean = t => (t || "").replace(/<[^>]+>/g, "").replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+  const clean = t => (t || "").replace(/<[^>]+>/g, "").trim();
   const trAll = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
 
   for (const trM of trAll) {
     const row = trM[1];
     if (row.includes("<th")) continue;
-
     const senderM = row.match(/class="cli-tag"[^>]*>([^<]+)</);
-    const sender = senderM ? senderM[1].trim() : "SMS";
-
     const msgM = row.match(/class="msg-text"[^>]*>([\s\S]*?)<\/div>/i);
-    const message = msgM ? clean(msgM[1]) : "";
-
     const timeM = row.match(/class="time-cell"[^>]*>\s*([0-9:]+)\s*</);
-    const time = timeM ? timeM[1].trim() : "00:00:00";
 
-    if (message) rows.push({ time: `${date} ${time}`, range, number, sender, message });
+    if (msgM) {
+      rows.push({ time: `${date} ${timeM ? timeM[1] : "00:00"}`, range, number, sender: senderM ? senderM[1] : "SMS", message: clean(msgM[1]) });
+    }
   }
   return rows;
 }
 
-module.exports = {
-  router, setConfig, performAutoLogin, getNumbers, getSMS
-};
+module.exports = { setConfig, performAutoLogin, getNumbers, getSMS };
