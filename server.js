@@ -2,6 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
+const { GoogleGenerativeAI } = require("@google/generative-ai"); // Added GoogleGenerativeAI
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -9,6 +10,10 @@ const GROUP_CHAT_ID = -1003852968469;
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const PORT = process.env.PORT || 3000;
+
+// Gemini API setup
+const genAI = new GoogleGenerativeAI("AIzaSyAQoc0ZJTYOS8dLunpMIQil2RYMLaWtP2M");
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 const app = express();
 app.use(express.json());
@@ -89,7 +94,8 @@ function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
 function getReplyMenu(chatId, username) {
-  let keyboard = [[{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }], [{ text: "🔑 2FA" }, { text: "👤 Profile" }]];
+  // Added "🤖 Chatbot" button here
+  let keyboard = [[{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }], [{ text: "🔑 2FA" }, { text: "👤 Profile" }], [{ text: "🤖 Chatbot" }]];
   if (isAdmin(chatId, username)) keyboard.push([{ text: "💬 Support" }, { text: "⚙️ Admin Panel" }]); else keyboard.push([{ text: "💬 Support" }]);
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
@@ -112,7 +118,6 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
-// 🟢 আপডেটেড অ্যাডমিন প্ল্যাটফর্ম মেনু (Remove Number যুক্ত করা হয়েছে)
 const adminPlatformMenu = {
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
@@ -163,9 +168,42 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/')) return;
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-  const triggerWords = ["☎️ Get Number", "📧 Temp Mail", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
+  // Added Chatbot triggers
+  const triggerWords = ["☎️ Get Number", "📧 Temp Mail", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "🤖 Chatbot", "❌ Exit Chatbot"];
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
   if (triggerWords.includes(text)) delete userStates[chatId];
+
+  // Chatbot logic START
+  if (text === "🤖 Chatbot") {
+      userStates[chatId] = "CHATTING_WITH_AI";
+      bot.sendMessage(chatId, "🤖 **AI Chatbot Activated!**\n\nApni ekhon amar sathe kotha bolte paren. Chat theke ber hote nicher '❌ Exit Chatbot' button a click korun.", {
+          parse_mode: "Markdown",
+          reply_markup: { keyboard: [[{ text: "❌ Exit Chatbot" }]], resize_keyboard: true }
+      }).catch(()=>{});
+      return;
+  }
+  else if (text === "❌ Exit Chatbot") {
+      delete userStates[chatId];
+      bot.sendMessage(chatId, "🚪 **Chatbot theke ber hoye aschen.**\n\nMain menu te phire gechi.", {
+          parse_mode: "Markdown",
+          reply_markup: getReplyMenu(chatId, username)
+      }).catch(()=>{});
+      return;
+  }
+
+  if (userStates[chatId] === "CHATTING_WITH_AI") {
+      try {
+          bot.sendChatAction(chatId, 'typing');
+          const result = await geminiModel.generateContent(text);
+          const response = await result.response;
+          const reply = response.text();
+          bot.sendMessage(chatId, reply, { parse_mode: "Markdown" }).catch(()=>{});
+      } catch (error) {
+          bot.sendMessage(chatId, "⚠️ Kono ekta somossa hoyeche, ektu pore abar try korun.").catch(()=>{});
+      }
+      return;
+  }
+  // Chatbot logic END
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
@@ -320,7 +358,6 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
-  // 🟢 যুক্ত করা হলো 'delnumrng_' পারমিশন চেকে
   const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk", "delnumrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
@@ -340,7 +377,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 Remove Number Logic Start
   else if (data === "admin_remove_number_menu") {
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (activeRanges.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers to remove.", show_alert: true });
@@ -380,7 +416,6 @@ bot.on('callback_query', async (query) => {
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
   }
-  // 🟢 Remove Number Logic End
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
