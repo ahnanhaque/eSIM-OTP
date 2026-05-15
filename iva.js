@@ -157,33 +157,30 @@ async function loginIVAS(email, password) {
     resetProxySession(); 
     console.log("[IVA] Fetching login page via Bright Data Web Unlocker. Waiting for Cloudflare...");
     
-    const getRes = await makeRequest("GET", "/login", null, null, {
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Upgrade-Insecure-Requests": "1"
-    });
+    // 🟢 কোনো এক্সট্রা হেডার পাঠাবো না, Bright Data নিজে হেডার জেনারেট করবে
+    const getRes = await makeRequest("GET", "/login", null, null, {});
     
-    let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
+    // 🟢 টোকেন খোঁজার জন্য দুটি প্যাটার্ন ব্যবহার করা হলো
+    let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/) || 
+                     getRes.body.match(/"csrf-token"\s+content="([^"]+)"/);
     let csrfToken = tokenMatch ? tokenMatch[1] : null;
 
     if (!csrfToken) {
+        console.log("[IVA] ❌ Cloudflare block detected. Response Preview:", getRes.body.substring(0, 300));
         return { success: false, error: "Cloudflare challenge blocked the request. Web Unlocker could not bypass it." };
     }
 
-    console.log("[IVA] CSRF Token fetched. Submitting login form...");
+    console.log("[IVA] ✅ CSRF Token fetched. Submitting login form...");
     const postBody = new URLSearchParams({
         _token: csrfToken,
         email: email,
         password: password
     }).toString();
 
+    // 🟢 লগইন সাবমিটের সময় শুধু বেসিক অরিজিন পাঠানো হলো
     await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Origin": BASE_URL,
-      "Referer": `${BASE_URL}/login`,
-      "Upgrade-Insecure-Requests": "1"
+      "Referer": `${BASE_URL}/login`
     });
 
     if (IVAS_SESSION && XSRF_TOKEN) {
