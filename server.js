@@ -95,7 +95,6 @@ function getReplyMenu(chatId, username) {
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
-// 🟢 All platforms now use dynamic country menu instead of placeholder
 const platformMenu = { 
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "menu_country_fb" }],
@@ -125,7 +124,6 @@ const adminPlatformMenu = {
   ]
 };
 
-// 🟢 Added "Set Proxy" to Login Panel Menu
 const loginPanelMenu = {
   inline_keyboard: [
     [{ text: "📨 IVA SMS", callback_data: "admin_login_ivas" }],
@@ -284,7 +282,6 @@ bot.on('message', async (msg) => {
   else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin for any assistance. (@Excellentzqlt)", { parse_mode: "Markdown" }).catch(()=>{});
   else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); }
   
-  // 🟢 Handle New Proxy Input Setup
   else if (userStates[chatId] === "WAITING_FOR_PROXY" && isAdmin(chatId, username)) {
     const parts = text.split(',');
     if (parts.length === 4) {
@@ -302,7 +299,7 @@ bot.on('message', async (msg) => {
         bot.sendMessage(chatId, `✅ **Proxy Updated Successfully!**\n\n🌐 **Host:** ${host}\n🔌 **Port:** ${port}\n👤 **User:** ${user}`, { parse_mode: "Markdown" }).catch(()=>{});
         bot.sendMessage(chatId, "🔑 **Select a panel to login:**", { reply_markup: loginPanelMenu, parse_mode: "Markdown" }).catch(()=>{});
     } else {
-        bot.sendMessage(chatId, "❌ Invalid format. Please enter exactly as: `Host, Port, Username, Password`\nExample: `brd.superproxy.io, 33335, user-123, pass123`", { parse_mode: "Markdown" }).catch(()=>{});
+        bot.sendMessage(chatId, "❌ Invalid format. Please enter exactly as: `Host, Port, Username, Password`\nExample: `brd.superproxy.io, 33335, user-123, pass_123`", { parse_mode: "Markdown" }).catch(()=>{});
     }
     delete userStates[chatId];
   }
@@ -397,7 +394,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 Handle Set Proxy Click
   else if (data === "admin_set_proxy") {
     userStates[chatId] = "WAITING_FOR_PROXY";
     bot.sendMessage(chatId, "🌐 **Enter new Proxy details:**\nFormat: `Host, Port, Username, Password`\nExample: `brd.superproxy.io, 33335, user-123, pass_123`", { parse_mode: "Markdown" }).catch(()=>{});
@@ -468,7 +464,6 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
-  // 🟢 Handles all platforms (Facebook, Instagram, WhatsApp) to show country menu
   else if (data.startsWith("menu_country_")) {
     clearPendingForChat(chatId); 
     const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
@@ -507,7 +502,7 @@ bot.on('callback_query', async (query) => {
         { text: "🔄 Change", callback_data: `assign_next_${sel}` },
         { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }
     ]);
-    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: "menu_country_fb" }]); // Back goes to last country menu, can be dynamic later
+    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: "menu_country_fb" }]); 
     
     bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
@@ -516,15 +511,44 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
-    bot.answerCallbackQuery(query.id, { text: "🔄 Loading ranges..." });
-    let grouped = { ...latestRangesFromExtension };
-    for (const r in db.availableNumbers) { if (!grouped[r]) grouped[r] = db.availableNumbers[r]; }
-    tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
-    
-    if (tempAdminData[chatId].ranges.length === 0) {
-        return bot.editMessageText("📭 **No data found!** Please ensure you have added numbers manually or logged in successfully.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
+    bot.answerCallbackQuery(query.id, { text: "🔄 Fetching live ranges from IVAS..." });
+    bot.editMessageText("⏳ Fetching live data from IVAS via Bright Data. Please wait...", { chat_id: chatId, message_id: messageId }).catch(()=>{});
+
+    const currentToken = iva.getCookies().xsrf;
+    if (!currentToken) {
+        return bot.editMessageText("⚠️ **Not logged in to IVAS!**\nPlease login from the Admin Panel first.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
     }
-    renderManageRangesMenu(chatId, messageId);
+
+    iva.getNumbers(currentToken).then(numbersData => {
+        let grouped = {};
+
+        if (numbersData && numbersData.aaData) {
+            numbersData.aaData.forEach(row => {
+                const range = row[0];
+                const number = row[2];
+                if (range && number) {
+                    if (!grouped[range]) grouped[range] = [];
+                    grouped[range].push(number);
+                }
+            });
+        }
+
+        for (const r in db.availableNumbers) {
+            if (!grouped[r]) grouped[r] = [];
+            db.availableNumbers[r].forEach(num => {
+                if (!grouped[r].includes(num)) grouped[r].push(num);
+            });
+        }
+
+        tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
+
+        if (tempAdminData[chatId].ranges.length === 0) {
+            return bot.editMessageText("📭 **No ranges found!** Check if your IVAS account has active numbers.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
+        }
+        renderManageRangesMenu(chatId, messageId);
+    }).catch(err => {
+        bot.editMessageText("❌ Error fetching data: " + err.message, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] } }).catch(()=>{});
+    });
   }
 
   else if (data.startsWith("togglerng_")) {
@@ -579,7 +603,28 @@ app.post('/api/ivas-data', (req, res) => {
 
 app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
-// 🟢 Load database and configure proxy on startup if it exists
+// 🟢 Auto-fetch SMS logic every 3 seconds
+setInterval(async () => {
+    try {
+        if (!iva.getCookies || typeof iva.getCookies !== 'function') return;
+        const token = iva.getCookies().xsrf;
+        if (!token) return; 
+
+        const smsData = await iva.getSMS(token);
+        if (smsData && smsData.aaData) {
+            smsData.aaData.forEach(row => {
+                const time = row[0];
+                const range = row[1];
+                const number = row[2];
+                const message = row[4];
+                processFoundOTP(number, time, message, range);
+            });
+        }
+    } catch (err) {
+        // Silent catch to prevent console flood
+    }
+}, 3000); // 🟢 3 seconds update applied here
+
 mongoose.connect(MONGODB_URI).then(async () => {
   const data = await BotDB.findOne(); if (data) db = { ...db, ...data.toObject() }; else await BotDB.create(db);
   isDbLoaded = true; 
