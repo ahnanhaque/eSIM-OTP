@@ -7,6 +7,8 @@ const router = express.Router();
 
 /* ================= CONFIG ================= */
 const BASE_URL       = "https://www.ivasms.com";
+const TERMINATION_ID = "1029603";
+const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36";
 
 // 🟢 Bright Data Proxy Configuration (Dynamic)
 let PROXY_HOST = "brd.superproxy.io";
@@ -41,18 +43,20 @@ function resetProxySession() {
 }
 
 /* ================= COOKIES IN MEMORY ================= */
-let XSRF_TOKEN = "";
-let IVAS_SESSION = "";
-let RAW_COOKIES = [];
+let COOKIES = {
+  "XSRF-TOKEN":       "",
+  "ivas_sms_session": ""
+};
+let RAW_COOKIES = []; // Store ALL cookies (including Cloudflare clearance)
 
 function setCookies(xsrf, session) {
-  XSRF_TOKEN = xsrf;
-  IVAS_SESSION = session;
+  COOKIES["XSRF-TOKEN"] = xsrf;
+  COOKIES["ivas_sms_session"] = session;
   console.log("✅ [IVA] Clean Cookies successfully updated in memory!");
 }
 
 function getCookies() {
-  return { xsrf: XSRF_TOKEN, session: IVAS_SESSION };
+  return { xsrf: COOKIES["XSRF-TOKEN"], session: COOKIES["ivas_sms_session"] };
 }
 
 /* ================= HELPERS ================= */
@@ -62,30 +66,48 @@ function getToday() {
 }
 
 function getXsrf() {
-  try { return decodeURIComponent(XSRF_TOKEN || ""); }
-  catch { return XSRF_TOKEN || ""; }
+  try { return decodeURIComponent(COOKIES["XSRF-TOKEN"] || ""); }
+  catch { return COOKIES["XSRF-TOKEN"] || ""; }
 }
 
 function safeJSON(text) {
   try { return JSON.parse(text); }
-  catch { return null; }
+  catch { return { error: "Invalid JSON", preview: text.substring(0, 300) }; }
 }
 
 /* ================= HTTP REQUEST WITH PROXY ================= */
-function makeRequest(method, path, body, contentType, extraHeaders = {}) {
+function makeRequest(method, path, body, contentType, extraHeaders = {}, isLogin = false) {
   return new Promise((resolve, reject) => {
     
     let cookieHeader = RAW_COOKIES.join("; ");
-    if (!cookieHeader && XSRF_TOKEN && IVAS_SESSION) {
-        cookieHeader = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
+    if (!cookieHeader && COOKIES["XSRF-TOKEN"] && COOKIES["ivas_sms_session"]) {
+        cookieHeader = `XSRF-TOKEN=${COOKIES["XSRF-TOKEN"]}; ivas_sms_session=${COOKIES["ivas_sms_session"]}`;
     }
 
-    const headers = {
-      "Accept":           "*/*",
-      "Accept-Encoding":  "gzip, deflate, br",
-      "Accept-Language":  "en-US,en;q=0.9",
-      ...extraHeaders
-    };
+    let headers = {};
+    if (isLogin) {
+        // 🟢 Login headers (Clean for Bright Data to handle Cloudflare)
+        headers = {
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "en-US,en;q=0.9",
+            ...extraHeaders
+        };
+    } else {
+        // 🟢 Normal fetching headers (Your Original Logic)
+        headers = {
+            "User-Agent":       USER_AGENT,
+            "Accept":           "*/*",
+            "Accept-Encoding":  "gzip, deflate, br",
+            "Accept-Language":  "en-PK,en;q=0.9",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-XSRF-TOKEN":     getXsrf(),
+            "X-CSRF-TOKEN":     getXsrf(),
+            "Origin":           BASE_URL,
+            "Referer":          `${BASE_URL}/portal`,
+            ...extraHeaders
+        };
+    }
     
     if (cookieHeader) headers["Cookie"] = cookieHeader;
 
@@ -123,8 +145,8 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
                 if (foundIndex !== -1) RAW_COOKIES[foundIndex] = rawCookie;
                 else RAW_COOKIES.push(rawCookie);
 
-                if (c.includes('XSRF-TOKEN=')) XSRF_TOKEN = decodeURIComponent(c.split('XSRF-TOKEN=')[1].split(';')[0]);
-                if (c.includes('ivas_sms_session=')) IVAS_SESSION = decodeURIComponent(c.split('ivas_sms_session=')[1].split(';')[0]);
+                if (c.includes('XSRF-TOKEN=')) COOKIES["XSRF-TOKEN"] = decodeURIComponent(c.split('XSRF-TOKEN=')[1].split(';')[0]);
+                if (c.includes('ivas_sms_session=')) COOKIES["ivas_sms_session"] = decodeURIComponent(c.split('ivas_sms_session=')[1].split(';')[0]);
             });
         }
 
@@ -143,7 +165,7 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
     
     req.on('timeout', () => {
         req.destroy();
-        reject(new Error("Request Timed Out. Bright Data took too long to solve Cloudflare."));
+        reject(new Error("Request Timed Out. Bright Data took too long."));
     });
 
     if (body) req.write(body);
@@ -151,155 +173,154 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   });
 }
 
-/* ================= 🟢 LOGIN FUNCTION ================= */
+/* ================= 🟢 NEW LOGIN FUNCTION ================= */
 async function loginIVAS(email, password) {
   try {
     resetProxySession(); 
     console.log("[IVA] Fetching login page via Bright Data Web Unlocker. Waiting for Cloudflare...");
     
-    const getRes = await makeRequest("GET", "/login", null, null, {});
+    const getRes = await makeRequest("GET", "/login", null, null, {}, true);
     
     let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/) || 
                      getRes.body.match(/"csrf-token"\s+content="([^"]+)"/);
     let csrfToken = tokenMatch ? tokenMatch[1] : null;
 
     if (!csrfToken) {
-        console.log("[IVA] ❌ Cloudflare block detected.");
-        return { success: false, error: "Cloudflare challenge blocked the request. Web Unlocker could not bypass it." };
+        return { success: false, error: "Cloudflare challenge blocked the request." };
     }
 
     console.log("[IVA] ✅ CSRF Token fetched. Submitting login form...");
     const postBody = new URLSearchParams({ _token: csrfToken, email: email, password: password }).toString();
 
     await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
-      "Origin": BASE_URL,
-      "Referer": `${BASE_URL}/login`
-    });
+      "Origin": BASE_URL, "Referer": `${BASE_URL}/login`
+    }, true);
 
-    if (IVAS_SESSION && XSRF_TOKEN) {
+    if (COOKIES["ivas_sms_session"] && COOKIES["XSRF-TOKEN"]) {
        console.log("✅ [IVA] Logged in successfully!");
        return { success: true };
     } else {
-       return { success: false, error: "Failed to retrieve session cookies. Check your credentials." };
+       return { success: false, error: "Failed to retrieve session cookies. Check credentials." };
     }
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
-/* ================= 🟢 GET NUMBERS (FETCH FROM /portal/numbers) ================= */
-async function getNumbers(token) {
-  const ts = Date.now();
-  // 1st Attempt: Fetch via standard Datatables API for /portal/numbers
-  const path = `/portal/numbers?draw=1&columns[0][data]=number_id&columns[0][name]=id&columns[0][orderable]=false&columns[1][data]=Number&columns[2][data]=range&columns[3][data]=A2P&columns[4][data]=LimitA2P&columns[5][data]=limit_cli_a2p&columns[6][data]=limit_cli_did_a2p&columns[7][data]=action&columns[7][searchable]=false&columns[7][orderable]=false&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&search[value]=&_=${ts}`;
-
-  let resp = await makeRequest("GET", path, null, null, {
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": `${BASE_URL}/portal/numbers`,
-    "Accept": "application/json, text/javascript, */*; q=0.01"
+/* ================= 🟢 ORIGINAL FETCH _token ================= */
+async function fetchToken() {
+  const resp = await makeRequest("GET", "/portal", null, null, {
+    "Accept": "text/html,application/xhtml+xml,*/*"
   }).catch(() => null);
-
-  let aaData = [];
-
-  if (resp && resp.body) {
-      const json = safeJSON(resp.body);
-      if (json && json.data) {
-          aaData = json.data.map(row => [row.range || "", "", String(row.Number || ""), "Weekly", ""]);
-          return { aaData };
-      }
-  }
-
-  // 2nd Attempt: Fetch directly from the HTML page if API returns no data
-  resp = await makeRequest("GET", "/portal/numbers", null, null, {
-    "Referer": `${BASE_URL}/portal`,
-    "Accept": "text/html,application/xhtml+xml"
-  }).catch(() => null);
-
-  if (resp && resp.body) {
-     const clean = t => (t || "").replace(/<[^>]+>/g, "").trim();
-     const trAll = [...resp.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-     for (const trM of trAll) {
-         if (trM[1].includes("<th") || trM[1].includes("No data available")) continue;
-         const tds = [...trM[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
-         if (tds.length >= 3) {
-             let number = clean(tds[1][1]);
-             let range = clean(tds[2][1]);
-             if (number.match(/\d{5,}/)) {
-                 aaData.push([range, "", number, "Weekly", ""]);
-             }
-         }
-     }
-  }
-
-  return { aaData };
+  
+  if (!resp) return null;
+  const match = resp.body.match(/name="_token"\s+value="([^"]+)"/) ||
+                resp.body.match(/"csrf-token"\s+content="([^"]+)"/);
+  return match ? match[1] : null;
 }
 
-/* ================= 🟢 GET SMS (FETCH FROM /portal/live/my_sms) ================= */
-async function getSMS(token) {
-  let resp = await makeRequest("GET", "/portal/live/my_sms", null, null, {
-      "X-Requested-With": "XMLHttpRequest",
-      "Referer": `${BASE_URL}/portal/numbers`,
-      "Accept": "application/json, text/html, */*; q=0.01"
+/* ================= 🟢 ORIGINAL GET NUMBERS ================= */
+async function getNumbers(token) {
+  const ts   = Date.now();
+  const path = `/portal/numbers?draw=1`
+    + `&columns[0][data]=number_id&columns[0][name]=id&columns[0][orderable]=false`
+    + `&columns[1][data]=Number&columns[2][data]=range&columns[3][data]=A2P`
+    + `&columns[4][data]=LimitA2P&columns[5][data]=limit_cli_a2p`
+    + `&columns[6][data]=limit_cli_did_a2p`
+    + `&columns[7][data]=action&columns[7][searchable]=false&columns[7][orderable]=false`
+    + `&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&search[value]=&_=${ts}`;
+
+  const resp = await makeRequest("GET", path, null, null, {
+    "Referer": `${BASE_URL}/portal/numbers`,
+    "Accept": "application/json, text/javascript, */*; q=0.01",
+    "X-CSRF-TOKEN": token
   }).catch(() => null);
 
-  let allRows = [];
-  if (!resp || !resp.body) return { aaData: [] };
+  if (!resp) return { aaData: [] };
+  const json = safeJSON(resp.body);
+  
+  if (!json || !json.data) return json;
+  const aaData = json.data.map(row => [row.range || "", "", String(row.Number || ""), "Weekly", ""]);
+  
+  return {
+    sEcho: 2,
+    iTotalRecords: String(json.recordsTotal || aaData.length),
+    iTotalDisplayRecords: String(json.recordsFiltered || aaData.length),
+    aaData
+  };
+}
 
-  let json = safeJSON(resp.body);
-  const clean = t => (t || "").replace(/<[^>]+>/g, "").replace(/\n/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&#039;/g, "'").trim();
+/* ================= 🟢 ORIGINAL GET SMS ================= */
+async function getSMS(token) {
+  const today    = getToday();
+  const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
+  const ua       = USER_AGENT;
 
-  // Try JSON Parse (if page loads via AJAX Datatable)
-  if (json && json.data) {
-       json.data.forEach(row => {
-           let range = row.range || row.Range || "";
-           let number = row.number || row.Number || row.receiver || "";
-           let message = row.message || row.Message || row.msg || "";
-           let time = row.created_at || row.date || row.time || "";
-           let sender = row.sender || row.Sender || row.cli || "";
+  const parts = [
+    `--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="to"\r\n\r\n${today}`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="_token"\r\n\r\n${token}`,
+    `--${boundary}--`
+  ].join("\r\n");
 
-           if (Array.isArray(row)) {
-               time = row[0] || time;
-               range = row[1] || range;
-               number = row[2] || number;
-               sender = row[3] || sender;
-               message = row[4] || message;
-           }
+  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01", "User-Agent": ua }).catch(() => null);
+  if (!r1) return { aaData: [] };
 
-           if (number && message) allRows.push([clean(time), clean(range), clean(number), clean(sender), clean(message)]);
-       });
-  } else {
-       // Try HTML Parse (if page returns raw table directly)
-       const trAll = [...resp.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-       for (const trM of trAll) {
-           const row = trM[1];
-           if (row.includes("<th") || row.includes("No data available")) continue;
-           
-           const tds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
-           if (tds.length >= 4) {
-               let time = clean(tds[0][1]);
-               let range = clean(tds[1][1]);
-               let number = clean(tds[2][1]);
-               let sender = clean(tds[3][1]);
-               let message = clean(tds[4] ? tds[4][1] : (tds[3] ? tds[3][1] : ""));
+  const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
+  const allRows = [];
 
-               let numMatch = number.match(/\d+/);
-               if (numMatch) number = numMatch[0];
+  for (const range of ranges) {
+    const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
+    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01", "User-Agent": ua }).catch(() => null);
+    if (!r2) continue;
 
-               if (number && message) allRows.push([time, range, number, sender, message]);
-           } else {
-               // Fallback structure for unknown elements
-               let msgM = row.match(/class="msg-text"[^>]*>([\s\S]*?)<\/div>/i) || row.match(/class="message"[^>]*>([\s\S]*?)<\/div>/i);
-               let numM = row.match(/\b\d{8,15}\b/);
-               let message = msgM ? clean(msgM[1]) : "";
-               let number = numM ? numM[0] : "";
-               if (message && number) allRows.push([getToday(), "UNKNOWN", number, "SMS", message]);
-           }
-       }
+    const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
+
+    for (const number of numbers) {
+      const b3 = new URLSearchParams({ _token: token, start: today, end: today, Number: number, Range: range }).toString();
+      const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01", "User-Agent": ua }).catch(() => null);
+      if (!r3) continue;
+
+      const msgs = parseSMSMessages(r3.body, range, number, today);
+      allRows.push(...msgs);
+    }
   }
 
-  return { aaData: allRows };
+  allRows.sort((a, b) => new Date(b[0]) - new Date(a[0]));
+
+  return {
+    sEcho: 1,
+    iTotalRecords: String(allRows.length),
+    iTotalDisplayRecords: String(allRows.length),
+    aaData: allRows
+  };
+}
+
+function parseSMSMessages(html, range, number, date) {
+  const rows  = [];
+  const clean = t => (t || "").replace(/<[^>]+>/g, "").replace(/\n/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&#039;/g, "'").replace(/\s+/g, " ").trim();
+  const trAll = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+
+  for (const trM of trAll) {
+    const row = trM[1];
+    if (row.includes("<th")) continue;
+
+    const senderM = row.match(/class="cli-tag"[^>]*>([^<]+)</);
+    const sender  = senderM ? senderM[1].trim() : "SMS";
+
+    const msgM   = row.match(/class="msg-text"[^>]*>([\s\S]*?)<\/div>/i);
+    const message = msgM ? clean(msgM[1]) : "";
+
+    const timeM = row.match(/class="time-cell"[^>]*>\s*([0-9:]+)\s*</);
+    const time  = timeM ? timeM[1].trim() : "00:00:00";
+
+    if (message) {
+      rows.push([`${date} ${time}`, range, number, sender, message, "$", 0]);
+    }
+  }
+  return rows;
 }
 
 module.exports = {
-  router, setCookies, getCookies, getNumbers, getSMS, makeRequest, getToday, BASE_URL, loginIVAS, setProxyConfig
+  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL, loginIVAS, setProxyConfig
 };
