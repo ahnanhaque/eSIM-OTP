@@ -2,7 +2,6 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
-const { GoogleGenerativeAI } = require("@google/generative-ai"); 
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -10,10 +9,6 @@ const GROUP_CHAT_ID = -1003852968469;
 const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1"; 
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const PORT = process.env.PORT || 3000;
-
-// Gemini API setup (Updated to the latest active model: gemini-2.5-flash)
-const genAI = new GoogleGenerativeAI("AIzaSyAQoc0ZJTYOS8dLunpMIQil2RYMLaWtP2M");
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const app = express();
 app.use(express.json());
@@ -45,7 +40,7 @@ const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
-let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {}, chatLanguage = {};
+let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 
 function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => {}); }
 function getBalance(chatId) { return db.balances[chatId] || 0; }
@@ -94,7 +89,7 @@ function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
 function getReplyMenu(chatId, username) {
-  let keyboard = [[{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }], [{ text: "🔑 2FA" }, { text: "👤 Profile" }], [{ text: "🤖 Chatbot" }]];
+  let keyboard = [[{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }], [{ text: "🔑 2FA" }, { text: "👤 Profile" }]];
   if (isAdmin(chatId, username)) keyboard.push([{ text: "💬 Support" }, { text: "⚙️ Admin Panel" }]); else keyboard.push([{ text: "💬 Support" }]);
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
@@ -117,6 +112,7 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
+// 🟢 আপডেটেড অ্যাডমিন প্ল্যাটফর্ম মেনু (Remove Number যুক্ত করা হয়েছে)
 const adminPlatformMenu = {
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
@@ -167,51 +163,9 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/')) return;
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-  const triggerWords = ["☎️ Get Number", "📧 Temp Mail", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "🤖 Chatbot", "❌ Exit Chatbot"];
+  const triggerWords = ["☎️ Get Number", "📧 Temp Mail", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
   if (triggerWords.includes(text)) delete userStates[chatId];
-
-  // Chatbot Language Selection Logic
-  if (text === "🤖 Chatbot") {
-      bot.sendMessage(chatId, "🗣️ **Please select your language / Apnar bhasha beche nin:**", {
-          parse_mode: "Markdown",
-          reply_markup: {
-              inline_keyboard: [
-                  [{ text: "🇬🇧 English", callback_data: "ai_lang_en" }, { text: "🇧🇩 Bangla", callback_data: "ai_lang_bn" }],
-                  [{ text: "❌ Cancel", callback_data: "close_menu" }]
-              ]
-          }
-      }).catch(()=>{});
-      return;
-  }
-  else if (text === "❌ Exit Chatbot") {
-      delete userStates[chatId];
-      delete chatLanguage[chatId]; 
-      bot.sendMessage(chatId, "🚪 **Chatbot session ended.**\n\nMain menu te phire gechi.", {
-          parse_mode: "Markdown",
-          reply_markup: getReplyMenu(chatId, username)
-      }).catch(()=>{});
-      return;
-  }
-
-  // Active AI Chat Logic
-  if (userStates[chatId] === "CHATTING_WITH_AI") {
-      try {
-          bot.sendChatAction(chatId, 'typing');
-          const lang = chatLanguage[chatId] || "English"; 
-          
-          const promptText = `Please strictly reply to the following user's message in ${lang} language. Do not use any other language.\n\nUser Message: ${text}`;
-          
-          const result = await geminiModel.generateContent(promptText);
-          const response = await result.response;
-          const reply = response.text();
-          bot.sendMessage(chatId, reply, { parse_mode: "Markdown" }).catch(()=>{});
-      } catch (error) {
-          console.error("[Gemini API Error]:", error);
-          bot.sendMessage(chatId, "⚠️ Kono ekta somossa hoyeche, ektu pore abar try korun.").catch(()=>{});
-      }
-      return;
-  }
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
@@ -366,28 +320,11 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
+  // 🟢 যুক্ত করা হলো 'delnumrng_' পারমিশন চেকে
   const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk", "delnumrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
-
-  if (data === "ai_lang_en" || data === "ai_lang_bn") {
-      const lang = data === "ai_lang_en" ? "English" : "Bangla";
-      chatLanguage[chatId] = lang; 
-      userStates[chatId] = "CHATTING_WITH_AI"; 
-      bot.deleteMessage(chatId, messageId).catch(()=>{}); 
-      
-      let welcomeMsg = lang === "English" 
-          ? "🤖 **AI Chatbot Activated! (English)**\n\nYou can now chat with me. Click '❌ Exit Chatbot' below to leave."
-          : "🤖 **AI Chatbot Activated! (Bangla)**\n\nApni ekhon amar sathe kotha bolte paren. Chat theke ber hote nicher '❌ Exit Chatbot' a click korun.";
-      
-      bot.sendMessage(chatId, welcomeMsg, {
-          parse_mode: "Markdown",
-          reply_markup: { keyboard: [[{ text: "❌ Exit Chatbot" }]], resize_keyboard: true }
-      }).catch(()=>{});
-      
-      return bot.answerCallbackQuery(query.id);
-  }
   
   else if (data === "refresh_2fa") {
     const secret = tempAdminData[chatId]?.active2FAKey;
@@ -403,6 +340,7 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
+  // 🟢 Remove Number Logic Start
   else if (data === "admin_remove_number_menu") {
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (activeRanges.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers to remove.", show_alert: true });
@@ -442,6 +380,7 @@ bot.on('callback_query', async (query) => {
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
   }
+  // 🟢 Remove Number Logic End
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
