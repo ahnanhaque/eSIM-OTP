@@ -99,7 +99,7 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
         headers, 
         agent: getProxyAgent(),
         rejectUnauthorized: false, 
-        timeout: 45000 
+        timeout: 90000 // 🟢 Timeout increased to 90 seconds
     }, res => {
       let chunks = [];
       res.on("data", d => chunks.push(d));
@@ -143,7 +143,7 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
     
     req.on('timeout', () => {
         req.destroy();
-        reject(new Error("Request Timed Out. Bright Data took too long."));
+        reject(new Error("Request Timed Out. Bright Data took too long to solve Cloudflare."));
     });
 
     if (body) req.write(body);
