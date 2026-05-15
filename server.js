@@ -11,9 +11,9 @@ const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1";
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const PORT = process.env.PORT || 3000;
 
-// Gemini API setup 
+// Gemini API setup (Updated to the latest active model: gemini-2.5-flash)
 const genAI = new GoogleGenerativeAI("AIzaSyAQoc0ZJTYOS8dLunpMIQil2RYMLaWtP2M");
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 const app = express();
 app.use(express.json());
@@ -45,7 +45,6 @@ const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
-// Ekhane chatLanguage={} add kora hoyeche user er selected bhasha save rakhar jonno
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {}, chatLanguage = {};
 
 function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => {}); }
@@ -187,7 +186,7 @@ bot.on('message', async (msg) => {
   }
   else if (text === "❌ Exit Chatbot") {
       delete userStates[chatId];
-      delete chatLanguage[chatId]; // Clean up saved language
+      delete chatLanguage[chatId]; 
       bot.sendMessage(chatId, "🚪 **Chatbot session ended.**\n\nMain menu te phire gechi.", {
           parse_mode: "Markdown",
           reply_markup: getReplyMenu(chatId, username)
@@ -199,9 +198,8 @@ bot.on('message', async (msg) => {
   if (userStates[chatId] === "CHATTING_WITH_AI") {
       try {
           bot.sendChatAction(chatId, 'typing');
-          const lang = chatLanguage[chatId] || "English"; // Default language jodi kono karone set na hoy
+          const lang = chatLanguage[chatId] || "English"; 
           
-          // AI ke bola hochche jeno se obosshoi user er select kora bhashate uttor dey
           const promptText = `Please strictly reply to the following user's message in ${lang} language. Do not use any other language.\n\nUser Message: ${text}`;
           
           const result = await geminiModel.generateContent(promptText);
@@ -373,14 +371,12 @@ bot.on('callback_query', async (query) => {
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
 
-  // Chatbot Language Callback Logic Add kora holo ekhane
   if (data === "ai_lang_en" || data === "ai_lang_bn") {
       const lang = data === "ai_lang_en" ? "English" : "Bangla";
-      chatLanguage[chatId] = lang; // User er beche neya bhasha save kora holo
-      userStates[chatId] = "CHATTING_WITH_AI"; // Chatting mode on kora holo
-      bot.deleteMessage(chatId, messageId).catch(()=>{}); // Bhasha select er menu ta delete kora holo
+      chatLanguage[chatId] = lang; 
+      userStates[chatId] = "CHATTING_WITH_AI"; 
+      bot.deleteMessage(chatId, messageId).catch(()=>{}); 
       
-      // Bhasha onujayi Welcome Message
       let welcomeMsg = lang === "English" 
           ? "🤖 **AI Chatbot Activated! (English)**\n\nYou can now chat with me. Click '❌ Exit Chatbot' below to leave."
           : "🤖 **AI Chatbot Activated! (Bangla)**\n\nApni ekhon amar sathe kotha bolte paren. Chat theke ber hote nicher '❌ Exit Chatbot' a click korun.";
