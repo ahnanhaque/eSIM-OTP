@@ -94,7 +94,6 @@ function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
 function getReplyMenu(chatId, username) {
-  // Added "🤖 Chatbot" button here
   let keyboard = [[{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }], [{ text: "🔑 2FA" }, { text: "👤 Profile" }], [{ text: "🤖 Chatbot" }]];
   if (isAdmin(chatId, username)) keyboard.push([{ text: "💬 Support" }, { text: "⚙️ Admin Panel" }]); else keyboard.push([{ text: "💬 Support" }]);
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
@@ -168,12 +167,11 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/')) return;
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-  // Added Chatbot triggers
   const triggerWords = ["☎️ Get Number", "📧 Temp Mail", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "🤖 Chatbot", "❌ Exit Chatbot"];
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
   if (triggerWords.includes(text)) delete userStates[chatId];
 
-  // Chatbot logic START
+  // Chatbot Logic
   if (text === "🤖 Chatbot") {
       userStates[chatId] = "CHATTING_WITH_AI";
       bot.sendMessage(chatId, "🤖 **AI Chatbot Activated!**\n\nApni ekhon amar sathe kotha bolte paren. Chat theke ber hote nicher '❌ Exit Chatbot' button a click korun.", {
@@ -199,11 +197,11 @@ bot.on('message', async (msg) => {
           const reply = response.text();
           bot.sendMessage(chatId, reply, { parse_mode: "Markdown" }).catch(()=>{});
       } catch (error) {
+          console.error("[Gemini API Error]:", error); // Ekhane error print hobe Render e
           bot.sendMessage(chatId, "⚠️ Kono ekta somossa hoyeche, ektu pore abar try korun.").catch(()=>{});
       }
       return;
   }
-  // Chatbot logic END
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
