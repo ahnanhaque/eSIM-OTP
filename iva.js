@@ -1,62 +1,25 @@
 const express = require("express");
 const https   = require("https");
 const zlib    = require("zlib");
-const { HttpsProxyAgent } = require("https-proxy-agent");
 
 const router = express.Router();
 
 /* ================= CONFIG ================= */
 const BASE_URL       = "https://www.ivasms.com";
-const TERMINATION_ID = "1029603";
-const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36";
-
-// 🟢 Bright Data Proxy Configuration (Dynamic)
-let PROXY_HOST = "brd.superproxy.io";
-let PROXY_PORT = 33335;
-let PROXY_USER = "brd-customer-hl_2d9fa9c9-zone-esimbot";
-let PROXY_PASS = "8po0jdioin6o";
-
-function setProxyConfig(host, port, user, pass) {
-    PROXY_HOST = host;
-    PROXY_PORT = parseInt(port);
-    PROXY_USER = user;
-    PROXY_PASS = pass;
-    resetProxySession();
-    console.log("✅ [IVA] Proxy configuration successfully updated in memory!");
-}
-
-// Session-based Proxy Agent
-let currentProxyAgent = null;
-
-function getProxyAgent() {
-    if (!currentProxyAgent) {
-        const sessionId = `session-${Math.floor(Math.random() * 1000000)}`;
-        const proxyUrl = `http://${PROXY_USER}-${sessionId}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
-        currentProxyAgent = new HttpsProxyAgent(proxyUrl);
-    }
-    return currentProxyAgent;
-}
-
-function resetProxySession() {
-    currentProxyAgent = null;
-    RAW_COOKIES = [];
-}
+const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
 /* ================= COOKIES IN MEMORY ================= */
-let COOKIES = {
-  "XSRF-TOKEN":       "",
-  "ivas_sms_session": ""
-};
-let RAW_COOKIES = []; // Store ALL cookies (including Cloudflare clearance)
+let XSRF_TOKEN = "";
+let IVAS_SESSION = "";
 
 function setCookies(xsrf, session) {
-  COOKIES["XSRF-TOKEN"] = xsrf;
-  COOKIES["ivas_sms_session"] = session;
+  XSRF_TOKEN = xsrf;
+  IVAS_SESSION = session;
   console.log("✅ [IVA] Clean Cookies successfully updated in memory!");
 }
 
 function getCookies() {
-  return { xsrf: COOKIES["XSRF-TOKEN"], session: COOKIES["ivas_sms_session"] };
+  return { xsrf: XSRF_TOKEN, session: IVAS_SESSION };
 }
 
 /* ================= HELPERS ================= */
@@ -66,8 +29,8 @@ function getToday() {
 }
 
 function getXsrf() {
-  try { return decodeURIComponent(COOKIES["XSRF-TOKEN"] || ""); }
-  catch { return COOKIES["XSRF-TOKEN"] || ""; }
+  try { return decodeURIComponent(XSRF_TOKEN || ""); }
+  catch { return XSRF_TOKEN || ""; }
 }
 
 function safeJSON(text) {
@@ -75,54 +38,33 @@ function safeJSON(text) {
   catch { return { error: "Invalid JSON", preview: text.substring(0, 300) }; }
 }
 
-/* ================= HTTP REQUEST WITH PROXY ================= */
-function makeRequest(method, path, body, contentType, extraHeaders = {}, isLogin = false) {
+/* ================= HTTP REQUEST ================= */
+function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     
-    let cookieHeader = RAW_COOKIES.join("; ");
-    if (!cookieHeader && COOKIES["XSRF-TOKEN"] && COOKIES["ivas_sms_session"]) {
-        cookieHeader = `XSRF-TOKEN=${COOKIES["XSRF-TOKEN"]}; ivas_sms_session=${COOKIES["ivas_sms_session"]}`;
-    }
+    // শুধু দুটো কুকি দিয়ে ক্লিন স্ট্রিং তৈরি
+    const cleanCookieString = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
 
-    let headers = {};
-    if (isLogin) {
-        // 🟢 Login headers (Clean for Bright Data to handle Cloudflare)
-        headers = {
-            "Accept": "*/*",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Accept-Language": "en-US,en;q=0.9",
-            ...extraHeaders
-        };
-    } else {
-        // 🟢 Normal fetching headers (Your Original Logic)
-        headers = {
-            "User-Agent":       USER_AGENT,
-            "Accept":           "*/*",
-            "Accept-Encoding":  "gzip, deflate, br",
-            "Accept-Language":  "en-PK,en;q=0.9",
-            "X-Requested-With": "XMLHttpRequest",
-            "X-XSRF-TOKEN":     getXsrf(),
-            "X-CSRF-TOKEN":     getXsrf(),
-            "Origin":           BASE_URL,
-            "Referer":          `${BASE_URL}/portal`,
-            ...extraHeaders
-        };
-    }
-    
-    if (cookieHeader) headers["Cookie"] = cookieHeader;
+    const headers = {
+      "User-Agent":       USER_AGENT,
+      "Accept":           "*/*",
+      "Accept-Encoding":  "gzip, deflate, br",
+      "Accept-Language":  "en-US,en;q=0.9",
+      "Cookie":           cleanCookieString, 
+      "X-Requested-With": "XMLHttpRequest",
+      "X-XSRF-TOKEN":     getXsrf(),
+      "X-CSRF-TOKEN":     getXsrf(),
+      "Origin":           BASE_URL,
+      "Referer":          `${BASE_URL}/portal`,
+      ...extraHeaders
+    };
 
     if (method === "POST" && body) {
       headers["Content-Type"]   = contentType;
       headers["Content-Length"] = Buffer.byteLength(body);
     }
 
-    const req = https.request(BASE_URL + path, { 
-        method, 
-        headers, 
-        agent: getProxyAgent(),
-        rejectUnauthorized: false, 
-        timeout: 90000 
-    }, res => {
+    const req = https.request(BASE_URL + path, { method, headers }, res => {
       let chunks = [];
       res.on("data", d => chunks.push(d));
       res.on("end", () => {
@@ -135,79 +77,21 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}, isLogin
 
         const text = buf.toString("utf-8");
 
-        const setCookiesHeader = res.headers['set-cookie'];
-        if (setCookiesHeader) {
-            setCookiesHeader.forEach(c => {
-                const rawCookie = c.split(';')[0];
-                const cookieName = rawCookie.split('=')[0];
-                
-                let foundIndex = RAW_COOKIES.findIndex(rc => rc.startsWith(cookieName + '='));
-                if (foundIndex !== -1) RAW_COOKIES[foundIndex] = rawCookie;
-                else RAW_COOKIES.push(rawCookie);
-
-                if (c.includes('XSRF-TOKEN=')) COOKIES["XSRF-TOKEN"] = decodeURIComponent(c.split('XSRF-TOKEN=')[1].split(';')[0]);
-                if (c.includes('ivas_sms_session=')) COOKIES["ivas_sms_session"] = decodeURIComponent(c.split('ivas_sms_session=')[1].split(';')[0]);
-            });
-        }
-
         if (res.statusCode === 401 || res.statusCode === 419 || res.statusCode === 403 || text.includes('"message":"Unauthenticated"')) {
-          if (path !== "/login") return reject(new Error(`SESSION_EXPIRED (Status: ${res.statusCode})`));
+          return reject(new Error("SESSION_EXPIRED"));
         }
 
         resolve({ status: res.statusCode, body: text });
       });
     });
 
-    req.on("error", (err) => {
-        console.error("[IVA Request Error]:", err.message);
-        reject(err);
-    });
-    
-    req.on('timeout', () => {
-        req.destroy();
-        reject(new Error("Request Timed Out. Bright Data took too long."));
-    });
-
+    req.on("error", reject);
     if (body) req.write(body);
     req.end();
   });
 }
 
-/* ================= 🟢 NEW LOGIN FUNCTION ================= */
-async function loginIVAS(email, password) {
-  try {
-    resetProxySession(); 
-    console.log("[IVA] Fetching login page via Bright Data Web Unlocker. Waiting for Cloudflare...");
-    
-    const getRes = await makeRequest("GET", "/login", null, null, {}, true);
-    
-    let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/) || 
-                     getRes.body.match(/"csrf-token"\s+content="([^"]+)"/);
-    let csrfToken = tokenMatch ? tokenMatch[1] : null;
-
-    if (!csrfToken) {
-        return { success: false, error: "Cloudflare challenge blocked the request." };
-    }
-
-    console.log("[IVA] ✅ CSRF Token fetched. Submitting login form...");
-    const postBody = new URLSearchParams({ _token: csrfToken, email: email, password: password }).toString();
-
-    await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
-      "Origin": BASE_URL, "Referer": `${BASE_URL}/login`
-    }, true);
-
-    if (COOKIES["ivas_sms_session"] && COOKIES["XSRF-TOKEN"]) {
-       console.log("✅ [IVA] Logged in successfully!");
-       return { success: true };
-    } else {
-       return { success: false, error: "Failed to retrieve session cookies. Check credentials." };
-    }
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
-}
-
-/* ================= 🟢 ORIGINAL FETCH _token ================= */
+/* ================= FETCH _token ================= */
 async function fetchToken() {
   const resp = await makeRequest("GET", "/portal", null, null, {
     "Accept": "text/html,application/xhtml+xml,*/*"
@@ -219,7 +103,7 @@ async function fetchToken() {
   return match ? match[1] : null;
 }
 
-/* ================= 🟢 ORIGINAL GET NUMBERS ================= */
+/* ================= GET NUMBERS ================= */
 async function getNumbers(token) {
   const ts   = Date.now();
   const path = `/portal/numbers?draw=1`
@@ -250,11 +134,10 @@ async function getNumbers(token) {
   };
 }
 
-/* ================= 🟢 ORIGINAL GET SMS ================= */
+/* ================= GET SMS ================= */
 async function getSMS(token) {
   const today    = getToday();
   const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
-  const ua       = USER_AGENT;
 
   const parts = [
     `--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`,
@@ -263,7 +146,7 @@ async function getSMS(token) {
     `--${boundary}--`
   ].join("\r\n");
 
-  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01", "User-Agent": ua }).catch(() => null);
+  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01" }).catch(() => null);
   if (!r1) return { aaData: [] };
 
   const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
@@ -271,14 +154,14 @@ async function getSMS(token) {
 
   for (const range of ranges) {
     const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
-    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01", "User-Agent": ua }).catch(() => null);
+    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01" }).catch(() => null);
     if (!r2) continue;
 
     const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
 
     for (const number of numbers) {
       const b3 = new URLSearchParams({ _token: token, start: today, end: today, Number: number, Range: range }).toString();
-      const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01", "User-Agent": ua }).catch(() => null);
+      const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01" }).catch(() => null);
       if (!r3) continue;
 
       const msgs = parseSMSMessages(r3.body, range, number, today);
@@ -322,5 +205,5 @@ function parseSMSMessages(html, range, number, date) {
 }
 
 module.exports = {
-  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL, loginIVAS, setProxyConfig
+  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL
 };
