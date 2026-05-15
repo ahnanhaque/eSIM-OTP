@@ -7,20 +7,27 @@ const router = express.Router();
 
 /* ================= CONFIG ================= */
 const BASE_URL       = "https://www.ivasms.com";
-const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-// 🟢 Bright Data Proxy Configuration
-const PROXY_HOST = "brd.superproxy.io";
-const PROXY_PORT = 33335;
-const PROXY_USER = "brd-customer-hl_2d9fa9c9-zone-esimbot";
-const PROXY_PASS = "8po0jdioin6o";
+// 🟢 Bright Data Proxy Configuration (Now Dynamic)
+let PROXY_HOST = "brd.superproxy.io";
+let PROXY_PORT = 33335;
+let PROXY_USER = "brd-customer-hl_2d9fa9c9-zone-esimbot";
+let PROXY_PASS = "8po0jdioin6o";
 
-// Session-based Proxy Agent to keep the same IP for GET and POST requests
+function setProxyConfig(host, port, user, pass) {
+    PROXY_HOST = host;
+    PROXY_PORT = parseInt(port);
+    PROXY_USER = user;
+    PROXY_PASS = pass;
+    resetProxySession();
+    console.log("✅ [IVA] Proxy configuration successfully updated in memory!");
+}
+
+// Session-based Proxy Agent
 let currentProxyAgent = null;
 
 function getProxyAgent() {
     if (!currentProxyAgent) {
-        // 🟢 Generate a random session ID so the IP doesn't change mid-login
         const sessionId = `session-${Math.floor(Math.random() * 1000000)}`;
         const proxyUrl = `http://${PROXY_USER}-${sessionId}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
         currentProxyAgent = new HttpsProxyAgent(proxyUrl);
@@ -36,7 +43,7 @@ function resetProxySession() {
 /* ================= COOKIES IN MEMORY ================= */
 let XSRF_TOKEN = "";
 let IVAS_SESSION = "";
-let RAW_COOKIES = []; // 🟢 Store ALL cookies including Cloudflare clearance
+let RAW_COOKIES = []; // Store ALL cookies (including Cloudflare clearance)
 
 function setCookies(xsrf, session) {
   XSRF_TOKEN = xsrf;
@@ -68,22 +75,15 @@ function safeJSON(text) {
 function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     
-    // 🟢 Send all accumulated cookies (including Cloudflare cookies)
     let cookieHeader = RAW_COOKIES.join("; ");
     if (!cookieHeader && XSRF_TOKEN && IVAS_SESSION) {
         cookieHeader = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
     }
 
     const headers = {
-      "User-Agent":       USER_AGENT,
       "Accept":           "*/*",
       "Accept-Encoding":  "gzip, deflate, br",
       "Accept-Language":  "en-US,en;q=0.9",
-      "X-Requested-With": "XMLHttpRequest",
-      "X-XSRF-TOKEN":     getXsrf(),
-      "X-CSRF-TOKEN":     getXsrf(),
-      "Origin":           BASE_URL,
-      "Referer":          `${BASE_URL}/portal`,
       ...extraHeaders
     };
     
@@ -98,7 +98,8 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
         method, 
         headers, 
         agent: getProxyAgent(),
-        rejectUnauthorized: false // 🟢 CRITICAL: Ignore Bright Data SSL Certificate errors
+        rejectUnauthorized: false, 
+        timeout: 45000 
     }, res => {
       let chunks = [];
       res.on("data", d => chunks.push(d));
@@ -112,14 +113,12 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
 
         const text = buf.toString("utf-8");
 
-        // 🟢 Extract and save ALL cookies automatically
         const setCookiesHeader = res.headers['set-cookie'];
         if (setCookiesHeader) {
             setCookiesHeader.forEach(c => {
                 const rawCookie = c.split(';')[0];
                 const cookieName = rawCookie.split('=')[0];
                 
-                // Update RAW_COOKIES array
                 let foundIndex = RAW_COOKIES.findIndex(rc => rc.startsWith(cookieName + '='));
                 if (foundIndex !== -1) RAW_COOKIES[foundIndex] = rawCookie;
                 else RAW_COOKIES.push(rawCookie);
@@ -141,6 +140,11 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
         console.error("[IVA Request Error]:", err.message);
         reject(err);
     });
+    
+    req.on('timeout', () => {
+        req.destroy();
+        reject(new Error("Request Timed Out. Bright Data took too long."));
+    });
 
     if (body) req.write(body);
     req.end();
@@ -150,22 +154,25 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
 /* ================= 🟢 NEW LOGIN FUNCTION ================= */
 async function loginIVAS(email, password) {
   try {
-    resetProxySession(); // Start a fresh Bright Data session for login
-    console.log("[IVA] Fetching login page via Bright Data Web Unlocker...");
+    resetProxySession(); 
+    console.log("[IVA] Fetching login page via Bright Data Web Unlocker. Waiting for Cloudflare...");
     
     const getRes = await makeRequest("GET", "/login", null, null, {
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Upgrade-Insecure-Requests": "1"
     });
     
     let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
     let csrfToken = tokenMatch ? tokenMatch[1] : null;
 
     if (!csrfToken) {
-        console.log("[IVA] Cloudflare blocked or CSRF missing. Response Preview:", getRes.body.substring(0, 300));
-        return { success: false, error: "Cloudflare challenge blocked the request. Please try again." };
+        return { success: false, error: "Cloudflare challenge blocked the request. Web Unlocker could not bypass it." };
     }
 
-    console.log("[IVA] CSRF Token fetched. Attempting POST login...");
+    console.log("[IVA] CSRF Token fetched. Submitting login form...");
     const postBody = new URLSearchParams({
         _token: csrfToken,
         email: email,
@@ -173,35 +180,24 @@ async function loginIVAS(email, password) {
     }).toString();
 
     await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
-      "Referer": `${BASE_URL}/login`,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Origin": BASE_URL,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      "Referer": `${BASE_URL}/login`,
+      "Upgrade-Insecure-Requests": "1"
     });
 
     if (IVAS_SESSION && XSRF_TOKEN) {
        console.log("✅ [IVA] Logged in successfully!");
        return { success: true };
     } else {
-       return { success: false, error: "Failed to retrieve session cookies. Invalid credentials or Cloudflare block on POST." };
+       return { success: false, error: "Failed to retrieve session cookies. Check your credentials." };
     }
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
-/* ================= FETCH _token ================= */
-async function fetchToken() {
-  const resp = await makeRequest("GET", "/portal", null, null, {
-    "Accept": "text/html,application/xhtml+xml,*/*"
-  }).catch(() => null);
-  
-  if (!resp) return null;
-  const match = resp.body.match(/name="_token"\s+value="([^"]+)"/) ||
-                resp.body.match(/"csrf-token"\s+content="([^"]+)"/);
-  return match ? match[1] : null;
-}
-
-/* ================= GET NUMBERS ================= */
+/* ================= GET NUMBERS & GET SMS ================= */
 async function getNumbers(token) {
   const ts   = Date.now();
   const path = `/portal/numbers?draw=1`
@@ -213,9 +209,10 @@ async function getNumbers(token) {
     + `&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&search[value]=&_=${ts}`;
 
   const resp = await makeRequest("GET", path, null, null, {
+    "X-Requested-With": "XMLHttpRequest", 
+    "X-CSRF-TOKEN": token,
     "Referer": `${BASE_URL}/portal/numbers`,
-    "Accept": "application/json, text/javascript, */*; q=0.01",
-    "X-CSRF-TOKEN": token
+    "Accept": "application/json, text/javascript, */*; q=0.01"
   }).catch(() => null);
 
   if (!resp) return { aaData: [] };
@@ -232,7 +229,6 @@ async function getNumbers(token) {
   };
 }
 
-/* ================= GET SMS ================= */
 async function getSMS(token) {
   const today    = getToday();
   const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
@@ -244,7 +240,13 @@ async function getSMS(token) {
     `--${boundary}--`
   ].join("\r\n");
 
-  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01" }).catch(() => null);
+  const headersObj = {
+      "X-Requested-With": "XMLHttpRequest", 
+      "Referer": `${BASE_URL}/portal/sms/received`, 
+      "Accept": "text/html, */*; q=0.01"
+  };
+
+  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, headersObj).catch(() => null);
   if (!r1) return { aaData: [] };
 
   const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
@@ -252,14 +254,14 @@ async function getSMS(token) {
 
   for (const range of ranges) {
     const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
-    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01" }).catch(() => null);
+    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", headersObj).catch(() => null);
     if (!r2) continue;
 
     const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
 
     for (const number of numbers) {
       const b3 = new URLSearchParams({ _token: token, start: today, end: today, Number: number, Range: range }).toString();
-      const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", { "Referer": `${BASE_URL}/portal/sms/received`, "Accept": "text/html, */*; q=0.01" }).catch(() => null);
+      const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", headersObj).catch(() => null);
       if (!r3) continue;
 
       const msgs = parseSMSMessages(r3.body, range, number, today);
@@ -303,5 +305,5 @@ function parseSMSMessages(html, range, number, date) {
 }
 
 module.exports = {
-  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL, loginIVAS
+  router, setCookies, getCookies, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL, loginIVAS, setProxyConfig
 };
