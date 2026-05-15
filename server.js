@@ -2,6 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
+const iva = require("./iva.js"); // 🟢 IVA Module Imported
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -112,7 +113,6 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
-// 🟢 আপডেটেড অ্যাডমিন প্ল্যাটফর্ম মেনু (Remove Number যুক্ত করা হয়েছে)
 const adminPlatformMenu = {
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
@@ -123,11 +123,11 @@ const adminPlatformMenu = {
   ]
 };
 
+// 🟢 Login Button added to Manage Number Panel
 const manageNumberPanel = {
   inline_keyboard: [
-    [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
-    [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }],
-    [{ text: "MK SMS 💬", callback_data: "placeholder_mk" }],
+    [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }, { text: "🔑 Login to IVAS", callback_data: "admin_ivas_login" }],
+    [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }, { text: "MK SMS 💬", callback_data: "placeholder_mk" }],
     [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
     [{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]
   ]
@@ -309,6 +309,25 @@ bot.on('message', async (msg) => {
     if(!db.adminUsernames.includes(newAdmin)) { db.adminUsernames.push(newAdmin); saveDB(); bot.sendMessage(chatId, `✅ **${newAdmin}** has been successfully added as an admin.`).catch(()=>{}); }
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
+  // 🟢 IVAS Login Logic for Message
+  else if (userStates[chatId] === "WAITING_FOR_IVAS_CREDS" && isAdmin(chatId, username)) {
+    const parts = text.split(',');
+    if (parts.length === 2) {
+        const email = parts[0].trim();
+        const password = parts[1].trim();
+        bot.sendMessage(chatId, "⏳ Logging into IVAS via Bright Data Web Unlocker. Please wait...").catch(()=>{});
+        iva.loginIVAS(email, password).then(res => {
+            if (res.success) {
+                bot.sendMessage(chatId, "✅ **Successfully logged in to IVAS!**\nCookies have been updated in the bot's memory automatically.", { parse_mode: "Markdown" }).catch(()=>{});
+            } else {
+                bot.sendMessage(chatId, "❌ **Login failed:** " + res.error, { parse_mode: "Markdown" }).catch(()=>{});
+            }
+        });
+    } else {
+        bot.sendMessage(chatId, "❌ Invalid format. Please enter exactly as: `email, password`\nExample: `admin@example.com, mypass123`", { parse_mode: "Markdown" }).catch(()=>{});
+    }
+    delete userStates[chatId];
+  }
 });
 
 bot.on('callback_query', async (query) => {
@@ -320,7 +339,6 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
-  // 🟢 যুক্ত করা হলো 'delnumrng_' পারমিশন চেকে
   const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk", "delnumrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
@@ -340,7 +358,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 Remove Number Logic Start
   else if (data === "admin_remove_number_menu") {
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (activeRanges.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers to remove.", show_alert: true });
@@ -380,11 +397,16 @@ bot.on('callback_query', async (query) => {
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
   }
-  // 🟢 Remove Number Logic End
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
     bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
+  }
+  // 🟢 IVAS Login Callback Handler
+  else if (data === "admin_ivas_login") {
+    userStates[chatId] = "WAITING_FOR_IVAS_CREDS";
+    bot.sendMessage(chatId, "🔐 **Enter your IVAS login details:**\nFormat: `email, password`\nExample: `admin@example.com, mypass123`", { parse_mode: "Markdown" }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
   else if (data === "placeholder_stex" || data === "placeholder_mk" || data === "placeholder_ig" || data === "placeholder_wa") {
