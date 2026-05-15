@@ -99,7 +99,7 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
         headers, 
         agent: getProxyAgent(),
         rejectUnauthorized: false, 
-        timeout: 90000 // 🟢 Timeout increased to 90 seconds
+        timeout: 90000 
     }, res => {
       let chunks = [];
       res.on("data", d => chunks.push(d));
@@ -157,10 +157,8 @@ async function loginIVAS(email, password) {
     resetProxySession(); 
     console.log("[IVA] Fetching login page via Bright Data Web Unlocker. Waiting for Cloudflare...");
     
-    // 🟢 কোনো এক্সট্রা হেডার পাঠাবো না, Bright Data নিজে হেডার জেনারেট করবে
     const getRes = await makeRequest("GET", "/login", null, null, {});
     
-    // 🟢 টোকেন খোঁজার জন্য দুটি প্যাটার্ন ব্যবহার করা হলো
     let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/) || 
                      getRes.body.match(/"csrf-token"\s+content="([^"]+)"/);
     let csrfToken = tokenMatch ? tokenMatch[1] : null;
@@ -177,7 +175,6 @@ async function loginIVAS(email, password) {
         password: password
     }).toString();
 
-    // 🟢 লগইন সাবমিটের সময় শুধু বেসিক অরিজিন পাঠানো হলো
     await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
       "Origin": BASE_URL,
       "Referer": `${BASE_URL}/login`
@@ -194,38 +191,48 @@ async function loginIVAS(email, password) {
   }
 }
 
-/* ================= GET NUMBERS & GET SMS ================= */
+/* ================= 🟢 GET NUMBERS (UPDATED FOR LIVE SMS PAGE) ================= */
 async function getNumbers(token) {
-  const ts   = Date.now();
-  const path = `/portal/numbers?draw=1`
-    + `&columns[0][data]=number_id&columns[0][name]=id&columns[0][orderable]=false`
-    + `&columns[1][data]=Number&columns[2][data]=range&columns[3][data]=A2P`
-    + `&columns[4][data]=LimitA2P&columns[5][data]=limit_cli_a2p`
-    + `&columns[6][data]=limit_cli_did_a2p`
-    + `&columns[7][data]=action&columns[7][searchable]=false&columns[7][orderable]=false`
-    + `&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&search[value]=&_=${ts}`;
+  const today    = getToday();
+  const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
 
-  const resp = await makeRequest("GET", path, null, null, {
-    "X-Requested-With": "XMLHttpRequest", 
-    "X-CSRF-TOKEN": token,
-    "Referer": `${BASE_URL}/portal/numbers`,
-    "Accept": "application/json, text/javascript, */*; q=0.01"
-  }).catch(() => null);
+  const parts = [
+    `--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="to"\r\n\r\n${today}`,
+    `--${boundary}\r\nContent-Disposition: form-data; name="_token"\r\n\r\n${token}`,
+    `--${boundary}--`
+  ].join("\r\n");
 
-  if (!resp) return { aaData: [] };
-  const json = safeJSON(resp.body);
-  
-  if (!json || !json.data) return json;
-  const aaData = json.data.map(row => [row.range || "", "", String(row.Number || ""), "Weekly", ""]);
-  
-  return {
-    sEcho: 2,
-    iTotalRecords: String(json.recordsTotal || aaData.length),
-    iTotalDisplayRecords: String(json.recordsFiltered || aaData.length),
-    aaData
+  const headersObj = {
+      "X-Requested-With": "XMLHttpRequest", 
+      "Referer": `${BASE_URL}/portal/sms/received`, 
+      "Accept": "text/html, */*; q=0.01"
   };
+
+  // 🟢 সরাসরি "Live SMS" এর সাইডবার থেকে রেঞ্জ ফেচ করা হচ্ছে
+  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, headersObj).catch(() => null);
+  if (!r1 || !r1.body) return { aaData: [] };
+
+  const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
+  const aaData = [];
+
+  for (const range of ranges) {
+    const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
+    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", headersObj).catch(() => null);
+    if (!r2 || !r2.body) continue;
+
+    // 🟢 রেঞ্জের ভেতরের নাম্বারগুলো স্ক্যান করা হচ্ছে
+    const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
+    for (const number of numbers) {
+       // বটের ফরম্যাটে অ্যারে পুশ করা হচ্ছে
+       aaData.push([range, "", String(number), "Weekly", ""]);
+    }
+  }
+
+  return { aaData };
 }
 
+/* ================= GET SMS ================= */
 async function getSMS(token) {
   const today    = getToday();
   const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
@@ -244,7 +251,7 @@ async function getSMS(token) {
   };
 
   const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, headersObj).catch(() => null);
-  if (!r1) return { aaData: [] };
+  if (!r1 || !r1.body) return { aaData: [] };
 
   const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
   const allRows = [];
@@ -252,14 +259,14 @@ async function getSMS(token) {
   for (const range of ranges) {
     const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
     const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", headersObj).catch(() => null);
-    if (!r2) continue;
+    if (!r2 || !r2.body) continue;
 
     const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
 
     for (const number of numbers) {
       const b3 = new URLSearchParams({ _token: token, start: today, end: today, Number: number, Range: range }).toString();
       const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", headersObj).catch(() => null);
-      if (!r3) continue;
+      if (!r3 || !r3.body) continue;
 
       const msgs = parseSMSMessages(r3.body, range, number, today);
       allRows.push(...msgs);
