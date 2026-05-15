@@ -1,12 +1,17 @@
 const express = require("express");
 const https   = require("https");
 const zlib    = require("zlib");
+const { HttpsProxyAgent } = require("https-proxy-agent");
 
 const router = express.Router();
 
 /* ================= CONFIG ================= */
 const BASE_URL       = "https://www.ivasms.com";
 const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// 🟢 Bright Data Web Unlocker Proxy Configuration
+const PROXY_URL = "http://brd-customer-hl_2d9fa9c9-zone-esimbot:8po0jdioin6o@brd.superproxy.io:33335";
+const proxyAgent = new HttpsProxyAgent(PROXY_URL);
 
 /* ================= COOKIES IN MEMORY ================= */
 let XSRF_TOKEN = "";
@@ -38,19 +43,20 @@ function safeJSON(text) {
   catch { return { error: "Invalid JSON", preview: text.substring(0, 300) }; }
 }
 
-/* ================= HTTP REQUEST ================= */
+/* ================= HTTP REQUEST WITH PROXY ================= */
 function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     
-    // শুধু দুটো কুকি দিয়ে ক্লিন স্ট্রিং তৈরি
-    const cleanCookieString = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
+    let cookieHeader = "";
+    if (XSRF_TOKEN && IVAS_SESSION) {
+        cookieHeader = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
+    }
 
     const headers = {
       "User-Agent":       USER_AGENT,
       "Accept":           "*/*",
       "Accept-Encoding":  "gzip, deflate, br",
       "Accept-Language":  "en-US,en;q=0.9",
-      "Cookie":           cleanCookieString, 
       "X-Requested-With": "XMLHttpRequest",
       "X-XSRF-TOKEN":     getXsrf(),
       "X-CSRF-TOKEN":     getXsrf(),
@@ -58,13 +64,16 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
       "Referer":          `${BASE_URL}/portal`,
       ...extraHeaders
     };
+    
+    if (cookieHeader) headers["Cookie"] = cookieHeader;
 
     if (method === "POST" && body) {
       headers["Content-Type"]   = contentType;
       headers["Content-Length"] = Buffer.byteLength(body);
     }
 
-    const req = https.request(BASE_URL + path, { method, headers }, res => {
+    // 🟢 Proxy Agent added here
+    const req = https.request(BASE_URL + path, { method, headers, agent: proxyAgent }, res => {
       let chunks = [];
       res.on("data", d => chunks.push(d));
       res.on("end", () => {
@@ -77,8 +86,17 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
 
         const text = buf.toString("utf-8");
 
+        // 🟢 Extract and save cookies automatically from response
+        const setCookiesHeader = res.headers['set-cookie'];
+        if (setCookiesHeader) {
+            setCookiesHeader.forEach(c => {
+                if (c.includes('XSRF-TOKEN=')) XSRF_TOKEN = decodeURIComponent(c.split('XSRF-TOKEN=')[1].split(';')[0]);
+                if (c.includes('ivas_sms_session=')) IVAS_SESSION = decodeURIComponent(c.split('ivas_sms_session=')[1].split(';')[0]);
+            });
+        }
+
         if (res.statusCode === 401 || res.statusCode === 419 || res.statusCode === 403 || text.includes('"message":"Unauthenticated"')) {
-          return reject(new Error("SESSION_EXPIRED"));
+          if (path !== "/login") return reject(new Error("SESSION_EXPIRED"));
         }
 
         resolve({ status: res.statusCode, body: text });
@@ -89,6 +107,43 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
     if (body) req.write(body);
     req.end();
   });
+}
+
+/* ================= 🟢 NEW LOGIN FUNCTION ================= */
+async function loginIVAS(email, password) {
+  try {
+    console.log("[IVA] Fetching login page via Bright Data...");
+    const getRes = await makeRequest("GET", "/login", null, null, {
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    });
+    
+    let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
+    let csrfToken = tokenMatch ? tokenMatch[1] : null;
+
+    if (!csrfToken) return { success: false, error: "Cloudflare challenge blocked the request or CSRF token missing." };
+
+    console.log("[IVA] CSRF Token fetched. Attempting login...");
+    const postBody = new URLSearchParams({
+        _token: csrfToken,
+        email: email,
+        password: password
+    }).toString();
+
+    await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
+      "Referer": `${BASE_URL}/login`,
+      "Origin": BASE_URL,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+    });
+
+    if (IVAS_SESSION && XSRF_TOKEN) {
+       console.log("✅ [IVA] Logged in successfully!");
+       return { success: true };
+    } else {
+       return { success: false, error: "Failed to retrieve session cookies after login. Check credentials." };
+    }
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
 }
 
 /* ================= FETCH _token ================= */
@@ -205,5 +260,5 @@ function parseSMSMessages(html, range, number, date) {
 }
 
 module.exports = {
-  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL
+  router, setCookies, getCookies, fetchToken, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL, loginIVAS
 };
