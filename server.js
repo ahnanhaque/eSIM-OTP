@@ -2,7 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
-const iva = require("./iva.js"); // 🟢 IVA Module Imported
+const iva = require("./iva.js");
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -39,7 +39,7 @@ bot.getMe().then(info => botInfo = info).catch(console.error);
 const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4, proxy: null }, availableNumbers: {}, cookies: {} };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 
@@ -95,38 +95,49 @@ function getReplyMenu(chatId, username) {
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
+// 🟢 All platforms now use dynamic country menu instead of placeholder
 const platformMenu = { 
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "menu_country_fb" }],
-    [{ text: "ⓘ Instagram", callback_data: "placeholder_ig" }],
-    [{ text: "✆ WhatsApp", callback_data: "placeholder_wa" }],
+    [{ text: "ⓘ Instagram", callback_data: "menu_country_ig" }],
+    [{ text: "✆ WhatsApp", callback_data: "menu_country_wa" }],
     [{ text: "✖ Close Menu", callback_data: "close_menu" }]
   ] 
 };
 
 function getAdminMenu(chatId) {
   let menu = [ 
-    [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }], 
-    [{ text: "⚙️ Manage Number", callback_data: "admin_manage_numbers" }] 
+    [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }, { text: "⚙️ Manage Number", callback_data: "admin_manage_numbers" }], 
+    [{ text: "🔑 Login to Panel", callback_data: "admin_login_panel" }] 
   ];
-  if (isSuperAdmin(chatId)) menu.push([{ text: "👑 Manage Admins", callback_data: "admin_manage_admins" }, { text: "❌ Close Menu", callback_data: "close_menu" }]); else menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
+  if (isSuperAdmin(chatId)) menu.push([{ text: "👑 Manage Admins", callback_data: "admin_manage_admins" }, { text: "❌ Close Menu", callback_data: "close_menu" }]); 
+  else menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
   return { inline_keyboard: menu };
 }
 
 const adminPlatformMenu = {
   inline_keyboard: [
-    [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
-    [{ text: "ⓘ Instagram", callback_data: "admin_sel_plat_ig" }],
+    [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }, { text: "ⓘ Instagram", callback_data: "admin_sel_plat_ig" }],
     [{ text: "✆ WhatsApp", callback_data: "admin_sel_plat_wa" }],
+    [{ text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }],
     [{ text: "🗑️ Remove Number", callback_data: "admin_remove_number_menu" }], 
     [{ text: "⬅️ Back", callback_data: "admin_panel" }]
   ]
 };
 
-// 🟢 Login Button added to Manage Number Panel
+// 🟢 Added "Set Proxy" to Login Panel Menu
+const loginPanelMenu = {
+  inline_keyboard: [
+    [{ text: "📨 IVA SMS", callback_data: "admin_login_ivas" }],
+    [{ text: "📩 STEX SMS", callback_data: "placeholder_stex" }, { text: "💬 MK SMS", callback_data: "placeholder_mk" }],
+    [{ text: "🌐 Set Proxy", callback_data: "admin_set_proxy" }],
+    [{ text: "⬅️ Back", callback_data: "admin_panel" }]
+  ]
+};
+
 const manageNumberPanel = {
   inline_keyboard: [
-    [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }, { text: "🔑 Login to IVAS", callback_data: "admin_ivas_login" }],
+    [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
     [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }, { text: "MK SMS 💬", callback_data: "placeholder_mk" }],
     [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
     [{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]
@@ -139,7 +150,7 @@ function renderManageRangesMenu(chatId, messageId) {
   rangesArray.forEach((r, index) => { let isAdded = db.availableNumbers[r.name] && db.availableNumbers[r.name].length > 0; rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); });
   rangeButtons.push([{ text: "📥 Add All", callback_data: "togglerng_addall" }, { text: "🗑️ Remove All", callback_data: "togglerng_delall" }]);
   rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]);
-  bot.editMessageText("⚙️ **iVAS Manage Ranges:**\n\nClick a range to manually toggle its availability:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
+  bot.editMessageText("⚙️ **Manage Ranges:**\n\nClick a range to manually toggle its availability:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
 }
 
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
@@ -272,10 +283,34 @@ bot.on('message', async (msg) => {
   }
   else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin for any assistance. (@Excellentzqlt)", { parse_mode: "Markdown" }).catch(()=>{});
   else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); }
+  
+  // 🟢 Handle New Proxy Input Setup
+  else if (userStates[chatId] === "WAITING_FOR_PROXY" && isAdmin(chatId, username)) {
+    const parts = text.split(',');
+    if (parts.length === 4) {
+        const host = parts[0].trim();
+        const port = parts[1].trim();
+        const user = parts[2].trim();
+        const pass = parts[3].trim();
+        db.settings.proxy = { host, port, user, pass };
+        saveDB();
+        
+        if (typeof iva.setProxyConfig === 'function') {
+            iva.setProxyConfig(host, port, user, pass);
+        }
+        
+        bot.sendMessage(chatId, `✅ **Proxy Updated Successfully!**\n\n🌐 **Host:** ${host}\n🔌 **Port:** ${port}\n👤 **User:** ${user}`, { parse_mode: "Markdown" }).catch(()=>{});
+        bot.sendMessage(chatId, "🔑 **Select a panel to login:**", { reply_markup: loginPanelMenu, parse_mode: "Markdown" }).catch(()=>{});
+    } else {
+        bot.sendMessage(chatId, "❌ Invalid format. Please enter exactly as: `Host, Port, Username, Password`\nExample: `brd.superproxy.io, 33335, user-123, pass123`", { parse_mode: "Markdown" }).catch(()=>{});
+    }
+    delete userStates[chatId];
+  }
+
   else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
     const limit = parseInt(text);
     if (isNaN(limit) || limit < 1 || limit > 20) bot.sendMessage(chatId, "❌ Invalid input. Please enter a valid number between 1 and 20.").catch(()=>{});
-    else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated! Users will now be assigned **${limit}** numbers at a time.`).catch(()=>{}); bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId) }).catch(()=>{}); delete userStates[chatId]; }
+    else { db.settings.maxNumbers = limit; saveDB(); bot.sendMessage(chatId, `✅ Successfully updated! Users will now be assigned **${limit}** numbers at a time.`).catch(()=>{}); bot.sendMessage(chatId, "⚙️ **Admin Platform Options:**", { reply_markup: adminPlatformMenu }).catch(()=>{}); delete userStates[chatId]; }
   }
   else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
     const info = getCountryInfo(text.trim().toUpperCase());
@@ -309,7 +344,6 @@ bot.on('message', async (msg) => {
     if(!db.adminUsernames.includes(newAdmin)) { db.adminUsernames.push(newAdmin); saveDB(); bot.sendMessage(chatId, `✅ **${newAdmin}** has been successfully added as an admin.`).catch(()=>{}); }
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
-  // 🟢 IVAS Login Logic for Message
   else if (userStates[chatId] === "WAITING_FOR_IVAS_CREDS" && isAdmin(chatId, username)) {
     const parts = text.split(',');
     if (parts.length === 2) {
@@ -355,6 +389,24 @@ bot.on('callback_query', async (query) => {
 
   else if (data === "admin_manage_numbers") {
     bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
+  }
+
+  else if (data === "admin_login_panel") {
+    bot.editMessageText("🔑 **Select a panel to login:**", { chat_id: chatId, message_id: messageId, reply_markup: loginPanelMenu, parse_mode: "Markdown" }).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
+  }
+  
+  // 🟢 Handle Set Proxy Click
+  else if (data === "admin_set_proxy") {
+    userStates[chatId] = "WAITING_FOR_PROXY";
+    bot.sendMessage(chatId, "🌐 **Enter new Proxy details:**\nFormat: `Host, Port, Username, Password`\nExample: `brd.superproxy.io, 33335, user-123, pass_123`", { parse_mode: "Markdown" }).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
+  }
+  
+  else if (data === "admin_login_ivas") {
+    userStates[chatId] = "WAITING_FOR_IVAS_CREDS";
+    bot.sendMessage(chatId, "🔐 **Enter your IVAS login details:**\nFormat: `email, password`\nExample: `admin@example.com, mypass123`", { parse_mode: "Markdown" }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
   
@@ -403,13 +455,7 @@ bot.on('callback_query', async (query) => {
     bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
-  // 🟢 IVAS Login Callback Handler
-  else if (data === "admin_ivas_login") {
-    userStates[chatId] = "WAITING_FOR_IVAS_CREDS";
-    bot.sendMessage(chatId, "🔐 **Enter your IVAS login details:**\nFormat: `email, password`\nExample: `admin@example.com, mypass123`", { parse_mode: "Markdown" }).catch(()=>{});
-    bot.answerCallbackQuery(query.id);
-  }
-  else if (data === "placeholder_stex" || data === "placeholder_mk" || data === "placeholder_ig" || data === "placeholder_wa") {
+  else if (data === "placeholder_stex" || data === "placeholder_mk") {
       bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
   }
 
@@ -422,14 +468,17 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
-  else if (data === "menu_country_fb") {
-    clearPendingForChat(chatId); const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
+  // 🟢 Handles all platforms (Facebook, Instagram, WhatsApp) to show country menu
+  else if (data.startsWith("menu_country_")) {
+    clearPendingForChat(chatId); 
+    const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (ranges.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
     let baseCountryCount = {}, currentV = {}, countryButtons = [];
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
     ranges.forEach(range => { let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; } countryButtons.push([{ text: `${dName} | 📦: ${db.availableNumbers[range].length}`, callback_data: `assign_${range}` }]); });
     countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
-    bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }).catch(()=>{}); bot.answerCallbackQuery(query.id);
+    bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }).catch(()=>{}); 
+    bot.answerCallbackQuery(query.id);
   }
   else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
@@ -458,21 +507,26 @@ bot.on('callback_query', async (query) => {
         { text: "🔄 Change", callback_data: `assign_next_${sel}` },
         { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }
     ]);
-    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: "menu_country_fb" }]);
+    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: "menu_country_fb" }]); // Back goes to last country menu, can be dynamic later
     
     bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
   
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
-    bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
+    bot.answerCallbackQuery(query.id, { text: "🔄 Loading ranges..." });
     let grouped = { ...latestRangesFromExtension };
     for (const r in db.availableNumbers) { if (!grouped[r]) grouped[r] = db.availableNumbers[r]; }
     tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
-    if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
+    
+    if (tempAdminData[chatId].ranges.length === 0) {
+        return bot.editMessageText("📭 **No data found!** Please ensure you have added numbers manually or logged in successfully.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
+    }
     renderManageRangesMenu(chatId, messageId);
   }
+
   else if (data.startsWith("togglerng_")) {
     const action = data.replace("togglerng_", ""); if (!tempAdminData[chatId]?.ranges) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Please fetch ranges again.", show_alert: true });
     if (action === "addall") { let t = 0; tempAdminData[chatId].ranges.forEach(r => { if (!db.availableNumbers[r.name]) db.availableNumbers[r.name] = []; r.nums.forEach(num => { if (!db.availableNumbers[r.name].includes(num) && !inUseNumbers[num]) { db.availableNumbers[r.name].push(num); t++; } }); }); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Successfully added all ${t} available numbers.` }); }
@@ -525,7 +579,17 @@ app.post('/api/ivas-data', (req, res) => {
 
 app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
+// 🟢 Load database and configure proxy on startup if it exists
 mongoose.connect(MONGODB_URI).then(async () => {
   const data = await BotDB.findOne(); if (data) db = { ...db, ...data.toObject() }; else await BotDB.create(db);
-  isDbLoaded = true; app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
+  isDbLoaded = true; 
+  
+  if(db.settings && db.settings.proxy && db.settings.proxy.host) {
+     if (typeof iva.setProxyConfig === 'function') {
+         iva.setProxyConfig(db.settings.proxy.host, db.settings.proxy.port, db.settings.proxy.user, db.settings.proxy.pass);
+         console.log("🟢 Loaded dynamic proxy from MongoDB on startup.");
+     }
+  }
+  
+  app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
 }).catch(err => console.log(err));
