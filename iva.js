@@ -9,13 +9,34 @@ const router = express.Router();
 const BASE_URL       = "https://www.ivasms.com";
 const USER_AGENT     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-// 🟢 Bright Data Web Unlocker Proxy Configuration
-const PROXY_URL = "http://brd-customer-hl_2d9fa9c9-zone-esimbot:8po0jdioin6o@brd.superproxy.io:33335";
-const proxyAgent = new HttpsProxyAgent(PROXY_URL);
+// 🟢 Bright Data Proxy Configuration
+const PROXY_HOST = "brd.superproxy.io";
+const PROXY_PORT = 33335;
+const PROXY_USER = "brd-customer-hl_2d9fa9c9-zone-esimbot";
+const PROXY_PASS = "8po0jdioin6o";
+
+// Session-based Proxy Agent to keep the same IP for GET and POST requests
+let currentProxyAgent = null;
+
+function getProxyAgent() {
+    if (!currentProxyAgent) {
+        // 🟢 Generate a random session ID so the IP doesn't change mid-login
+        const sessionId = `session-${Math.floor(Math.random() * 1000000)}`;
+        const proxyUrl = `http://${PROXY_USER}-${sessionId}:${PROXY_PASS}@${PROXY_HOST}:${PROXY_PORT}`;
+        currentProxyAgent = new HttpsProxyAgent(proxyUrl);
+    }
+    return currentProxyAgent;
+}
+
+function resetProxySession() {
+    currentProxyAgent = null;
+    RAW_COOKIES = [];
+}
 
 /* ================= COOKIES IN MEMORY ================= */
 let XSRF_TOKEN = "";
 let IVAS_SESSION = "";
+let RAW_COOKIES = []; // 🟢 Store ALL cookies including Cloudflare clearance
 
 function setCookies(xsrf, session) {
   XSRF_TOKEN = xsrf;
@@ -47,8 +68,9 @@ function safeJSON(text) {
 function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     
-    let cookieHeader = "";
-    if (XSRF_TOKEN && IVAS_SESSION) {
+    // 🟢 Send all accumulated cookies (including Cloudflare cookies)
+    let cookieHeader = RAW_COOKIES.join("; ");
+    if (!cookieHeader && XSRF_TOKEN && IVAS_SESSION) {
         cookieHeader = `XSRF-TOKEN=${XSRF_TOKEN}; ivas_sms_session=${IVAS_SESSION}`;
     }
 
@@ -72,8 +94,12 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
       headers["Content-Length"] = Buffer.byteLength(body);
     }
 
-    // 🟢 Proxy Agent added here
-    const req = https.request(BASE_URL + path, { method, headers, agent: proxyAgent }, res => {
+    const req = https.request(BASE_URL + path, { 
+        method, 
+        headers, 
+        agent: getProxyAgent(),
+        rejectUnauthorized: false // 🟢 CRITICAL: Ignore Bright Data SSL Certificate errors
+    }, res => {
       let chunks = [];
       res.on("data", d => chunks.push(d));
       res.on("end", () => {
@@ -86,24 +112,36 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
 
         const text = buf.toString("utf-8");
 
-        // 🟢 Extract and save cookies automatically from response
+        // 🟢 Extract and save ALL cookies automatically
         const setCookiesHeader = res.headers['set-cookie'];
         if (setCookiesHeader) {
             setCookiesHeader.forEach(c => {
+                const rawCookie = c.split(';')[0];
+                const cookieName = rawCookie.split('=')[0];
+                
+                // Update RAW_COOKIES array
+                let foundIndex = RAW_COOKIES.findIndex(rc => rc.startsWith(cookieName + '='));
+                if (foundIndex !== -1) RAW_COOKIES[foundIndex] = rawCookie;
+                else RAW_COOKIES.push(rawCookie);
+
                 if (c.includes('XSRF-TOKEN=')) XSRF_TOKEN = decodeURIComponent(c.split('XSRF-TOKEN=')[1].split(';')[0]);
                 if (c.includes('ivas_sms_session=')) IVAS_SESSION = decodeURIComponent(c.split('ivas_sms_session=')[1].split(';')[0]);
             });
         }
 
         if (res.statusCode === 401 || res.statusCode === 419 || res.statusCode === 403 || text.includes('"message":"Unauthenticated"')) {
-          if (path !== "/login") return reject(new Error("SESSION_EXPIRED"));
+          if (path !== "/login") return reject(new Error(`SESSION_EXPIRED (Status: ${res.statusCode})`));
         }
 
         resolve({ status: res.statusCode, body: text });
       });
     });
 
-    req.on("error", reject);
+    req.on("error", (err) => {
+        console.error("[IVA Request Error]:", err.message);
+        reject(err);
+    });
+
     if (body) req.write(body);
     req.end();
   });
@@ -112,7 +150,9 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
 /* ================= 🟢 NEW LOGIN FUNCTION ================= */
 async function loginIVAS(email, password) {
   try {
-    console.log("[IVA] Fetching login page via Bright Data...");
+    resetProxySession(); // Start a fresh Bright Data session for login
+    console.log("[IVA] Fetching login page via Bright Data Web Unlocker...");
+    
     const getRes = await makeRequest("GET", "/login", null, null, {
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
     });
@@ -120,9 +160,12 @@ async function loginIVAS(email, password) {
     let tokenMatch = getRes.body.match(/name="_token"\s+value="([^"]+)"/);
     let csrfToken = tokenMatch ? tokenMatch[1] : null;
 
-    if (!csrfToken) return { success: false, error: "Cloudflare challenge blocked the request or CSRF token missing." };
+    if (!csrfToken) {
+        console.log("[IVA] Cloudflare blocked or CSRF missing. Response Preview:", getRes.body.substring(0, 300));
+        return { success: false, error: "Cloudflare challenge blocked the request. Please try again." };
+    }
 
-    console.log("[IVA] CSRF Token fetched. Attempting login...");
+    console.log("[IVA] CSRF Token fetched. Attempting POST login...");
     const postBody = new URLSearchParams({
         _token: csrfToken,
         email: email,
@@ -139,7 +182,7 @@ async function loginIVAS(email, password) {
        console.log("✅ [IVA] Logged in successfully!");
        return { success: true };
     } else {
-       return { success: false, error: "Failed to retrieve session cookies after login. Check credentials." };
+       return { success: false, error: "Failed to retrieve session cookies. Invalid credentials or Cloudflare block on POST." };
     }
   } catch (err) {
     return { success: false, error: err.message };
