@@ -8,7 +8,7 @@ const router = express.Router();
 /* ================= CONFIG ================= */
 const BASE_URL       = "https://www.ivasms.com";
 
-// 🟢 Bright Data Proxy Configuration (Now Dynamic)
+// 🟢 Bright Data Proxy Configuration (Dynamic)
 let PROXY_HOST = "brd.superproxy.io";
 let PROXY_PORT = 33335;
 let PROXY_USER = "brd-customer-hl_2d9fa9c9-zone-esimbot";
@@ -43,7 +43,7 @@ function resetProxySession() {
 /* ================= COOKIES IN MEMORY ================= */
 let XSRF_TOKEN = "";
 let IVAS_SESSION = "";
-let RAW_COOKIES = []; // Store ALL cookies (including Cloudflare clearance)
+let RAW_COOKIES = [];
 
 function setCookies(xsrf, session) {
   XSRF_TOKEN = xsrf;
@@ -68,7 +68,7 @@ function getXsrf() {
 
 function safeJSON(text) {
   try { return JSON.parse(text); }
-  catch { return { error: "Invalid JSON", preview: text.substring(0, 300) }; }
+  catch { return null; }
 }
 
 /* ================= HTTP REQUEST WITH PROXY ================= */
@@ -151,7 +151,7 @@ function makeRequest(method, path, body, contentType, extraHeaders = {}) {
   });
 }
 
-/* ================= 🟢 NEW LOGIN FUNCTION ================= */
+/* ================= 🟢 LOGIN FUNCTION ================= */
 async function loginIVAS(email, password) {
   try {
     resetProxySession(); 
@@ -164,16 +164,12 @@ async function loginIVAS(email, password) {
     let csrfToken = tokenMatch ? tokenMatch[1] : null;
 
     if (!csrfToken) {
-        console.log("[IVA] ❌ Cloudflare block detected. Response Preview:", getRes.body.substring(0, 300));
+        console.log("[IVA] ❌ Cloudflare block detected.");
         return { success: false, error: "Cloudflare challenge blocked the request. Web Unlocker could not bypass it." };
     }
 
     console.log("[IVA] ✅ CSRF Token fetched. Submitting login form...");
-    const postBody = new URLSearchParams({
-        _token: csrfToken,
-        email: email,
-        password: password
-    }).toString();
+    const postBody = new URLSearchParams({ _token: csrfToken, email: email, password: password }).toString();
 
     await makeRequest("POST", "/login", postBody, "application/x-www-form-urlencoded", {
       "Origin": BASE_URL,
@@ -191,123 +187,119 @@ async function loginIVAS(email, password) {
   }
 }
 
-/* ================= 🟢 GET NUMBERS (UPDATED FOR LIVE SMS PAGE) ================= */
+/* ================= 🟢 GET NUMBERS (FETCH FROM /portal/numbers) ================= */
 async function getNumbers(token) {
-  const today    = getToday();
-  const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
+  const ts = Date.now();
+  // 1st Attempt: Fetch via standard Datatables API for /portal/numbers
+  const path = `/portal/numbers?draw=1&columns[0][data]=number_id&columns[0][name]=id&columns[0][orderable]=false&columns[1][data]=Number&columns[2][data]=range&columns[3][data]=A2P&columns[4][data]=LimitA2P&columns[5][data]=limit_cli_a2p&columns[6][data]=limit_cli_did_a2p&columns[7][data]=action&columns[7][searchable]=false&columns[7][orderable]=false&order[0][column]=1&order[0][dir]=desc&start=0&length=5000&search[value]=&_=${ts}`;
 
-  const parts = [
-    `--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="to"\r\n\r\n${today}`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="_token"\r\n\r\n${token}`,
-    `--${boundary}--`
-  ].join("\r\n");
+  let resp = await makeRequest("GET", path, null, null, {
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": `${BASE_URL}/portal/numbers`,
+    "Accept": "application/json, text/javascript, */*; q=0.01"
+  }).catch(() => null);
 
-  const headersObj = {
-      "X-Requested-With": "XMLHttpRequest", 
-      "Referer": `${BASE_URL}/portal/sms/received`, 
-      "Accept": "text/html, */*; q=0.01"
-  };
+  let aaData = [];
 
-  // 🟢 সরাসরি "Live SMS" এর সাইডবার থেকে রেঞ্জ ফেচ করা হচ্ছে
-  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, headersObj).catch(() => null);
-  if (!r1 || !r1.body) return { aaData: [] };
+  if (resp && resp.body) {
+      const json = safeJSON(resp.body);
+      if (json && json.data) {
+          aaData = json.data.map(row => [row.range || "", "", String(row.Number || ""), "Weekly", ""]);
+          return { aaData };
+      }
+  }
 
-  const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
-  const aaData = [];
+  // 2nd Attempt: Fetch directly from the HTML page if API returns no data
+  resp = await makeRequest("GET", "/portal/numbers", null, null, {
+    "Referer": `${BASE_URL}/portal`,
+    "Accept": "text/html,application/xhtml+xml"
+  }).catch(() => null);
 
-  for (const range of ranges) {
-    const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
-    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", headersObj).catch(() => null);
-    if (!r2 || !r2.body) continue;
-
-    // 🟢 রেঞ্জের ভেতরের নাম্বারগুলো স্ক্যান করা হচ্ছে
-    const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
-    for (const number of numbers) {
-       // বটের ফরম্যাটে অ্যারে পুশ করা হচ্ছে
-       aaData.push([range, "", String(number), "Weekly", ""]);
-    }
+  if (resp && resp.body) {
+     const clean = t => (t || "").replace(/<[^>]+>/g, "").trim();
+     const trAll = [...resp.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+     for (const trM of trAll) {
+         if (trM[1].includes("<th") || trM[1].includes("No data available")) continue;
+         const tds = [...trM[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+         if (tds.length >= 3) {
+             let number = clean(tds[1][1]);
+             let range = clean(tds[2][1]);
+             if (number.match(/\d{5,}/)) {
+                 aaData.push([range, "", number, "Weekly", ""]);
+             }
+         }
+     }
   }
 
   return { aaData };
 }
 
-/* ================= GET SMS ================= */
+/* ================= 🟢 GET SMS (FETCH FROM /portal/live/my_sms) ================= */
 async function getSMS(token) {
-  const today    = getToday();
-  const boundary = "----WebKitFormBoundary6I2Js7TBhcJuwIqw";
+  let resp = await makeRequest("GET", "/portal/live/my_sms", null, null, {
+      "X-Requested-With": "XMLHttpRequest",
+      "Referer": `${BASE_URL}/portal/numbers`,
+      "Accept": "application/json, text/html, */*; q=0.01"
+  }).catch(() => null);
 
-  const parts = [
-    `--${boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\n${today}`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="to"\r\n\r\n${today}`,
-    `--${boundary}\r\nContent-Disposition: form-data; name="_token"\r\n\r\n${token}`,
-    `--${boundary}--`
-  ].join("\r\n");
+  let allRows = [];
+  if (!resp || !resp.body) return { aaData: [] };
 
-  const headersObj = {
-      "X-Requested-With": "XMLHttpRequest", 
-      "Referer": `${BASE_URL}/portal/sms/received`, 
-      "Accept": "text/html, */*; q=0.01"
-  };
+  let json = safeJSON(resp.body);
+  const clean = t => (t || "").replace(/<[^>]+>/g, "").replace(/\n/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&#039;/g, "'").trim();
 
-  const r1 = await makeRequest("POST", "/portal/sms/received/getsms", parts, `multipart/form-data; boundary=${boundary}`, headersObj).catch(() => null);
-  if (!r1 || !r1.body) return { aaData: [] };
+  // Try JSON Parse (if page loads via AJAX Datatable)
+  if (json && json.data) {
+       json.data.forEach(row => {
+           let range = row.range || row.Range || "";
+           let number = row.number || row.Number || row.receiver || "";
+           let message = row.message || row.Message || row.msg || "";
+           let time = row.created_at || row.date || row.time || "";
+           let sender = row.sender || row.Sender || row.cli || "";
 
-  const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
-  const allRows = [];
+           if (Array.isArray(row)) {
+               time = row[0] || time;
+               range = row[1] || range;
+               number = row[2] || number;
+               sender = row[3] || sender;
+               message = row[4] || message;
+           }
 
-  for (const range of ranges) {
-    const b2 = new URLSearchParams({ _token: token, start: today, end: today, range }).toString();
-    const r2  = await makeRequest("POST", "/portal/sms/received/getsms/number", b2, "application/x-www-form-urlencoded", headersObj).catch(() => null);
-    if (!r2 || !r2.body) continue;
+           if (number && message) allRows.push([clean(time), clean(range), clean(number), clean(sender), clean(message)]);
+       });
+  } else {
+       // Try HTML Parse (if page returns raw table directly)
+       const trAll = [...resp.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+       for (const trM of trAll) {
+           const row = trM[1];
+           if (row.includes("<th") || row.includes("No data available")) continue;
+           
+           const tds = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+           if (tds.length >= 4) {
+               let time = clean(tds[0][1]);
+               let range = clean(tds[1][1]);
+               let number = clean(tds[2][1]);
+               let sender = clean(tds[3][1]);
+               let message = clean(tds[4] ? tds[4][1] : (tds[3] ? tds[3][1] : ""));
 
-    const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
+               let numMatch = number.match(/\d+/);
+               if (numMatch) number = numMatch[0];
 
-    for (const number of numbers) {
-      const b3 = new URLSearchParams({ _token: token, start: today, end: today, Number: number, Range: range }).toString();
-      const r3  = await makeRequest("POST", "/portal/sms/received/getsms/number/sms", b3, "application/x-www-form-urlencoded", headersObj).catch(() => null);
-      if (!r3 || !r3.body) continue;
-
-      const msgs = parseSMSMessages(r3.body, range, number, today);
-      allRows.push(...msgs);
-    }
+               if (number && message) allRows.push([time, range, number, sender, message]);
+           } else {
+               // Fallback structure for unknown elements
+               let msgM = row.match(/class="msg-text"[^>]*>([\s\S]*?)<\/div>/i) || row.match(/class="message"[^>]*>([\s\S]*?)<\/div>/i);
+               let numM = row.match(/\b\d{8,15}\b/);
+               let message = msgM ? clean(msgM[1]) : "";
+               let number = numM ? numM[0] : "";
+               if (message && number) allRows.push([getToday(), "UNKNOWN", number, "SMS", message]);
+           }
+       }
   }
 
-  allRows.sort((a, b) => new Date(b[0]) - new Date(a[0]));
-
-  return {
-    sEcho: 1,
-    iTotalRecords: String(allRows.length),
-    iTotalDisplayRecords: String(allRows.length),
-    aaData: allRows
-  };
-}
-
-function parseSMSMessages(html, range, number, date) {
-  const rows  = [];
-  const clean = t => (t || "").replace(/<[^>]+>/g, "").replace(/\n/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&#039;/g, "'").replace(/\s+/g, " ").trim();
-  const trAll = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
-
-  for (const trM of trAll) {
-    const row = trM[1];
-    if (row.includes("<th")) continue;
-
-    const senderM = row.match(/class="cli-tag"[^>]*>([^<]+)</);
-    const sender  = senderM ? senderM[1].trim() : "SMS";
-
-    const msgM   = row.match(/class="msg-text"[^>]*>([\s\S]*?)<\/div>/i);
-    const message = msgM ? clean(msgM[1]) : "";
-
-    const timeM = row.match(/class="time-cell"[^>]*>\s*([0-9:]+)\s*</);
-    const time  = timeM ? timeM[1].trim() : "00:00:00";
-
-    if (message) {
-      rows.push([`${date} ${time}`, range, number, sender, message, "$", 0]);
-    }
-  }
-  return rows;
+  return { aaData: allRows };
 }
 
 module.exports = {
-  router, setCookies, getCookies, getNumbers, getSMS, makeRequest, parseSMSMessages, getToday, BASE_URL, loginIVAS, setProxyConfig
+  router, setCookies, getCookies, getNumbers, getSMS, makeRequest, getToday, BASE_URL, loginIVAS, setProxyConfig
 };
