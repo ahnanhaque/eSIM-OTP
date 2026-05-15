@@ -2,7 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
-const { GoogleGenerativeAI } = require("@google/generative-ai"); // Added GoogleGenerativeAI
+const { GoogleGenerativeAI } = require("@google/generative-ai"); 
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -11,9 +11,9 @@ const GROUP_INVITE_LINK = "https://t.me/+x_1_25vVZJswNWM1";
 const MONGODB_URI = "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; 
 const PORT = process.env.PORT || 3000;
 
-// Gemini API setup
+// Gemini API setup 
 const genAI = new GoogleGenerativeAI("AIzaSyAQoc0ZJTYOS8dLunpMIQil2RYMLaWtP2M");
-const geminiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
 
 const app = express();
 app.use(express.json());
@@ -45,7 +45,8 @@ const BotDB = mongoose.model("BotData", dbSchema);
 
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
-let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
+// Ekhane chatLanguage={} add kora hoyeche user er selected bhasha save rakhar jonno
+let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {}, chatLanguage = {};
 
 function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => {}); }
 function getBalance(chatId) { return db.balances[chatId] || 0; }
@@ -171,33 +172,44 @@ bot.on('message', async (msg) => {
   if ((triggerWords.includes(text) || userStates[chatId]) && !await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
   if (triggerWords.includes(text)) delete userStates[chatId];
 
-  // Chatbot Logic
+  // Chatbot Language Selection Logic
   if (text === "🤖 Chatbot") {
-      userStates[chatId] = "CHATTING_WITH_AI";
-      bot.sendMessage(chatId, "🤖 **AI Chatbot Activated!**\n\nApni ekhon amar sathe kotha bolte paren. Chat theke ber hote nicher '❌ Exit Chatbot' button a click korun.", {
+      bot.sendMessage(chatId, "🗣️ **Please select your language / Apnar bhasha beche nin:**", {
           parse_mode: "Markdown",
-          reply_markup: { keyboard: [[{ text: "❌ Exit Chatbot" }]], resize_keyboard: true }
+          reply_markup: {
+              inline_keyboard: [
+                  [{ text: "🇬🇧 English", callback_data: "ai_lang_en" }, { text: "🇧🇩 Bangla", callback_data: "ai_lang_bn" }],
+                  [{ text: "❌ Cancel", callback_data: "close_menu" }]
+              ]
+          }
       }).catch(()=>{});
       return;
   }
   else if (text === "❌ Exit Chatbot") {
       delete userStates[chatId];
-      bot.sendMessage(chatId, "🚪 **Chatbot theke ber hoye aschen.**\n\nMain menu te phire gechi.", {
+      delete chatLanguage[chatId]; // Clean up saved language
+      bot.sendMessage(chatId, "🚪 **Chatbot session ended.**\n\nMain menu te phire gechi.", {
           parse_mode: "Markdown",
           reply_markup: getReplyMenu(chatId, username)
       }).catch(()=>{});
       return;
   }
 
+  // Active AI Chat Logic
   if (userStates[chatId] === "CHATTING_WITH_AI") {
       try {
           bot.sendChatAction(chatId, 'typing');
-          const result = await geminiModel.generateContent(text);
+          const lang = chatLanguage[chatId] || "English"; // Default language jodi kono karone set na hoy
+          
+          // AI ke bola hochche jeno se obosshoi user er select kora bhashate uttor dey
+          const promptText = `Please strictly reply to the following user's message in ${lang} language. Do not use any other language.\n\nUser Message: ${text}`;
+          
+          const result = await geminiModel.generateContent(promptText);
           const response = await result.response;
           const reply = response.text();
           bot.sendMessage(chatId, reply, { parse_mode: "Markdown" }).catch(()=>{});
       } catch (error) {
-          console.error("[Gemini API Error]:", error); // Ekhane error print hobe Render e
+          console.error("[Gemini API Error]:", error);
           bot.sendMessage(chatId, "⚠️ Kono ekta somossa hoyeche, ektu pore abar try korun.").catch(()=>{});
       }
       return;
@@ -360,6 +372,26 @@ bot.on('callback_query', async (query) => {
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
+
+  // Chatbot Language Callback Logic Add kora holo ekhane
+  if (data === "ai_lang_en" || data === "ai_lang_bn") {
+      const lang = data === "ai_lang_en" ? "English" : "Bangla";
+      chatLanguage[chatId] = lang; // User er beche neya bhasha save kora holo
+      userStates[chatId] = "CHATTING_WITH_AI"; // Chatting mode on kora holo
+      bot.deleteMessage(chatId, messageId).catch(()=>{}); // Bhasha select er menu ta delete kora holo
+      
+      // Bhasha onujayi Welcome Message
+      let welcomeMsg = lang === "English" 
+          ? "🤖 **AI Chatbot Activated! (English)**\n\nYou can now chat with me. Click '❌ Exit Chatbot' below to leave."
+          : "🤖 **AI Chatbot Activated! (Bangla)**\n\nApni ekhon amar sathe kotha bolte paren. Chat theke ber hote nicher '❌ Exit Chatbot' a click korun.";
+      
+      bot.sendMessage(chatId, welcomeMsg, {
+          parse_mode: "Markdown",
+          reply_markup: { keyboard: [[{ text: "❌ Exit Chatbot" }]], resize_keyboard: true }
+      }).catch(()=>{});
+      
+      return bot.answerCallbackQuery(query.id);
+  }
   
   else if (data === "refresh_2fa") {
     const secret = tempAdminData[chatId]?.active2FAKey;
