@@ -36,10 +36,11 @@ bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { comma
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
 
+// 🟢 Database Schema & Structure (Updated for Platform Isolation)
 const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {}, stexRanges: {}, stexToken: "" };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "" };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 
@@ -110,7 +111,6 @@ function getReplyMenu(chatId, username) {
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
-// 🟢 Instagram এবং WhatsApp ওপেন করা হয়েছে
 const platformMenu = { 
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "menu_country_fb" }],
@@ -150,12 +150,16 @@ const manageNumberPanel = {
 };
 
 function renderManageRangesMenu(chatId, messageId) {
+  const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
   const rangesArray = tempAdminData[chatId]?.ranges || []; 
   let rangeButtons = [];
-  rangesArray.forEach((r, index) => { let isAdded = db.availableNumbers[r.name] && db.availableNumbers[r.name].length > 0; rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); });
+  rangesArray.forEach((r, index) => { 
+      let isAdded = db.availableNumbers[platform] && db.availableNumbers[platform][r.name] && db.availableNumbers[platform][r.name].length > 0; 
+      rangeButtons.push([{ text: `${isAdded ? "✅" : "❌"} ${getCountryInfo(r.name).flag} ${r.name} (${r.nums.length})`, callback_data: `togglerng_${index}` }]); 
+  });
   rangeButtons.push([{ text: "📥 Add All", callback_data: "togglerng_addall" }, { text: "🗑️ Remove All", callback_data: "togglerng_delall" }]);
   rangeButtons.push([{ text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" }, { text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]);
-  bot.editMessageText("⚙️ **iVAS Manage Ranges:**\n\nClick a range to manually toggle its availability:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
+  bot.editMessageText(`⚙️ **iVAS Manage Ranges (${platform.toUpperCase()}):**\n\nClick a range to manually toggle its availability:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: rangeButtons }, parse_mode: "Markdown" }).catch(()=>{});
 }
 
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
@@ -300,11 +304,22 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the numbers below (each on a new line):`, { parse_mode: "Markdown" }).catch(()=>{});
   }
   else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
-    const country = tempAdminData[chatId]?.addNumberCountry; if (!country) { delete userStates[chatId]; return; }
+    const country = tempAdminData[chatId]?.addNumberCountry; 
+    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+    if (!country) { delete userStates[chatId]; return; }
     const numbers = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
-    if (!db.availableNumbers[country]) db.availableNumbers[country] = [];
-    let added = 0; numbers.forEach(num => { if (!db.availableNumbers[country].includes(num)) { db.availableNumbers[country].push(num); added++; } }); saveDB();
-    bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to ${country}.`, { parse_mode: "Markdown" }).catch(()=>{}); 
+    if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
+    if (!db.availableNumbers[platform][country]) db.availableNumbers[platform][country] = [];
+    
+    let added = 0; 
+    numbers.forEach(num => { 
+        if (!db.availableNumbers[platform][country].includes(num)) { 
+            db.availableNumbers[platform][country].push(num); 
+            added++; 
+        } 
+    }); 
+    saveDB();
+    bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to ${country} for **${platform.toUpperCase()}**.`, { parse_mode: "Markdown" }).catch(()=>{}); 
     bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel }).catch(()=>{});
     delete userStates[chatId]; delete tempAdminData[chatId];
   }
@@ -338,14 +353,16 @@ bot.on('message', async (msg) => {
       } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
       delete userStates[chatId];
   }
+  // 🟢 Adding Platform-Specific STEX Range
   else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
       const range = text.trim();
+      const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
       if(range.length >= 5) {
           const country = detectCountryFromRange(range);
-          if (!db.stexRanges) db.stexRanges = {}; 
-          db.stexRanges[range] = country; 
+          if (!db.stexRanges[platform]) db.stexRanges[platform] = {}; 
+          db.stexRanges[platform][range] = country; 
           saveDB();
-          bot.sendMessage(chatId, `✅ Successfully added Stex Range **${range}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
+          bot.sendMessage(chatId, `✅ Successfully added Stex Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
       } else { 
           bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); 
       }
@@ -376,7 +393,6 @@ bot.on('callback_query', async (query) => {
     } catch (e) { bot.answerCallbackQuery(query.id, { text: "❌ Error refreshing the code." }); }
   }
 
-  // 🟢 Manage Panel Updated Interface
   else if (data === "admin_manage_panel") {
       bot.editMessageText("⚙️ **Login to panel :**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [
           [{ text: "IVA SMS 📩", callback_data: "placeholder_iva" }],
@@ -392,26 +408,27 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 Remove Number Format Updated
+  // 🟢 Remove Number Logic Across ALL Platforms
   else if (data === "admin_remove_number_menu") {
-    const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
-    const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
-
-    if (activeRanges.length === 0 && stexRangesList.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers/ranges to remove.", show_alert: true });
-    
     let btns = [];
-    stexRangesList.forEach(r => {
-        const info = getCountryInfo(db.stexRanges[r]);
-        btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${r}` }]);
+    ['fb', 'ig', 'wa'].forEach(plat => {
+        const stexList = db.stexRanges[plat] ? Object.keys(db.stexRanges[plat]) : [];
+        stexList.forEach(r => {
+            const info = getCountryInfo(db.stexRanges[plat][r]);
+            btns.push([{ text: `Stex [${plat.toUpperCase()}] : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${plat}_${r}` }]);
+        });
+
+        const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
+        ivaList.forEach(r => {
+            const info = getCountryInfo(r);
+            btns.push([{ text: `IVA [${plat.toUpperCase()}] : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${plat}_${r}` }]);
+        });
     });
 
-    activeRanges.forEach(r => {
-        const info = getCountryInfo(r);
-        btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${r}` }]);
-    });
+    if (btns.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers/ranges to remove.", show_alert: true });
     
-    if (stexRangesList.length > 0) btns.push([{ text: "🗑️ REMOVE ALL STEX", callback_data: "delstexrng_ALL" }]);
-    if (activeRanges.length > 0) btns.push([{ text: "🗑️ REMOVE ALL IVA", callback_data: "delnumrng_ALL" }]);
+    btns.push([{ text: "🗑️ REMOVE ALL STEX", callback_data: "delstexrng_ALL" }]);
+    btns.push([{ text: "🗑️ REMOVE ALL IVA", callback_data: "delnumrng_ALL" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
@@ -419,42 +436,48 @@ bot.on('callback_query', async (query) => {
   }
   else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_")) {
     const isStex = data.startsWith("delstexrng_");
-    const target = data.replace(isStex ? "delstexrng_" : "delnumrng_", "");
+    const payload = data.replace(isStex ? "delstexrng_" : "delnumrng_", "");
     
-    if (target === "ALL") {
-        if (isStex) { db.stexRanges = {}; saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ All Stex ranges removed successfully!", show_alert: true }); }
-        else { db.availableNumbers = {}; saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ All IVA numbers removed successfully!", show_alert: true }); }
+    if (payload === "ALL") {
+        if (isStex) { db.stexRanges = { fb: {}, ig: {}, wa: {} }; saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ All Stex ranges removed successfully!", show_alert: true }); }
+        else { db.availableNumbers = { fb: {}, ig: {}, wa: {} }; saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ All IVA numbers removed successfully!", show_alert: true }); }
     } else {
+        const parts = payload.split('_');
+        const plat = parts[0];
+        const target = parts.slice(1).join('_');
+
         if (isStex) { 
-            if (db.stexRanges && db.stexRanges[target]) { delete db.stexRanges[target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ Stex range ${target} removed!` }); 
+            if (db.stexRanges[plat] && db.stexRanges[plat][target]) { delete db.stexRanges[plat][target]; saveDB(); }
+            bot.answerCallbackQuery(query.id, { text: `✅ Stex range ${target} removed from ${plat.toUpperCase()}!` }); 
         } else { 
-            delete db.availableNumbers[target]; saveDB(); 
-            bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed!` }); 
+            if (db.availableNumbers[plat] && db.availableNumbers[plat][target]) { delete db.availableNumbers[plat][target]; saveDB(); }
+            bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed from ${plat.toUpperCase()}!` }); 
         }
     }
     
-    const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
-    const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
+    // Re-render menu
+    let btns = [];
+    ['fb', 'ig', 'wa'].forEach(plat => {
+        const stexList = db.stexRanges[plat] ? Object.keys(db.stexRanges[plat]) : [];
+        stexList.forEach(r => {
+            const info = getCountryInfo(db.stexRanges[plat][r]);
+            btns.push([{ text: `Stex [${plat.toUpperCase()}] : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${plat}_${r}` }]);
+        });
 
-    if (activeRanges.length === 0 && stexRangesList.length === 0) {
+        const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
+        ivaList.forEach(r => {
+            const info = getCountryInfo(r);
+            btns.push([{ text: `IVA [${plat.toUpperCase()}] : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${plat}_${r}` }]);
+        });
+    });
+
+    if (btns.length === 0) {
         bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(()=>{});
         return;
     }
-    
-    let btns = [];
-    stexRangesList.forEach(r => {
-        const info = getCountryInfo(db.stexRanges[r]);
-        btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${r}` }]);
-    });
 
-    activeRanges.forEach(r => {
-        const info = getCountryInfo(r);
-        btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${r}` }]);
-    });
-
-    if (stexRangesList.length > 0) btns.push([{ text: "🗑️ REMOVE ALL STEX", callback_data: "delstexrng_ALL" }]);
-    if (activeRanges.length > 0) btns.push([{ text: "🗑️ REMOVE ALL IVA", callback_data: "delnumrng_ALL" }]);
+    btns.push([{ text: "🗑️ REMOVE ALL STEX", callback_data: "delstexrng_ALL" }]);
+    btns.push([{ text: "🗑️ REMOVE ALL IVA", callback_data: "delnumrng_ALL" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
@@ -462,12 +485,13 @@ bot.on('callback_query', async (query) => {
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
-    bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
+    bot.editMessageText(`🛠 **Managing ${data.split('_')[3].toUpperCase()} Panel:**`, { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
 
   else if (data === "placeholder_stex") {
-    bot.editMessageText("🛠 **Stex SMS Management**\n\nChoose an option:", {
+    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+    bot.editMessageText(`🛠 **Stex SMS Management (${platform.toUpperCase()})**\n\nChoose an option:`, {
         chat_id: chatId, message_id: messageId,
         reply_markup: {
             inline_keyboard: [
@@ -489,7 +513,6 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Placeholder for IVA and MK API Logic
   else if (data === "placeholder_mk" || data === "placeholder_iva") {
       bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
   }
@@ -503,32 +526,43 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
-  // 🟢 Facebook, Instagram, WhatsApp Menu (All Pointing Here)
+  // 🟢 Facebook, Instagram, WhatsApp Menu
   else if (data.startsWith("menu_country_")) {
     clearPendingForChat(chatId); 
-    const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
-    const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
+    const platform = data.replace("menu_country_", ""); 
+    const availPlatformDB = db.availableNumbers[platform] || {};
+    const stexPlatformDB = db.stexRanges[platform] || {};
     
-    if (ranges.length === 0 && stexRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
+    const ranges = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
+    const stexRangesList = Object.keys(stexPlatformDB);
+    
+    if (ranges.length === 0 && stexRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
     
     let baseCountryCount = {}, currentV = {}, countryButtons = [];
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
-    ranges.forEach(range => { let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; } countryButtons.push([{ text: `${dName} | 📦: ${db.availableNumbers[range].length}`, callback_data: `assign_${range}` }]); });
+    ranges.forEach(range => { 
+        let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; 
+        if (baseCountryCount[info.cleanName] > 1) { 
+            currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; 
+            dName += ` V${currentV[info.cleanName]}`; 
+        } 
+        countryButtons.push([{ text: `${dName} | 📦: ${availPlatformDB[range].length}`, callback_data: `assign_${platform}_${range}` }]); 
+    });
     
     let stexCountryCount = {}, stexCurrentV = {};
     stexRangesList.forEach(r => { 
-        let i = getCountryInfo(db.stexRanges[r]); 
+        let i = getCountryInfo(stexPlatformDB[r]); 
         stexCountryCount[i.cleanName] = (stexCountryCount[i.cleanName] || 0) + 1; 
     });
 
     stexRangesList.forEach(range => {
-        let info = getCountryInfo(db.stexRanges[range]);
+        let info = getCountryInfo(stexPlatformDB[range]);
         let prefix = "⚡";
         if (stexCountryCount[info.cleanName] > 1) {
             stexCurrentV[info.cleanName] = (stexCurrentV[info.cleanName] || 0) + 1;
             prefix = `V${stexCurrentV[info.cleanName]}`;
         }
-        countryButtons.push([{ text: `${prefix} ${info.flag} ${info.cleanName} | 📦: ∞`, callback_data: `assign_${range}` }]);
+        countryButtons.push([{ text: `${prefix} ${info.flag} ${info.cleanName} | 📦: ∞`, callback_data: `assign_${platform}_${range}` }]);
     });
 
     countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
@@ -536,10 +570,16 @@ bot.on('callback_query', async (query) => {
   }
   else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
+  // 🟢 Number Assignment & Fetching Logic
   else if (data.startsWith("assign_")) {
-    const sel = data.replace("assign_next_", "").replace("assign_", ""); clearPendingForChat(chatId);
+    const pureData = data.replace("assign_next_", "").replace("assign_", ""); 
+    const firstUnderscore = pureData.indexOf('_');
+    const platform = pureData.substring(0, firstUnderscore);
+    const sel = pureData.substring(firstUnderscore + 1);
     
-    if (db.stexRanges && db.stexRanges[sel]) {
+    clearPendingForChat(chatId);
+    
+    if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
         bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from Stex...", show_alert: false });
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
@@ -552,7 +592,7 @@ bot.on('callback_query', async (query) => {
                 const n = numData.full_number || numData.number.replace('+', '');
                 fetchedNums.push(n);
                 inUseNumbers[n] = true;
-                pendingRequests[n] = { chatId: chatId, country: db.stexRanges[sel], isStex: true };
+                pendingRequests[n] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true };
             } catch (e) {
                 console.log("Stex fetch error:", e.message);
                 break; 
@@ -563,10 +603,10 @@ bot.on('callback_query', async (query) => {
         }
 
         if(fetchedNums.length === 0) {
-            return bot.editMessageText(`❌ Out of stock or error fetching from Stex.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_country_fb" }]] } }).catch(()=>{});
+            return bot.editMessageText(`❌ Out of stock or error fetching from Stex.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{});
         }
 
-        const info = getCountryInfo(db.stexRanges[sel]);
+        const info = getCountryInfo(db.stexRanges[platform][sel]);
         let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
         
         let actionMenu = { inline_keyboard: [] };
@@ -574,8 +614,8 @@ bot.on('callback_query', async (query) => {
             actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]);
         });
         actionMenu.inline_keyboard.push(
-            [{ text: "🔄 Change", callback_data: `assign_next_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-            [{ text: "🔙 Back", callback_data: "menu_country_fb" }]
+            [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+            [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
         );
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
@@ -594,7 +634,7 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
-    const nums = db.availableNumbers[sel] || [];
+    const nums = db.availableNumbers[platform][sel] || [];
     if (nums.length === 0) return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
     
     const limit = db.settings.maxNumbers || 4, assignedNums = nums.splice(0, limit);
@@ -614,10 +654,10 @@ bot.on('callback_query', async (query) => {
     });
     
     actionMenu.inline_keyboard.push([
-        { text: "🔄 Change", callback_data: `assign_next_${sel}` },
+        { text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` },
         { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }
     ]);
-    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: "menu_country_fb" }]);
+    actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
     
     bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
         setTimeout(() => {
@@ -637,17 +677,50 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_panel") { bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
     bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
+    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+    if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
     let grouped = { ...latestRangesFromExtension };
-    for (const r in db.availableNumbers) { if (!grouped[r]) grouped[r] = db.availableNumbers[r]; }
+    for (const r in db.availableNumbers[platform]) { if (!grouped[r]) grouped[r] = db.availableNumbers[platform][r]; }
     tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
     if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(()=>{});
     renderManageRangesMenu(chatId, messageId);
   }
   else if (data.startsWith("togglerng_")) {
-    const action = data.replace("togglerng_", ""); if (!tempAdminData[chatId]?.ranges) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Please fetch ranges again.", show_alert: true });
-    if (action === "addall") { let t = 0; tempAdminData[chatId].ranges.forEach(r => { if (!db.availableNumbers[r.name]) db.availableNumbers[r.name] = []; r.nums.forEach(num => { if (!db.availableNumbers[r.name].includes(num) && !inUseNumbers[num]) { db.availableNumbers[r.name].push(num); t++; } }); }); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Successfully added all ${t} available numbers.` }); }
-    else if (action === "delall") { tempAdminData[chatId].ranges.forEach(r => { delete db.availableNumbers[r.name]; }); saveDB(); bot.answerCallbackQuery(query.id, { text: `🗑️ Successfully removed all numbers from the active list.` }); }
-    else { const idx = parseInt(action), sel = tempAdminData[chatId].ranges[idx]; if (db.availableNumbers[sel.name]) { delete db.availableNumbers[sel.name]; saveDB(); bot.answerCallbackQuery(query.id, { text: `❌ Removed range from active list.` }); } else { db.availableNumbers[sel.name] = []; let a = 0; sel.nums.forEach(num => { if (!inUseNumbers[num]) { db.availableNumbers[sel.name].push(num); a++; } }); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Added range successfully (${a} numbers).` }); } }
+    const action = data.replace("togglerng_", ""); 
+    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+    if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
+    if (!tempAdminData[chatId]?.ranges) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Please fetch ranges again.", show_alert: true });
+    
+    if (action === "addall") { 
+        let t = 0; 
+        tempAdminData[chatId].ranges.forEach(r => { 
+            if (!db.availableNumbers[platform][r.name]) db.availableNumbers[platform][r.name] = []; 
+            r.nums.forEach(num => { 
+                if (!db.availableNumbers[platform][r.name].includes(num) && !inUseNumbers[num]) { db.availableNumbers[platform][r.name].push(num); t++; } 
+            }); 
+        }); 
+        saveDB(); 
+        bot.answerCallbackQuery(query.id, { text: `✅ Successfully added all ${t} available numbers.` }); 
+    }
+    else if (action === "delall") { 
+        tempAdminData[chatId].ranges.forEach(r => { delete db.availableNumbers[platform][r.name]; }); 
+        saveDB(); 
+        bot.answerCallbackQuery(query.id, { text: `🗑️ Successfully removed all numbers from the active list.` }); 
+    }
+    else { 
+        const idx = parseInt(action), sel = tempAdminData[chatId].ranges[idx]; 
+        if (db.availableNumbers[platform][sel.name]) { 
+            delete db.availableNumbers[platform][sel.name]; 
+            saveDB(); 
+            bot.answerCallbackQuery(query.id, { text: `❌ Removed range from active list.` }); 
+        } else { 
+            db.availableNumbers[platform][sel.name] = []; 
+            let a = 0; 
+            sel.nums.forEach(num => { if (!inUseNumbers[num]) { db.availableNumbers[platform][sel.name].push(num); a++; } }); 
+            saveDB(); 
+            bot.answerCallbackQuery(query.id, { text: `✅ Added range successfully (${a} numbers).` }); 
+        } 
+    }
     renderManageRangesMenu(chatId, messageId);
   }
   else if (data === "admin_manage_admins") { if (!isSuperAdmin(chatId)) return; bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
@@ -696,7 +769,21 @@ app.post('/api/ivas-data', (req, res) => {
 app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
 mongoose.connect(MONGODB_URI).then(async () => {
-  const data = await BotDB.findOne(); if (data) db = { ...db, ...data.toObject() }; else await BotDB.create(db);
+  const data = await BotDB.findOne(); 
+  if (data) {
+      db = { ...db, ...data.toObject() };
+      // 🟢 Database Migration Logic (To keep your old data safe under 'Facebook')
+      if (!db.availableNumbers.fb && !db.availableNumbers.ig && !db.availableNumbers.wa) {
+          const oldData = { ...db.availableNumbers };
+          db.availableNumbers = { fb: oldData, ig: {}, wa: {} };
+      }
+      if (!db.stexRanges.fb && !db.stexRanges.ig && !db.stexRanges.wa) {
+          const oldStex = { ...db.stexRanges };
+          db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
+      }
+  } else {
+      await BotDB.create(db);
+  }
   
   if (db.stexToken) {
       stex.setAuthToken(db.stexToken);
