@@ -10,7 +10,7 @@ function setCookies(cookies) {
 function makeRequest(method, path, body, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "accept": "*/*",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
             "cookie": COOKIES || "",
             ...extraHeaders
@@ -42,49 +42,17 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 MK SMS Perfect Auto Login Logic (Strict Redirect & State Tracking)
-async function login(email, password) {
-    // ধাপ ১: সেশন ইনিশিয়ালের জন্য GET রিকোয়েস্ট
-    const initialRes = await makeRequest("GET", "/index.php");
-    if (initialRes.headers["set-cookie"]) {
-        COOKIES = initialRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-    }
-
-    // ধাপ ২: index.php-তে credentials সাবমিট করা
-    const body = `login_id=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
-    const loginRes = await makeRequest("POST", "/index.php", body, {
-        "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://mknetworkbd.com/index.php",
-        "origin": "https://mknetworkbd.com"
+// 🟢 MK SMS Cookie Verification
+async function verifyCookies(cookieStr) {
+    setCookies(cookieStr);
+    const res = await makeRequest("GET", "/getnum_test.php", null, {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
     });
-
-    // নতুন কোনো সেশন কুকি বা রিমেম্বার টোকেন আসলে তা মার্জ করা
-    if (loginRes.headers["set-cookie"]) {
-        let freshCookies = loginRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-        COOKIES = COOKIES ? COOKIES + "; " + freshCookies : freshCookies;
+    
+    if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
+        throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember from your browser.");
     }
-
-    // ধাপ ৩: auth.php পেজে হিট করে সেশন অ্যাক্টিভেট করা
-    const authRes = await makeRequest("GET", "/auth.php", null, {
-        "referer": "https://mknetworkbd.com/index.php"
-    });
-
-    if (authRes.headers["set-cookie"]) {
-        let authCookies = authRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-        COOKIES = COOKIES ? COOKIES + "; " + authCookies : authCookies;
-    }
-
-    // ধাপ ৪: ড্যাশবোর্ড পেজ হিট করে লগইন স্টেট কনফার্ম করা
-    const verifyRes = await makeRequest("GET", "/getnum_test.php", null, {
-        "referer": "https://mknetworkbd.com/auth.php"
-    });
-
-    // যদি পেজে এখনও login_id ফর্ম বা 'login' শব্দ থাকে, তার মানে লগইন হয়নি (ভুল credentials)
-    if (verifyRes.status === 302 || (typeof verifyRes.data === 'string' && verifyRes.data.includes('name="login_id"'))) {
-        throw new Error("Incorrect Email or Password! Login failed.");
-    }
-
-    return COOKIES;
+    return true; 
 }
 
 async function getNumber(range) {
@@ -126,4 +94,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { login, setCookies, getNumber, checkInfo };
+module.exports = { setCookies, verifyCookies, getNumber, checkInfo };
