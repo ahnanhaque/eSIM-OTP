@@ -110,11 +110,12 @@ function getReplyMenu(chatId, username) {
   return { keyboard: keyboard, resize_keyboard: true, is_persistent: true };
 }
 
+// 🟢 Instagram এবং WhatsApp ওপেন করা হয়েছে
 const platformMenu = { 
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "menu_country_fb" }],
-    [{ text: "ⓘ Instagram", callback_data: "placeholder_ig" }],
-    [{ text: "✆ WhatsApp", callback_data: "placeholder_wa" }],
+    [{ text: "ⓘ Instagram", callback_data: "menu_country_ig" }],
+    [{ text: "✆ WhatsApp", callback_data: "menu_country_wa" }],
     [{ text: "✖ Close Menu", callback_data: "close_menu" }]
   ] 
 };
@@ -337,7 +338,6 @@ bot.on('message', async (msg) => {
       } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
       delete userStates[chatId];
   }
-  // 🟢 Auto Detect Range Input Update (এখন আর আগের রেঞ্জ ডিলিট হবে না)
   else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
       const range = text.trim();
       if(range.length >= 5) {
@@ -362,8 +362,7 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
-  // 🟢 Added delstexrng_ permission check
-  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "delnumrng_", "delstexrng_"];
+  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "placeholder_iva", "delnumrng_", "delstexrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
@@ -377,9 +376,12 @@ bot.on('callback_query', async (query) => {
     } catch (e) { bot.answerCallbackQuery(query.id, { text: "❌ Error refreshing the code." }); }
   }
 
+  // 🟢 Manage Panel Updated Interface
   else if (data === "admin_manage_panel") {
-      bot.editMessageText("⚙️ **Manage Panel**\n\nSelect a panel to configure login:", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [
-          [{ text: "🔑 Login to Stex SMS", callback_data: "stex_login" }],
+      bot.editMessageText("⚙️ **Login to panel :**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [
+          [{ text: "IVA SMS 📩", callback_data: "placeholder_iva" }],
+          [{ text: "Stex SMS 📨", callback_data: "stex_login" }],
+          [{ text: "MK SMS ✉️", callback_data: "placeholder_mk" }],
           [{ text: "⬅️ Back", callback_data: "admin_panel" }]
       ]}}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
@@ -390,7 +392,7 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 Remove Number Logic Update (Now includes both IVA and Stex)
+  // 🟢 Remove Number Format Updated
   else if (data === "admin_remove_number_menu") {
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
@@ -398,18 +400,18 @@ bot.on('callback_query', async (query) => {
     if (activeRanges.length === 0 && stexRangesList.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers/ranges to remove.", show_alert: true });
     
     let btns = [];
-    activeRanges.forEach(r => {
-        const info = getCountryInfo(r);
-        btns.push([{ text: `🗑️ Remove ${info.flag} ${info.cleanName} (${db.availableNumbers[r].length})`, callback_data: `delnumrng_${r}` }]);
-    });
-    
     stexRangesList.forEach(r => {
         const info = getCountryInfo(db.stexRanges[r]);
-        btns.push([{ text: `🗑️ Remove Stex: ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${r}` }]);
+        btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${r}` }]);
     });
 
-    if (activeRanges.length > 0) btns.push([{ text: "🗑️ Remove All IVA Numbers", callback_data: "delnumrng_ALL" }]);
-    if (stexRangesList.length > 0) btns.push([{ text: "🗑️ Remove All Stex Ranges", callback_data: "delstexrng_ALL" }]);
+    activeRanges.forEach(r => {
+        const info = getCountryInfo(r);
+        btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${r}` }]);
+    });
+    
+    if (stexRangesList.length > 0) btns.push([{ text: "🗑️ REMOVE ALL STEX", callback_data: "delstexrng_ALL" }]);
+    if (activeRanges.length > 0) btns.push([{ text: "🗑️ REMOVE ALL IVA", callback_data: "delnumrng_ALL" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
@@ -432,7 +434,6 @@ bot.on('callback_query', async (query) => {
         }
     }
     
-    // Re-render menu
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
 
@@ -442,17 +443,18 @@ bot.on('callback_query', async (query) => {
     }
     
     let btns = [];
-    activeRanges.forEach(r => {
-        const info = getCountryInfo(r);
-        btns.push([{ text: `🗑️ Remove ${info.flag} ${info.cleanName} (${db.availableNumbers[r].length})`, callback_data: `delnumrng_${r}` }]);
-    });
     stexRangesList.forEach(r => {
         const info = getCountryInfo(db.stexRanges[r]);
-        btns.push([{ text: `🗑️ Remove Stex: ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${r}` }]);
+        btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${r}` }]);
     });
 
-    if (activeRanges.length > 0) btns.push([{ text: "🗑️ Remove All IVA Numbers", callback_data: "delnumrng_ALL" }]);
-    if (stexRangesList.length > 0) btns.push([{ text: "🗑️ Remove All Stex Ranges", callback_data: "delstexrng_ALL" }]);
+    activeRanges.forEach(r => {
+        const info = getCountryInfo(r);
+        btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${r}` }]);
+    });
+
+    if (stexRangesList.length > 0) btns.push([{ text: "🗑️ REMOVE ALL STEX", callback_data: "delstexrng_ALL" }]);
+    if (activeRanges.length > 0) btns.push([{ text: "🗑️ REMOVE ALL IVA", callback_data: "delnumrng_ALL" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
@@ -464,7 +466,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Stex Manage Options (Removed 'Delete' from here as it's moved to the global panel)
   else if (data === "placeholder_stex") {
     bot.editMessageText("🛠 **Stex SMS Management**\n\nChoose an option:", {
         chat_id: chatId, message_id: messageId,
@@ -488,7 +489,8 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  else if (data === "placeholder_mk" || data === "placeholder_ig" || data === "placeholder_wa") {
+  // 🟢 Placeholder for IVA and MK API Logic
+  else if (data === "placeholder_mk" || data === "placeholder_iva") {
       bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
   }
 
@@ -501,7 +503,8 @@ bot.on('callback_query', async (query) => {
   else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
-  else if (data === "menu_country_fb") {
+  // 🟢 Facebook, Instagram, WhatsApp Menu (All Pointing Here)
+  else if (data.startsWith("menu_country_")) {
     clearPendingForChat(chatId); 
     const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
@@ -512,7 +515,6 @@ bot.on('callback_query', async (query) => {
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
     ranges.forEach(range => { let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; } countryButtons.push([{ text: `${dName} | 📦: ${db.availableNumbers[range].length}`, callback_data: `assign_${range}` }]); });
     
-    // 🟢 Stex Country Versioning (V1, V2)
     let stexCountryCount = {}, stexCurrentV = {};
     stexRangesList.forEach(r => { 
         let i = getCountryInfo(db.stexRanges[r]); 
