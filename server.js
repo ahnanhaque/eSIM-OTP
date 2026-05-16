@@ -99,10 +99,6 @@ function getCountryInfo(countryName) {
   return { flag, cleanName };
 }
 
-const countryData = { "SIERRA LEONE": { flag: "🇸🇱" }, "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "TOGO": { flag: "🇹🇬" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
-
-function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `${numStr.slice(0, 4)}****${numStr.slice(-4)}`; }
-
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
 function getReplyMenu(chatId, username) {
@@ -200,53 +196,39 @@ bot.on('message', async (msg) => {
             if (activeTempMails[chatId].interval) clearInterval(activeTempMails[chatId].interval);
             if (activeTempMails[chatId].timeout) clearTimeout(activeTempMails[chatId].timeout);
         }
-
         const res = await fetch("https://api.tempmail.lol/v2/inbox/create");
         if (!res.ok) throw new Error("API Server is currently unreachable.");
-
         const data = await res.json();
-        const email = data.address;
-        const token = data.token;
-
+        const email = data.address, token = data.token;
         const sentMsg = await bot.sendMessage(chatId, `📧 **Your Temp Mail:**\n\`${email}\`\n\n📩 **SMS Status:** Waiting... ⏳`, { parse_mode: "Markdown" });
         const messageId = sentMsg.message_id;
 
         activeTempMails[chatId] = { email, token, lastId: null, messageId: messageId, otpReceived: false };
-
         activeTempMails[chatId].interval = setInterval(async () => {
             try {
                 const inboxRes = await fetch(`https://api.tempmail.lol/v2/inbox?token=${token}`);
                 const inboxData = await inboxRes.json();
-                
                 if (inboxData.emails && inboxData.emails.length > 0) {
                     const latest = inboxData.emails[0];
                     const mailId = latest.date + latest.subject; 
-                    
                     if (activeTempMails[chatId].lastId !== mailId) {
                         activeTempMails[chatId].lastId = mailId;
                         activeTempMails[chatId].otpReceived = true; 
-                        
                         const fullText = `${latest.subject} ${latest.body || ''} ${latest.html || ''}`;
                         const plainText = fullText.replace(/<[^>]+>/g, ' '); 
-                        
                         let otpMatch = plainText.match(/\b\d{4,8}\b/);
                         if (!otpMatch) otpMatch = plainText.match(/\b[A-Z0-9]{5,10}\b/i);
                         const otp = otpMatch ? otpMatch[0] : null;
-
                         const linkMatch = fullText.match(/https?:\/\/[^\s"'<>\\]+/);
                         const link = linkMatch ? linkMatch[0] : null;
-                        
                         const platformName = detectPlatform(latest.from, latest.subject, plainText);
-                        
                         let cleanMessage = latest.subject.replace(/[\r\n]+/g, ' ').trim();
                         if (cleanMessage.length < 10) {
                             let snippet = (latest.body || plainText).substring(0, 40).replace(/[\r\n]+/g, ' ').trim();
                             cleanMessage += snippet ? " - " + snippet + "..." : "";
                         }
-                        
                         let replyText = `📧 **Your Temp Mail:**\n\`${email}\`\n\n📬 **New Email Received!**\n🌐 **Platform:** ${platformName}\n📝 **Message:** ${cleanMessage}`;
                         let markup = { inline_keyboard: [] };
-                        
                         if (otp) {
                             replyText += `\n\n🔑 **Code:** \`${otp}\``;
                             markup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otp } }]);
@@ -256,7 +238,6 @@ bot.on('message', async (msg) => {
                         } else {
                             replyText += `\n\n⚠️ No specific verification code or link detected.`;
                         }
-                        
                         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: markup.inline_keyboard.length > 0 ? markup : null }).catch(()=>{});
                     }
                 }
@@ -269,7 +250,6 @@ bot.on('message', async (msg) => {
                 bot.editMessageText(`📧 **Your Temp Mail:**\n\`${email}\`\n\n⚠️ **Session Expired (15m).**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
             }
         }, 15 * 60 * 1000);
-
     } catch (e) {
         bot.sendMessage(chatId, `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`, { parse_mode: "Markdown" }).catch(()=>{});
     }
@@ -362,20 +342,25 @@ bot.on('message', async (msg) => {
           db.stexRanges[platform][range] = country; 
           saveDB();
           bot.sendMessage(chatId, `✅ Successfully added Stex Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
-      } else { 
-          bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); 
-      }
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
       delete userStates[chatId];
   }
 
-  // 🟢 MK SMS Cookie Creds (Manual Entry Only to Bypass Cloudflare/Bot Check)
+  // MK SMS Cookie Creds 
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
+         bot.sendMessage(chatId, "⏳ Verifying MK SMS Cookies on the server...").catch(()=>{});
          const cookieStr = `mk_lang=en; PHPSESSID=${parts[0].trim()}; mk_remember=${parts[1].trim()}`;
-         db.mkCookies = cookieStr; saveDB();
-         mk.setCookies(cookieStr);
-         bot.sendMessage(chatId, "✅ MK SMS Cookies Saved Successfully! Your bot now has direct access.", {parse_mode: "Markdown"}).catch(()=>{});
+         
+         mk.verifyCookies(cookieStr).then(() => {
+             db.mkCookies = cookieStr; 
+             saveDB();
+             bot.sendMessage(chatId, "✅ **MK SMS Cookies Verified & Saved Successfully!**\nYou can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
+         }).catch(e => {
+             bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
+         });
+
       } else { 
          bot.sendMessage(chatId, "❌ Invalid format. Use `PHPSESSID|mk_remember`").catch(()=>{}); 
       }
@@ -391,9 +376,7 @@ bot.on('message', async (msg) => {
           db.mkRanges[platform][range] = country; 
           saveDB();
           bot.sendMessage(chatId, `✅ Successfully added MK Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
-      } else { 
-          bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); 
-      }
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
       delete userStates[chatId];
   }
 });
@@ -431,10 +414,10 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 MK Login Propt uses cookie format
+  // 🟢 MK SMS Cookie Prompt
   else if (data === "placeholder_mk_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
-      bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`\n_(Get these from your browser's Developer Tools)_", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
 
@@ -702,7 +685,7 @@ bot.on('callback_query', async (query) => {
         let fetchedNums = [];
         bot.editMessageText(`⏳ **Fetching ${limit} numbers from MK SMS...**\n_Please wait, applying delay to prevent server spam._`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
-        if (db.mkCookies) mk.setCookies(db.mkCookies);
+        if (db.mkCookies) mk.setCookies(db.mkCookies); 
 
         for(let i=0; i<limit; i++) {
             try {
@@ -805,18 +788,30 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
 });
 
+// 🟢 Updated processFoundOTP function with Masking and Copy Code button
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
   
   const info = getCountryInfo(range || "UNKNOWN");
-  let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
-  let groupMarkup = { inline_keyboard: [[{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]] };
-  bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup }).catch(()=>{});
+  
+  const numStr = String(number);
+  const maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+
+  let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n📞 **Number:** \`${maskedGroupNumber}\`\n💌 **Full SMS:** ${message}`;
+  
+  let groupMarkup = { inline_keyboard: [] };
+  if (otpCode) {
+      groupMarkup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otpCode } }]);
+  }
+  groupMarkup.inline_keyboard.push([{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]);
+  
+  bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
   if (pendingRequests[number]) {
     const reqData = pendingRequests[number];
     const reqInfo = getCountryInfo(reqData.country);
+    
     let userReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n\n🌍 **Country:** ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:** ${message}`;
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `📋 Copy Code`, copy_text: { text: otpCode } }]);
