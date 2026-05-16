@@ -7,7 +7,6 @@ function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// মূল HTTP রিকোয়েস্ট ফাংশন 
 function makeRequest(method, path, body, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const headers = {
@@ -43,7 +42,19 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// MK SMS Get Number API (Direct Cookie Access)
+// 🟢 MK SMS Cookie Verification
+async function verifyCookies(cookieStr) {
+    setCookies(cookieStr);
+    const res = await makeRequest("GET", "/getnum_test.php", null, {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+    });
+    
+    if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
+        throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember from your browser.");
+    }
+    return true; 
+}
+
 async function getNumber(range) {
     const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
     const body = [
@@ -72,7 +83,6 @@ async function getNumber(range) {
     throw new Error((res.data && res.data.message) ? res.data.message : "Session Expired or Out of Stock.");
 }
 
-// MK SMS Check OTP API
 async function checkInfo(date) {
     const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`, null, {
         "accept": "*/*",
@@ -84,4 +94,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { setCookies, getNumber, checkInfo };
+module.exports = { setCookies, verifyCookies, getNumber, checkInfo };
