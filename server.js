@@ -368,17 +368,17 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
-  // MK SMS Cookie Creds Input Handler
+  // 🟢 MK SMS Cookie Creds (Manual Entry Only to Bypass Cloudflare/Bot Check)
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
-         bot.sendMessage(chatId, "⏳ Logging into MK SMS...").catch(()=>{});
-         mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
-             db.mkCookies = cookieStr; saveDB();
-             mk.setCookies(cookieStr); // 🟢 মেমরিতে ইনস্ট্যান্ট সিঙ্ক করা হলো
-             bot.sendMessage(chatId, "✅ MK SMS Login Successful! Cookies are securely saved.").catch(()=>{});
-         }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
-      } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
+         const cookieStr = `mk_lang=en; PHPSESSID=${parts[0].trim()}; mk_remember=${parts[1].trim()}`;
+         db.mkCookies = cookieStr; saveDB();
+         mk.setCookies(cookieStr);
+         bot.sendMessage(chatId, "✅ MK SMS Cookies Saved Successfully! Your bot now has direct access.", {parse_mode: "Markdown"}).catch(()=>{});
+      } else { 
+         bot.sendMessage(chatId, "❌ Invalid format. Use `PHPSESSID|mk_remember`").catch(()=>{}); 
+      }
       delete userStates[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_MK_RANGE" && isAdmin(chatId, username)) {
@@ -431,9 +431,10 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 MK Login Propt uses cookie format
   else if (data === "placeholder_mk_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
-      bot.sendMessage(chatId, "📧 **Send MK credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
 
@@ -695,14 +696,13 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
-    // 🟢 MK Assignment: রানটাইমে ডাটাবেস কুকি সিঙ্ক করার মডিউল বসানো হলো
     if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
         bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from MK...", show_alert: false });
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
         bot.editMessageText(`⏳ **Fetching ${limit} numbers from MK SMS...**\n_Please wait, applying delay to prevent server spam._`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
-        if (db.mkCookies) mk.setCookies(db.mkCookies); // 🟢 কারেন্ট লেটেস্ট কুকি মডিউলে সিঙ্ক নিশ্চিত করা হলো
+        if (db.mkCookies) mk.setCookies(db.mkCookies);
 
         for(let i=0; i<limit; i++) {
             try {
@@ -883,14 +883,14 @@ setInterval(async () => {
     } catch (e) {}
 }, 5000);
 
-// MK SMS Background Polling Logic (রানটাইম কুকি সিঙ্ক ইনক্লুড করা হলো)
+// MK SMS Background Polling Logic
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
     if (!hasMkPending) return;
 
     try {
-        if (db.mkCookies) mk.setCookies(db.mkCookies); // 🟢 পোলিং মেমরিতেও কুকি সিঙ্ক নিশ্চিত করা হলো
+        if (db.mkCookies) mk.setCookies(db.mkCookies); 
         const d = new Date();
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
