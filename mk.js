@@ -7,17 +7,20 @@ function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// মূল HTTP রিকোয়েস্ট ফাংশন
-function makeRequest(method, path, body, contentType = "application/json") {
+// মূল HTTP রিকোয়েস্ট ফাংশন (extraHeaders সাপোর্ট সহ আপডেট করা হয়েছে)
+function makeRequest(method, path, body, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "accept": "*/*",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-            "cookie": COOKIES || ""
+            "cookie": COOKIES || "",
+            ...extraHeaders
         };
 
         if (body && method === "POST") {
-            headers["content-type"] = contentType;
+            if (!headers["content-type"]) {
+                headers["content-type"] = "application/json";
+            }
             headers["content-length"] = Buffer.byteLength(body);
         }
 
@@ -40,21 +43,27 @@ function makeRequest(method, path, body, contentType = "application/json") {
     });
 }
 
-// 🟢 MK SMS 2-Step Auto Login Function
+// MK SMS 2-Step Auto Login Function
 async function login(email, password) {
-    // ধাপ ১: প্রথমে একটি GET রিকোয়েস্ট পাঠিয়ে প্রাথমিক PHPSESSID সংগ্রহ করা
-    const initialRes = await makeRequest("GET", "/index.php");
+    const loginHeaders = {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "referer": "https://mknetworkbd.com/index.php",
+        "origin": "https://mknetworkbd.com"
+    };
+
+    const initialRes = await makeRequest("GET", "/index.php", null, loginHeaders);
     let initialCookies = "";
     if (initialRes.headers["set-cookie"]) {
         initialCookies = initialRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-        COOKIES = initialCookies; // মেকরিকোয়েস্টে পাস করার জন্য সাময়িক সেভ
+        COOKIES = initialCookies; 
     }
 
-    // ধাপ ২: সংগৃহীত সেশন কুকি ব্যবহার করে ইমেইল ও পাসওয়ার্ড POST করা
     const body = `login_id=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
-    const loginRes = await makeRequest("POST", "/index.php", body, "application/x-www-form-urlencoded");
+    const loginRes = await makeRequest("POST", "/index.php", body, {
+        ...loginHeaders,
+        "content-type": "application/x-www-form-urlencoded"
+    });
     
-    // নতুন কোনো কুকি (যেমন mk_remember) আসলে তা আগের কুকির সাথে মার্জ করা
     let finalCookiesList = [];
     if (initialCookies) finalCookiesList.push(initialCookies);
     
@@ -62,7 +71,6 @@ async function login(email, password) {
         loginRes.headers["set-cookie"].forEach(c => {
             const cookiePair = c.split(";")[0];
             const cookieName = cookiePair.split("=")[0];
-            // ডুপ্লিকেট রিমুভ ট্র্যাকিং
             finalCookiesList = finalCookiesList.filter(existing => !existing.startsWith(cookieName + "="));
             finalCookiesList.push(cookiePair);
         });
@@ -72,12 +80,10 @@ async function login(email, password) {
         COOKIES = finalCookiesList.join("; ");
     }
     
-    // লগইন সফল হয়েছে কিনা তা যাচাই (রিডাইরেক্ট কোড বা ড্যাশবোর্ড কন্টেন্ট চেক)
     if (loginRes.status === 302 || (loginRes.data && loginRes.data.includes("dashboard"))) {
         return COOKIES;
     }
     
-    // যদি পেজে এখনও login_id ইনপুট ফর্ম দেখায়, তার মানে পাসওয়ার্ড ভুল বা লগইন হয়নি
     if (loginRes.data && loginRes.data.includes('name="login_id"')) {
         throw new Error("Login failed. Please check your MK email and password.");
     }
@@ -85,7 +91,7 @@ async function login(email, password) {
     return COOKIES;
 }
 
-// MK SMS Get Number API
+// 🟢 MK SMS Get Number API (ব্রাউজারের মতো ঠিকঠাক অরিজিন ও রেফারার হেডার বসানো হয়েছে)
 async function getNumber(range) {
     const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
     const body = [
@@ -101,16 +107,25 @@ async function getNumber(range) {
         ``
     ].join("\r\n");
 
-    const res = await makeRequest("POST", "/API/api_handler_test.php", body, `multipart/form-data; boundary=${boundary}`);
+    const res = await makeRequest("POST", "/API/api_handler_test.php", body, {
+        "accept": "*/*",
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        "referer": "https://mknetworkbd.com/getnum_test.php",
+        "origin": "https://mknetworkbd.com"
+    });
+    
     if (res.data && res.data.status === "success" && res.data.number) {
         return res.data;
     }
-    throw new Error((res.data && res.data.message) ? res.data.message : "Failed to get number from MK.");
+    throw new Error((res.data && res.data.message) ? res.data.message : "Failed to get number from MK. Server response: " + JSON.stringify(res.data));
 }
 
 // MK SMS Check OTP API
 async function checkInfo(date) {
-    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`);
+    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`, null, {
+        "accept": "*/*",
+        "referer": "https://mknetworkbd.com/getnum_test.php"
+    });
     if (res.data && res.data.status === "success" && res.data.data) {
         return res.data.data; 
     }
