@@ -77,7 +77,7 @@ function detectPlatform(from, subject, body) {
 }
 
 const countryPrefixes = {
-    "1": "USA", "7": "RUSSIA", "20": "EGYPT", "27": "SOUTH AFRICA", "30": "GREECE", "31": "NETHERLANDS", "32": "BELGIUM", "33": "FRANCE", "34": "SPAIN", "36": "HUNGARY", "39": "ITALY", "40": "ROMANIA", "43": "AUSTRIA", "44": "UK", "45": "DENMARK", "46": "SWEDEN", "47": "NORWAY", "48": "POLAND", "49": "GERMANY", "51": "PERU", "52": "MEXICO", "53": "CUBA", "54": "ARGENTINA", "55": "BRAZIL", "56": "CHILE", "57": "COLOMBIA", "58": "VENEZUELA", "60": "MALAYSIA", "61": "AUSTRALIA", "62": "INDONESIA", "63": "PHILIPPINES", "64": "NEW ZEALAND", "65": "SINGAPORE", "66": "THAILAND", "81": "JAPAN", "82": "SOUTH KOREA", "84": "VIETNAM", "86": "CHINA", "90": "TURKEY", "91": "INDIA", "92": "PAKISTAN", "93": "AFGHANISTAN", "94": "SRI LANKA", "95": "MYANMAR", "98": "IRAN", "211": "SOUTH SUDAN", "212": "MOROCCO", "213": "ALGERIA", "216": "TUNISIA", "218": "LIBYA", "220": "GAMBIA", "221": "SENEGAL", "222": "MAURITANIA", "223": "MALI", "224": "GUINEA", "225": "IVORY COAST", "226": "BURKINA FASO", "227": "NIGER", "228": "TOGO", "229": "BENIN", "230": "MAURITIUS", "231": "LIBERIA", "232": "SIERRA LEONE", "233": "GHANA", "234": "NIGERIA", "235": "CHAD", "236": "CENTRAL AFRICA", "237": "CAMEROON", "238": "CAPE VERDE", "239": "SAO TOME", "240": "EQUATORIAL開", "241": "GABON", "242": "CONGO", "243": "DR CONGO", "244": "ANGOLA", "245": "GUINEA BISSAU", "246": "DIEGO GARCIA", "248": "SEYCHELLES", "249": "SUDAN", "250": "RWANDA", "251": "ETHIOPIA", "252": "SOMALIA", "253": "DJIBOUTI", "254": "KENYA", "255": "TANZANIA", "256": "UGANDA", "257": "BURUNDI", "258": "MOZAMBIQUE", "260": "ZAMBIA", "261": "MADAGASCAR", "262": "REUNION", "263": "ZIMBABWE", "264": "NAMIBIA", "265": "MALAWI", "266": "LESOTHO", "267": "BOTSWANA", "268": "ESWATINI", "269": "COMOROS", "351": "PORTUGAL", "352": "LUXEMBOURG", "353": "IRELAND", "354": "ICELAND", "355": "ALBANIA", "356": "MALTA", "357": "CYPRUS", "358": "FINLAND", "359": "BULGARIA", "370": "LITHUANIA", "371": "LATVIA", "372": "ESTONIA", "373": "MOLDOVA", "374": "ARMENIA", "375": "BELARUS", "376": "ANDORRA", "377": "MONACO", "378": "SAN MARINO", "380": "UKRAINE", "381": "SERBIA", "382": "MONTENEGRO", "385": "CROATIA", "386": "SLOVENIA", "387": "BOSNIA", "389": "MACEDONIA", "852": "HONG KONG", "853": "MACAU", "855": "CAMBODIA", "856": "LAOS", "880": "BANGLADESH", "960": "MALDIVES", "961": "LEBANON", "962": "JORDAN", "963": "SYRIA", "964": "IRAQ", "965": "KUWAIT", "966": "SAUDI ARABIA", "967": "YEMEN", "968": "OMAN", "971": "UAE", "972": "ISRAEL", "973": "BAHRAIN", "974": "QATAR", "975": "BHUTAN", "976": "MONGOLIA", "977": "NEPAL", "992": "TAJIKISTAN", "993": "TURKMENISTAN", "994": "AZERBAIJAN", "995": "GEORGIA", "996": "KYRGYZSTAN", "998": "UZBEKISTAN"
+    "1": "USA", "7": "RUSSIA", "20": "EGYPT", "27": "SOUTH AFRICA", "30": "GREECE", "31": "NETHERLANDS", "32": "BELGIUM", "33": "FRANCE", "34": "SPAIN", "36": "HUNGARY", "39": "ITALY", "40": "ROMANIA", "43": "AUSTRIA", "44": "UK", "45": "DENMARK", "46": "SWEDEN", "47": "NORWAY", "48": "POLAND", "49": "GERMANY", "51": "PERU", "52": "MEXICO", "53": "CUBA", "54": "ARGENTINA", "55": "BRAZIL", "56": "CHILE", "57": "COLOMBIA", "58": "VENEZUELA", "60": "MALAYSIA", "61": "AUSTRALIA", "62": "INDONESIA", "63": "PHILIPPINES", "64": "NEW ZEALAND", "65": "SINGAPORE", "66": "THAILAND", "81": "JAPAN", "82": "SOUTH KOREA", "84": "VIETNAM", "86": "CHINA", "90": "TURKEY", "91": "INDIA", "92": "PAKISTAN", "93": "AFGHANISTAN", "94": "SRI LANKA", "95": "MYANMAR", "98": "IRAN", "211": "SOUTH SUDAN", "212": "MOROCCO", "213": "ALGERIA", "216": "TUNISIA", "218": "LIBYA", "220": "GAMBIA", "221": "SENEGAL", "222": "MAURITANIA", "223": "MALI", "224": "GUINEA", "225": "IVORY COAST", "226": "BURKINA FASO", "227": "NIGER", "228": "TOGO", "229": "BENIN", "230": "MAURITIUS", "231": "LIBERIA", "232": "SIERRA LEONE", "233": "GHANA", "234": "NIGERIA", "235": "CHAD", "236": "CENTRAL AFRICA", "237": "CAMEROON", "238": "CAPE VERDE", "239": "SAO TOME", "240": "EQUATORIAL GUINEA", "241": "GABON", "242": "CONGO", "243": "DR CONGO", "244": "ANGOLA", "245": "GUINEA BISSAU", "246": "DIEGO GARCIA", "248": "SEYCHELLES", "249": "SUDAN", "250": "RWANDA", "251": "ETHIOPIA", "252": "SOMALIA", "253": "DJIBOUTI", "254": "KENYA", "255": "TANZANIA", "256": "UGANDA", "257": "BURUNDI", "258": "MOZAMBIQUE", "260": "ZAMBIA", "261": "MADAGASCAR", "262": "REUNION", "263": "ZIMBABWE", "264": "NAMIBIA", "265": "MALAWI", "266": "LESOTHO", "267": "BOTSWANA", "268": "ESWATINI", "269": "COMOROS", "351": "PORTUGAL", "352": "LUXEMBOURG", "353": "IRELAND", "354": "ICELAND", "355": "ALBANIA", "356": "MALTA", "357": "CYPRUS", "358": "FINLAND", "359": "BULGARIA", "370": "LITHUANIA", "371": "LATVIA", "372": "ESTONIA", "373": "MOLDOVA", "374": "ARMENIA", "375": "BELARUS", "376": "ANDORRA", "377": "MONACO", "378": "SAN MARINO", "380": "UKRAINE", "381": "SERBIA", "382": "MONTENEGRO", "385": "CROATIA", "386": "SLOVENIA", "387": "BOSNIA", "389": "MACEDONIA", "852": "HONG KONG", "853": "MACAU", "855": "CAMBODIA", "856": "LAOS", "880": "BANGLADESH", "960": "MALDIVES", "961": "LEBANON", "962": "JORDAN", "963": "SYRIA", "964": "IRAQ", "965": "KUWAIT", "966": "SAUDI ARABIA", "967": "YEMEN", "968": "OMAN", "971": "UAE", "972": "ISRAEL", "973": "BAHRAIN", "974": "QATAR", "975": "BHUTAN", "976": "MONGOLIA", "977": "NEPAL", "992": "TAJIKISTAN", "993": "TURKMENISTAN", "994": "AZERBAIJAN", "995": "GEORGIA", "996": "KYRGYZSTAN", "998": "UZBEKISTAN"
 };
 
 function detectCountryFromRange(range) {
@@ -375,6 +375,7 @@ bot.on('message', async (msg) => {
          bot.sendMessage(chatId, "⏳ Logging into MK SMS...").catch(()=>{});
          mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
              db.mkCookies = cookieStr; saveDB();
+             mk.setCookies(cookieStr); // 🟢 মেমরিতে ইনস্ট্যান্ট সিঙ্ক করা হলো
              bot.sendMessage(chatId, "✅ MK SMS Login Successful! Cookies are securely saved.").catch(()=>{});
          }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
       } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
@@ -694,12 +695,14 @@ bot.on('callback_query', async (query) => {
         return;
     }
 
-    // 🟢 MK Number Assignment Logic with Terminal Console Logging
+    // 🟢 MK Assignment: রানটাইমে ডাটাবেস কুকি সিঙ্ক করার মডিউল বসানো হলো
     if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
         bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from MK...", show_alert: false });
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
         bot.editMessageText(`⏳ **Fetching ${limit} numbers from MK SMS...**\n_Please wait, applying delay to prevent server spam._`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+
+        if (db.mkCookies) mk.setCookies(db.mkCookies); // 🟢 কারেন্ট লেটেস্ট কুকি মডিউলে সিঙ্ক নিশ্চিত করা হলো
 
         for(let i=0; i<limit; i++) {
             try {
@@ -711,7 +714,7 @@ bot.on('callback_query', async (query) => {
                     pendingRequests[n] = { chatId: chatId, country: db.mkRanges[platform][sel], isMk: true };
                 }
             } catch (e) { 
-                console.log("\n[MK Fetch Error Detail]:", e.message); // 🟢 কনসোলে এরর ডিটেইলস প্রিন্ট করবে
+                console.log("\n[MK Fetch Error Detail]:", e.message); 
                 break; 
             }
             if(i < limit - 1) await new Promise(r => setTimeout(r, 2500)); 
@@ -880,13 +883,14 @@ setInterval(async () => {
     } catch (e) {}
 }, 5000);
 
-// MK SMS Background Polling Logic
+// MK SMS Background Polling Logic (রানটাইম কুকি সিঙ্ক ইনক্লুড করা হলো)
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
     if (!hasMkPending) return;
 
     try {
+        if (db.mkCookies) mk.setCookies(db.mkCookies); // 🟢 পোলিং মেমরিতেও কুকি সিঙ্ক নিশ্চিত করা হলো
         const d = new Date();
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
