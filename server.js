@@ -348,23 +348,21 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
-  // MK SMS Cookie Creds 
+  // 🟢 MK SMS Login Logic
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
-         bot.sendMessage(chatId, "⏳ Verifying MK SMS Cookies on the server...").catch(()=>{});
-         const cookieStr = `mk_lang=en; PHPSESSID=${parts[0].trim()}; mk_remember=${parts[1].trim()}`;
-         
-         mk.verifyCookies(cookieStr).then(() => {
+         bot.sendMessage(chatId, "⏳ Logging into MK SMS...").catch(()=>{});
+         mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
              db.mkCookies = cookieStr; 
              saveDB();
-             bot.sendMessage(chatId, "✅ **MK SMS Cookies Verified & Saved Successfully!**\nYou can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
+             bot.sendMessage(chatId, "✅ **MK SMS Login Successful!** Cookies are securely saved.", {parse_mode: "Markdown"}).catch(()=>{});
          }).catch(e => {
-             bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
+             bot.sendMessage(chatId, "❌ **Login Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
          });
 
       } else { 
-         bot.sendMessage(chatId, "❌ Invalid format. Use `PHPSESSID|mk_remember`").catch(()=>{}); 
+         bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); 
       }
       delete userStates[chatId];
   }
@@ -416,10 +414,10 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 MK SMS Cookie Prompt
+  // 🟢 MK SMS Login Prompt
   else if (data === "placeholder_mk_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
-      bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`\n_(Get these from your browser's Developer Tools)_", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.sendMessage(chatId, "📧 **Send MK credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
 
@@ -790,7 +788,6 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
 });
 
-// 🟢 Updated processFoundOTP function with Masking and Copy Code button
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
