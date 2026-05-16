@@ -891,13 +891,27 @@ setInterval(async () => {
         const d = new Date();
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
+        
         if (Array.isArray(records)) {
             records.forEach(rec => {
-                let num = rec.phone_number ? rec.phone_number.replace('+', '') : null;
-                if (num && pendingRequests[num] && rec.status === 'success') {
-                    let msg = rec.full_sms_list || rec.otps || "OTP Received";
-                    let reqData = pendingRequests[num];
-                    processFoundOTP(num, Date.now(), msg, reqData.country);
+                // নাম্বার থেকে +, স্পেস বা অন্য ক্যারেক্টার মুছে শুধু ডিজিট নেওয়া
+                let rawNum = String(rec.phone_number || rec.number || "");
+                let cleanRecNum = rawNum.replace(/\D/g, '');
+                
+                if (cleanRecNum) {
+                    // Pending রিকোয়েস্টের সাথে নাম্বারের ডিজিটগুলো মেলানো
+                    let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isMk);
+                    
+                    if (pendingKey) {
+                        // মেসেজের জন্য সব সম্ভাব্য ফিল্ড চেক করা (কারণ একেক API-তে একেক নাম থাকে)
+                        let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
+                        
+                        // যদি মেসেজ পাওয়া যায় এবং সেটা "waiting" জাতীয় কিছু না হয়, তাহলে ওটিপি সেন্ড করবে
+                        if (msg && typeof msg === 'string' && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                            let reqData = pendingRequests[pendingKey];
+                            processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
+                        }
+                    }
                 }
             });
         }
