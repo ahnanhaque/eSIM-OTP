@@ -3,7 +3,6 @@ const https = require("https");
 const BASE_URL = "https://mknetworkbd.com";
 let COOKIES = "";
 
-// কুকিজ সেট করার ফাংশন
 function setCookies(cookies) {
     COOKIES = cookies;
 }
@@ -28,9 +27,9 @@ function makeRequest(method, path, body, contentType = "application/json") {
             res.on("end", () => {
                 const text = Buffer.concat(chunks).toString("utf-8");
                 try { 
-                    resolve({ status: res.statusCode, data: JSON.parse(text) }); 
+                    resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text) }); 
                 } catch { 
-                    resolve({ status: res.statusCode, data: text }); 
+                    resolve({ status: res.statusCode, headers: res.headers, data: text }); 
                 }
             });
         });
@@ -41,7 +40,28 @@ function makeRequest(method, path, body, contentType = "application/json") {
     });
 }
 
-// MK SMS Get Number API (multipart/form-data)
+// 🟢 MK SMS Auto Login Function (কুকি স্ক্র্যাপ করবে)
+async function login(email, password) {
+    const body = `login_id=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
+    
+    const res = await makeRequest("POST", "/index.php", body, "application/x-www-form-urlencoded");
+    
+    const setCookie = res.headers["set-cookie"];
+    if (setCookie && setCookie.length > 0) {
+        const cookieStr = setCookie.map(c => c.split(";")[0]).join("; ");
+        COOKIES = cookieStr;
+        return COOKIES;
+    }
+    
+    // যদি কোনো কারণে সফল লগইনেও রিডাইরেক্ট কুকি না আসে, তবে রেসপন্স চেক
+    if (res.data && res.data.includes("dashboard")) {
+        return COOKIES;
+    }
+    
+    throw new Error("Login failed. Please check your MK email and password.");
+}
+
+// MK SMS Get Number API
 async function getNumber(range) {
     const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
     const body = [
@@ -64,7 +84,7 @@ async function getNumber(range) {
     throw new Error((res.data && res.data.message) ? res.data.message : "Failed to get number from MK.");
 }
 
-// 🟢 ওটিপি চেক করার জন্য নতুন কুয়েরি প্যারামিটার ও ডাইনামিক ডেট যুক্ত করা হলো
+// MK SMS Check OTP API
 async function checkInfo(date) {
     const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`);
     if (res.data && res.data.status === "success" && res.data.data) {
@@ -73,4 +93,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { setCookies, getNumber, checkInfo };
+module.exports = { login, setCookies, getNumber, checkInfo };
