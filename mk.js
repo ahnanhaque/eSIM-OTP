@@ -42,47 +42,46 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 MK SMS Email/Password Auto Login Logic (Redirect Following)
+// 🟢 MK SMS Perfect Auto Login Logic (Strict Redirect & State Tracking)
 async function login(email, password) {
-    // Step 1: Initial GET for PHPSESSID
+    // ধাপ ১: সেশন ইনিশিয়ালের জন্য GET রিকোয়েস্ট
     const initialRes = await makeRequest("GET", "/index.php");
     if (initialRes.headers["set-cookie"]) {
         COOKIES = initialRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
     }
 
-    // Step 2: POST Login data to index.php
+    // ধাপ ২: index.php-তে credentials সাবমিট করা
     const body = `login_id=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
-    await makeRequest("POST", "/index.php", body, {
+    const loginRes = await makeRequest("POST", "/index.php", body, {
         "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://mknetworkbd.com/index.php"
+        "referer": "https://mknetworkbd.com/index.php",
+        "origin": "https://mknetworkbd.com"
     });
 
-    // Step 3: Follow Redirect to auth.php (Where actual verification happens)
+    // নতুন কোনো সেশন কুকি বা রিমেম্বার টোকেন আসলে তা মার্জ করা
+    if (loginRes.headers["set-cookie"]) {
+        let freshCookies = loginRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
+        COOKIES = COOKIES ? COOKIES + "; " + freshCookies : freshCookies;
+    }
+
+    // ধাপ ৩: auth.php পেজে হিট করে সেশন অ্যাক্টিভেট করা
     const authRes = await makeRequest("GET", "/auth.php", null, {
         "referer": "https://mknetworkbd.com/index.php"
     });
 
-    // Extract real cookies (like mk_remember) from auth.php
     if (authRes.headers["set-cookie"]) {
-        authRes.headers["set-cookie"].forEach(c => {
-            const cookiePair = c.split(";")[0];
-            const cookieName = cookiePair.split("=")[0];
-            let currentCookies = COOKIES ? COOKIES.split("; ") : [];
-            currentCookies = currentCookies.filter(existing => !existing.startsWith(cookieName + "="));
-            currentCookies.push(cookiePair);
-            COOKIES = currentCookies.join("; ");
-        });
+        let authCookies = authRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
+        COOKIES = COOKIES ? COOKIES + "; " + authCookies : authCookies;
     }
 
-    // Check if auth.php rejected the login and sent us back to index.php
-    if (authRes.status === 302 && authRes.headers["location"] && authRes.headers["location"].includes("index.php")) {
-        throw new Error("Incorrect Email or Password!");
-    }
+    // ধাপ ৪: ড্যাশবোর্ড পেজ হিট করে লগইন স্টেট কনফার্ম করা
+    const verifyRes = await makeRequest("GET", "/getnum_test.php", null, {
+        "referer": "https://mknetworkbd.com/auth.php"
+    });
 
-    // Step 4: Final Dashboard Verification
-    const verifyRes = await makeRequest("GET", "/getnum_test.php");
+    // যদি পেজে এখনও login_id ফর্ম বা 'login' শব্দ থাকে, তার মানে লগইন হয়নি (ভুল credentials)
     if (verifyRes.status === 302 || (typeof verifyRes.data === 'string' && verifyRes.data.includes('name="login_id"'))) {
-        throw new Error("Incorrect Email or Password!");
+        throw new Error("Incorrect Email or Password! Login failed.");
     }
 
     return COOKIES;
