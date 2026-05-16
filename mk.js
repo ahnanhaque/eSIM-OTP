@@ -42,17 +42,53 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 MK SMS Cookie Verification
-async function verifyCookies(cookieStr) {
-    setCookies(cookieStr);
-    const res = await makeRequest("GET", "/getnum_test.php", null, {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+// 🟢 MK SMS Auto Login Function (Stex er moto email|password diye)
+async function login(email, password) {
+    // Step 1: Initialize session
+    const initialRes = await makeRequest("GET", "/index.php", null, {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
     });
     
-    if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
-        throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember from your browser.");
+    let initialCookies = "";
+    if (initialRes.headers["set-cookie"]) {
+        initialCookies = initialRes.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
+        COOKIES = initialCookies; 
     }
-    return true; 
+
+    // Step 2: Submit login credentials
+    const body = `login_id=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
+    const loginRes = await makeRequest("POST", "/index.php", body, {
+        "content-type": "application/x-www-form-urlencoded",
+        "referer": "https://mknetworkbd.com/index.php",
+        "origin": "https://mknetworkbd.com"
+    });
+    
+    let finalCookiesList = [];
+    if (initialCookies) finalCookiesList.push(initialCookies);
+    
+    if (loginRes.headers["set-cookie"]) {
+        loginRes.headers["set-cookie"].forEach(c => {
+            const cookiePair = c.split(";")[0];
+            const cookieName = cookiePair.split("=")[0];
+            finalCookiesList = finalCookiesList.filter(existing => !existing.startsWith(cookieName + "="));
+            finalCookiesList.push(cookiePair);
+        });
+    }
+
+    if (finalCookiesList.length > 0) {
+        COOKIES = finalCookiesList.join("; ");
+    }
+    
+    // Step 3: Verify login explicitly
+    const verifyRes = await makeRequest("GET", "/getnum_test.php", null, {
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    });
+    
+    if (verifyRes.data && typeof verifyRes.data === 'string' && verifyRes.data.includes('name="login_id"')) {
+        throw new Error("Incorrect email or password.");
+    }
+    
+    return COOKIES;
 }
 
 async function getNumber(range) {
@@ -94,4 +130,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { setCookies, verifyCookies, getNumber, checkInfo };
+module.exports = { login, setCookies, getNumber, checkInfo };
