@@ -864,7 +864,8 @@ setInterval(async () => {
     const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
     if (!hasStexPending) return;
     try {
-        const d = new Date();
+        // 🟢 Bangladesh Time (BST) Fixed Date
+        const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await stex.checkInfo(dateStr);
         if (Array.isArray(records)) {
@@ -888,7 +889,8 @@ setInterval(async () => {
 
     try {
         if (db.mkCookies) mk.setCookies(db.mkCookies); 
-        const d = new Date();
+        // 🟢 Bangladesh Time (BST) Fixed Date
+        const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
         
@@ -903,7 +905,7 @@ setInterval(async () => {
                     let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isMk);
                     
                     if (pendingKey) {
-                        // মেসেজের জন্য সব সম্ভাব্য ফিল্ড চেক করা (কারণ একেক API-তে একেক নাম থাকে)
+                        // মেসেজের জন্য সব সম্ভাব্য ফিল্ড চেক করা
                         let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
                         
                         // যদি মেসেজ পাওয়া যায় এবং সেটা "waiting" জাতীয় কিছু না হয়, তাহলে ওটিপি সেন্ড করবে
