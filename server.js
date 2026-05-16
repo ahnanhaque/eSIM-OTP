@@ -2,6 +2,7 @@ const express = require("express");
 const TelegramBot = require("node-telegram-bot-api");
 const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
+const stex = require("./stex.js"); // 🟢 STEX SMS মডিউল যুক্ত করা হলো
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -35,10 +36,11 @@ bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { comma
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
 
-const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object }, { strict: false });
+// 🟢 Stex এর জন্য stexRanges এবং stexToken যুক্ত করা হলো
+const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {} };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: {}, cookies: {}, stexRanges: {}, stexToken: "" };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 
@@ -82,7 +84,7 @@ function getCountryInfo(countryName) {
   return { flag, cleanName };
 }
 
-const countryData = { "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
+const countryData = { "SIERRA LEONE": { flag: "🇸🇱" }, "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "PERU": { flag: "🇵🇪" }, "EGYPT": { flag: "🇪🇬" }, "GUINEA": { flag: "🇬🇳" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
 
 function maskNumber(numStr) { return (!numStr || numStr.length < 6) ? numStr : `${numStr.slice(0, 4)}****${numStr.slice(-4)}`; }
 
@@ -112,7 +114,6 @@ function getAdminMenu(chatId) {
   return { inline_keyboard: menu };
 }
 
-// 🟢 আপডেটেড অ্যাডমিন প্ল্যাটফর্ম মেনু (Remove Number যুক্ত করা হয়েছে)
 const adminPlatformMenu = {
   inline_keyboard: [
     [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
@@ -309,6 +310,31 @@ bot.on('message', async (msg) => {
     if(!db.adminUsernames.includes(newAdmin)) { db.adminUsernames.push(newAdmin); saveDB(); bot.sendMessage(chatId, `✅ **${newAdmin}** has been successfully added as an admin.`).catch(()=>{}); }
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
+
+  // 🟢 Stex SMS Admin Input Handlers
+  else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
+      const parts = text.split('|');
+      if(parts.length === 2) {
+         bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(()=>{});
+         stex.login(parts[0].trim(), parts[1].trim()).then(token => {
+             db.stexToken = token; saveDB();
+             bot.sendMessage(chatId, "✅ Stex Login Successful! Token is saved.").catch(()=>{});
+         }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
+      delete userStates[chatId];
+  }
+  else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
+      const parts = text.split('|');
+      if(parts.length === 2) {
+          const country = parts[0].trim().toUpperCase();
+          const range = parts[1].trim();
+          if(!db.stexRanges) db.stexRanges = {};
+          db.stexRanges[range] = country;
+          saveDB();
+          bot.sendMessage(chatId, `✅ Successfully added Stex Range **${range}** to **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Use `COUNTRY_NAME|RANGE`").catch(()=>{}); }
+      delete userStates[chatId];
+  }
 });
 
 bot.on('callback_query', async (query) => {
@@ -320,8 +346,8 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
-  // 🟢 যুক্ত করা হলো 'delnumrng_' পারমিশন চেকে
-  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "placeholder_mk", "delnumrng_"];
+  // 🟢 যুক্ত করা হলো 'stex' পারমিশন চেক
+  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "delnumrng_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
@@ -340,7 +366,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   
-  // 🟢 Remove Number Logic Start
   else if (data === "admin_remove_number_menu") {
     const activeRanges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
     if (activeRanges.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers to remove.", show_alert: true });
@@ -380,14 +405,55 @@ bot.on('callback_query', async (query) => {
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
   }
-  // 🟢 Remove Number Logic End
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
     bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
-  else if (data === "placeholder_stex" || data === "placeholder_mk" || data === "placeholder_ig" || data === "placeholder_wa") {
+
+  // 🟢 Stex SMS Admin Panel Logic
+  else if (data === "placeholder_stex") {
+    bot.editMessageText("🛠 **Stex SMS Management**\n\nChoose an option:", {
+        chat_id: chatId, message_id: messageId,
+        reply_markup: {
+            inline_keyboard: [
+                [{ text: "🔑 Login to Stex", callback_data: "stex_login" }],
+                [{ text: "➕ Add Stex Range", callback_data: "stex_add_range" }],
+                [{ text: "🗑️ Remove Stex Range", callback_data: "stex_del_range" }],
+                [{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]
+            ]
+        }
+    }).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "stex_login") {
+      userStates[chatId] = "WAITING_FOR_STEX_CREDS";
+      bot.sendMessage(chatId, "📧 **Send Stex credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "stex_add_range") {
+      userStates[chatId] = "WAITING_FOR_STEX_RANGE";
+      bot.sendMessage(chatId, "🌍 **Enter Country Name & Range**\nFormat: `COUNTRY_NAME|RANGE`\nExample: `SIERRA LEONE|23276XXX`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "stex_del_range") {
+      if(!db.stexRanges || Object.keys(db.stexRanges).length === 0) return bot.answerCallbackQuery(query.id, {text: "No Stex ranges available.", show_alert: true});
+      let btns = Object.keys(db.stexRanges).map(r => [{text: `🗑️ ${db.stexRanges[r]} (${r})`, callback_data: `stexdel_${r}`}]);
+      btns.push([{text: "⬅️ Back", callback_data: "placeholder_stex"}]);
+      bot.editMessageText("🗑️ **Select a Stex range to remove:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns } }).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data.startsWith("stexdel_")) {
+      const r = data.replace("stexdel_", "");
+      if(db.stexRanges && db.stexRanges[r]) {
+          delete db.stexRanges[r]; saveDB();
+          bot.answerCallbackQuery(query.id, {text: `✅ Removed Range ${r}`});
+          bot.editMessageText("🛠 **Please select a panel to manage:**", { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
+      }
+  }
+
+  else if (data === "placeholder_mk" || data === "placeholder_ig" || data === "placeholder_wa") {
       bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
   }
 
@@ -401,11 +467,22 @@ bot.on('callback_query', async (query) => {
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data === "menu_country_fb") {
-    clearPendingForChat(chatId); const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
-    if (ranges.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
+    clearPendingForChat(chatId); 
+    const ranges = Object.keys(db.availableNumbers).filter(k => db.availableNumbers[k].length > 0);
+    const stexRangesList = db.stexRanges ? Object.keys(db.stexRanges) : [];
+    
+    if (ranges.length === 0 && stexRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
+    
     let baseCountryCount = {}, currentV = {}, countryButtons = [];
     ranges.forEach(r => { let i = getCountryInfo(r); baseCountryCount[i.cleanName] = (baseCountryCount[i.cleanName] || 0) + 1; });
     ranges.forEach(range => { let info = getCountryInfo(range), dName = `${info.flag} ${info.cleanName}`; if (baseCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; } countryButtons.push([{ text: `${dName} | 📦: ${db.availableNumbers[range].length}`, callback_data: `assign_${range}` }]); });
+    
+    // 🟢 STEX কান্ট্রি গুলো মেনুতে যুক্ত করা হলো
+    stexRangesList.forEach(range => {
+        let info = getCountryInfo(db.stexRanges[range]);
+        countryButtons.push([{ text: `⚡ ${info.flag} ${info.cleanName} | 📦: ∞`, callback_data: `assign_${range}` }]);
+    });
+
     countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
     bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }).catch(()=>{}); bot.answerCallbackQuery(query.id);
   }
@@ -413,6 +490,33 @@ bot.on('callback_query', async (query) => {
   
   else if (data.startsWith("assign_")) {
     const sel = data.replace("assign_next_", "").replace("assign_", ""); clearPendingForChat(chatId);
+    
+    // 🟢 Stex Number Assignment Logic
+    if (db.stexRanges && db.stexRanges[sel]) {
+        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching number from Stex...", show_alert: false });
+        try {
+            const numData = await stex.getNumber(sel);
+            const n = numData.full_number || numData.number.replace('+', '');
+            inUseNumbers[n] = true;
+            
+            // reqData এর ভেতর country সেভ করে রাখছি
+            pendingRequests[n] = { chatId: chatId, country: db.stexRanges[sel], isStex: true };
+            
+            const info = getCountryInfo(db.stexRanges[sel]);
+            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
+            
+            let actionMenu = { inline_keyboard: [
+                [{ text: `${info.flag} +${n}`, copy_text: { text: n } }],
+                [{ text: "🔄 Change", callback_data: `assign_next_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔙 Back", callback_data: "menu_country_fb" }]
+            ]};
+            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).catch(()=>{});
+        } catch (e) {
+            bot.editMessageText(`❌ Stex Error: ${e.message}`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: "menu_country_fb" }]] } }).catch(()=>{});
+        }
+        return;
+    }
+
     const nums = db.availableNumbers[sel] || [];
     if (nums.length === 0) return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
     
@@ -505,5 +609,36 @@ app.get('/', (req, res) => res.status(200).send('Bot is successfully running on 
 
 mongoose.connect(MONGODB_URI).then(async () => {
   const data = await BotDB.findOne(); if (data) db = { ...db, ...data.toObject() }; else await BotDB.create(db);
+  
+  // 🟢 Database থেকে Stex Token লোড করা হলো
+  if (db.stexToken) {
+      stex.setAuthToken(db.stexToken);
+  }
+
   isDbLoaded = true; app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
 }).catch(err => console.log(err));
+
+// 🟢 Stex SMS Background Polling Logic (প্রতি ৫ সেকেন্ডে)
+setInterval(async () => {
+    if (!db.stexToken) return;
+    const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
+    if (!hasStexPending) return;
+
+    try {
+        const d = new Date();
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+        const records = await stex.checkInfo(dateStr);
+        
+        if (Array.isArray(records)) {
+            records.forEach(rec => {
+                let num = rec.number ? rec.number.replace('+', '') : null;
+                if (num && pendingRequests[num] && rec.status === 'success') {
+                    let msg = rec.message || rec.otp || "OTP Received";
+                    let reqData = pendingRequests[num];
+                    // pendingRequests থেকে country বের করে পাঠানো হলো
+                    processFoundOTP(num, Date.now(), msg, reqData.country);
+                }
+            });
+        }
+    } catch (e) {}
+}, 5000);
