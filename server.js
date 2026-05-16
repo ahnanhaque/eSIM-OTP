@@ -49,7 +49,7 @@ function getBalance(chatId) { return db.balances[chatId] || 0; }
 function addBalance(chatId, amount) { if (!db.balances[chatId]) db.balances[chatId] = 0; db.balances[chatId] += amount; saveDB(); }
 function isSuperAdmin(chatId) { return chatId === ADMIN_ID; }
 function isAdmin(chatId, username) { if (isSuperAdmin(chatId)) return true; let un = username ? "@" + username.replace('@', '').toLowerCase() : null; return un && db.adminUsernames.includes(un); }
-async function isUserMember(userId) { if (isSuperAdmin(userId)) return true; try { const member = await bot.getChatMember(GROUP_INVITE_LINK, userId); return ['creator', 'administrator', 'member', 'restricted'].includes(member.status); } catch (e) { return false; } }
+async function isUserMember(userId) { if (isSuperAdmin(userId)) return true; try { const member = await bot.getChatMember(GROUP_CHAT_ID, userId); return ['creator', 'administrator', 'member', 'restricted'].includes(member.status); } catch (e) { return false; } }
 
 function sendJoinPrompt(chatId) {
   bot.sendMessage(chatId, `⚠️ **Access Denied!**\n\nYou must join our official group first to use this bot. Once joined, click the check button below.`, { reply_markup: { inline_keyboard: [[{ text: "📢 Join Group", url: GROUP_INVITE_LINK }], [{ text: "🔄 Check Again", callback_data: "check_join" }]] }, parse_mode: "Markdown" }).catch(()=>{});
@@ -368,15 +368,16 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
-  // MK SMS Cookie Creds Input Handler
+  // 🟢 MK SMS Login Credentials Handler (Updated to use email|password)
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
-         const cookieStr = `mk_lang=en; PHPSESSID=${parts[0].trim()}; mk_remember=${parts[1].trim()}`;
-         db.mkCookies = cookieStr; saveDB();
-         mk.setCookies(cookieStr);
-         bot.sendMessage(chatId, "✅ MK SMS Cookies Saved Successfully!").catch(()=>{});
-      } else { bot.sendMessage(chatId, "❌ Invalid format. Use `PHPSESSID|mk_remember`").catch(()=>{}); }
+         bot.sendMessage(chatId, "⏳ Logging into MK SMS...").catch(()=>{});
+         mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
+             db.mkCookies = cookieStr; saveDB();
+             bot.sendMessage(chatId, "✅ MK SMS Login Successful! Cookies are securely saved.").catch(()=>{});
+         }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
       delete userStates[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_MK_RANGE" && isAdmin(chatId, username)) {
@@ -429,9 +430,10 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 MK Login Prompts Updated from cookies to standard credentials
   else if (data === "placeholder_mk_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
-      bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.sendMessage(chatId, "📧 **Send MK credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
 
@@ -875,7 +877,7 @@ setInterval(async () => {
     } catch (e) {}
 }, 5000);
 
-// 🟢 MK SMS Background Polling Logic (প্রতি ৫ সেকেন্ডে - ডাইনামিক ডেট প্যারামিটার সহ আপডেট করা হলো)
+// MK SMS Background Polling Logic
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
@@ -884,7 +886,7 @@ setInterval(async () => {
     try {
         const d = new Date();
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-        const records = await mk.checkInfo(dateStr); // লাইভ ডেট পাস করা হলো
+        const records = await mk.checkInfo(dateStr); 
         if (Array.isArray(records)) {
             records.forEach(rec => {
                 let num = rec.phone_number ? rec.phone_number.replace('+', '') : null;
