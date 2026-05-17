@@ -43,6 +43,7 @@ const BotDB = mongoose.model("BotData", dbSchema);
 let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "" };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
+let activeNumberMessages = {}; // 🟢 Notun state variable aager number message track korar jonno
 
 function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(err => {}); }
 function getBalance(chatId) { return db.balances[chatId] || 0; }
@@ -187,6 +188,11 @@ bot.on('message', async (msg) => {
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
+    // 🟢 Auto Delete Previous Number Message 
+    if (activeNumberMessages[chatId]) {
+        bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(()=>{});
+        delete activeNumberMessages[chatId];
+    }
     bot.sendMessage(chatId, `🛠 Please select the platform you want to receive an OTP for:`, { reply_markup: platformMenu }).catch(()=>{}); 
   } 
   else if (text === "📧 Temp Mail") {
@@ -323,7 +329,6 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 
-  // Stex Login Creds
   else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -348,7 +353,6 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
-  // MK SMS Cookie Creds 
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -416,7 +420,6 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 MK SMS Cookie Prompt
   else if (data === "placeholder_mk_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
       bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`\n_(Get these from your browser's Developer Tools)_", {parse_mode: "Markdown"}).catch(()=>{});
@@ -650,7 +653,7 @@ bot.on('callback_query', async (query) => {
         bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from Stex...", show_alert: false });
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
-        bot.editMessageText(`⏳ **Fetching ${limit} numbers from Stex...**\n_Please wait, applying delay to prevent server spam._`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+        bot.editMessageText(`⏳ **Fetching ${limit} numbers from Stex...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
         for(let i=0; i<limit; i++) {
             try {
@@ -660,7 +663,7 @@ bot.on('callback_query', async (query) => {
                 inUseNumbers[n] = true;
                 pendingRequests[n] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true };
             } catch (e) { break; }
-            if(i < limit - 1) await new Promise(r => setTimeout(r, 2500)); 
+            // 🟢 Ekhane kono await new Promise ba sleep nai. API joto taratari number dibe bot tototarari nibe.
         }
 
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching from Stex.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{});
@@ -672,6 +675,7 @@ bot.on('callback_query', async (query) => {
         actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+            activeNumberMessages[chatId] = messageId; // 🟢 Number message er id ta track kora holo auto delete er jonno
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 replyText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**`;
@@ -685,7 +689,7 @@ bot.on('callback_query', async (query) => {
         bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from MK...", show_alert: false });
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
-        bot.editMessageText(`⏳ **Fetching ${limit} numbers from MK SMS...**\n_Please wait, applying delay to prevent server spam._`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+        bot.editMessageText(`⏳ **Fetching ${limit} numbers from MK SMS...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
         if (db.mkCookies) mk.setCookies(db.mkCookies); 
 
@@ -702,7 +706,7 @@ bot.on('callback_query', async (query) => {
                 console.log("\n[MK Fetch Error Detail]:", e.message); 
                 break; 
             }
-            if(i < limit - 1) await new Promise(r => setTimeout(r, 2500)); 
+            // 🟢 Ekhane kono await new Promise ba sleep nai. API joto taratari number dibe bot tototarari nibe.
         }
 
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching from MK.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{});
@@ -714,6 +718,7 @@ bot.on('callback_query', async (query) => {
         actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+            activeNumberMessages[chatId] = messageId; // 🟢 Number message er id ta track kora holo auto delete er jonno
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 replyText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**`;
@@ -742,6 +747,7 @@ bot.on('callback_query', async (query) => {
     actionMenu.inline_keyboard.push([{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
     
     bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+        activeNumberMessages[chatId] = messageId; // 🟢 Number message er id ta track kora holo auto delete er jonno
         setTimeout(() => {
             assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
             replyText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**`;
@@ -790,7 +796,6 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
 });
 
-// 🟢 Updated processFoundOTP function with Masking and Copy Code button
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
@@ -864,7 +869,6 @@ setInterval(async () => {
     const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
     if (!hasStexPending) return;
     try {
-        // 🟢 Bangladesh Time (BST) Fixed Date
         const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await stex.checkInfo(dateStr);
@@ -879,7 +883,7 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 5000);
+}, 1000); // 🟢 Changed to 1000ms (1 second)
 
 // MK SMS Background Polling Logic
 setInterval(async () => {
@@ -889,26 +893,20 @@ setInterval(async () => {
 
     try {
         if (db.mkCookies) mk.setCookies(db.mkCookies); 
-        // 🟢 Bangladesh Time (BST) Fixed Date
         const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
         
         if (Array.isArray(records)) {
             records.forEach(rec => {
-                // নাম্বার থেকে +, স্পেস বা অন্য ক্যারেক্টার মুছে শুধু ডিজিট নেওয়া
                 let rawNum = String(rec.phone_number || rec.number || "");
                 let cleanRecNum = rawNum.replace(/\D/g, '');
                 
                 if (cleanRecNum) {
-                    // Pending রিকোয়েস্টের সাথে নাম্বারের ডিজিটগুলো মেলানো
                     let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isMk);
                     
                     if (pendingKey) {
-                        // মেসেজের জন্য সব সম্ভাব্য ফিল্ড চেক করা
                         let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
-                        
-                        // যদি মেসেজ পাওয়া যায় এবং সেটা "waiting" জাতীয় কিছু না হয়, তাহলে ওটিপি সেন্ড করবে
                         if (msg && typeof msg === 'string' && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                             let reqData = pendingRequests[pendingKey];
                             processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
@@ -918,4 +916,4 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 5000);
+}, 1000); // 🟢 Changed to 1000ms (1 second)
