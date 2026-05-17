@@ -188,7 +188,6 @@ bot.on('message', async (msg) => {
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
-    // 🟢 Delete previous number message if it exists
     if (activeNumberMessages[chatId]) {
         bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(()=>{});
         delete activeNumberMessages[chatId];
@@ -461,7 +460,6 @@ bot.on('callback_query', async (query) => {
 
     if (btns.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers/ranges to remove.", show_alert: true });
     
-    // 🟢 Single Unified Remove All Button
     btns.push([{ text: "🗑️ REMOVE ALL", callback_data: "delall_everything" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     
@@ -535,7 +533,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Direct Add Range Prompt implementation
   else if (data === "placeholder_stex") {
     const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
     userStates[chatId] = "WAITING_FOR_STEX_RANGE";
@@ -576,7 +573,6 @@ bot.on('callback_query', async (query) => {
     
     if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
     
-    // 🟢 Alphabetical Sort & Global V1, V2 System
     let combinedRanges = [];
     ranges.forEach(r => combinedRanges.push({ type: 'iva', range: r, info: getCountryInfo(r) }));
     stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(stexPlatformDB[r]) }));
@@ -644,8 +640,6 @@ bot.on('callback_query', async (query) => {
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
             activeNumberMessages[chatId] = messageId; 
-            
-            // 🟢 15 Minute Strikethrough & Next Button Logic
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 
@@ -692,8 +686,6 @@ bot.on('callback_query', async (query) => {
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
             activeNumberMessages[chatId] = messageId;
-            
-            // 🟢 15 Minute Strikethrough & Next Button Logic
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
@@ -730,8 +722,6 @@ bot.on('callback_query', async (query) => {
     
     bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
         activeNumberMessages[chatId] = messageId;
-        
-        // 🟢 15 Minute Strikethrough & Next Button Logic
         setTimeout(() => {
             assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
@@ -787,7 +777,6 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
 });
 
-// 🟢 OTP Formatter logic update
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
@@ -803,23 +792,15 @@ function processFoundOTP(number, time, message, range) {
   else if(platCode === 'ig') platName = "Instagram";
   else if(platCode === 'wa') platName = "WhatsApp";
 
-  // Group Message Format
   let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n🌐 **Platform:** ${platName}\n📞 **Number:** \`${maskedGroupNumber}\`\n💌 **Full SMS:**\n> ${message}`;
-  
   let groupMarkup = { inline_keyboard: [] };
-  if (otpCode) {
-      groupMarkup.inline_keyboard.push([{ text: `OTP`, copy_text: { text: otpCode } }]);
-  }
+  if (otpCode) { groupMarkup.inline_keyboard.push([{ text: `OTP`, copy_text: { text: otpCode } }]); }
   groupMarkup.inline_keyboard.push([{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]);
-  
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
-  // User Inbox Message Format
   if (reqData) {
     const reqInfo = getCountryInfo(reqData.country);
-    
     let userReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n🌍 **Country:** ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n\n🌐 **Platform:** ${platName}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:**\n> ${message}`;
-    
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `OTP`, copy_text: { text: otpCode } }]);
     
@@ -883,9 +864,9 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 1000); 
+}, 2500); 
 
-// MK SMS Background Polling Logic
+// MK SMS Background Polling Logic (with Auto Cookie Updater)
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
@@ -897,6 +878,13 @@ setInterval(async () => {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
         
+        // Auto Cookie Updater check
+        const updatedCookies = mk.getCookies();
+        if (updatedCookies && updatedCookies !== db.mkCookies) {
+            db.mkCookies = updatedCookies;
+            saveDB();
+        }
+
         if (Array.isArray(records)) {
             records.forEach(rec => {
                 let rawNum = String(rec.phone_number || rec.number || "");
@@ -916,4 +904,4 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 1000);
+}, 2500);
