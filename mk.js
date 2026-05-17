@@ -7,11 +7,6 @@ function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// 🟢 Auto Cookie Tracker function
-function getCookies() {
-    return COOKIES;
-}
-
 function makeRequest(method, path, body, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const headers = {
@@ -29,18 +24,6 @@ function makeRequest(method, path, body, extraHeaders = {}) {
         }
 
         const req = https.request(BASE_URL + path, { method, headers }, res => {
-            // 🟢 Auto Cookie Saver Logic: Server notun cookie dile auto update korbe
-            if (res.headers["set-cookie"]) {
-                let currentCookies = COOKIES ? COOKIES.split("; ") : [];
-                res.headers["set-cookie"].forEach(c => {
-                    let cookiePair = c.split(";")[0];
-                    let cookieName = cookiePair.split("=")[0];
-                    currentCookies = currentCookies.filter(existing => !existing.startsWith(cookieName + "="));
-                    currentCookies.push(cookiePair);
-                });
-                COOKIES = currentCookies.join("; ");
-            }
-
             let chunks = [];
             res.on("data", d => chunks.push(d));
             res.on("end", () => {
@@ -118,4 +101,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { setCookies, getCookies, verifyCookies, getNumber, checkInfo };
+module.exports = { setCookies, verifyCookies, getNumber, checkInfo };
