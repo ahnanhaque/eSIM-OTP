@@ -792,15 +792,21 @@ function processFoundOTP(number, time, message, range) {
   else if(platCode === 'ig') platName = "Instagram";
   else if(platCode === 'wa') platName = "WhatsApp";
 
+  // 🟢 Group Message formatting with Markdown Blockquote
   let groupReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n🌐 **Platform:** ${platName}\n📞 **Number:** \`${maskedGroupNumber}\`\n💌 **Full SMS:**\n> ${message}`;
+  
   let groupMarkup = { inline_keyboard: [] };
-  if (otpCode) { groupMarkup.inline_keyboard.push([{ text: `OTP`, copy_text: { text: otpCode } }]); }
+  if (otpCode) {
+      groupMarkup.inline_keyboard.push([{ text: `OTP`, copy_text: { text: otpCode } }]);
+  }
   groupMarkup.inline_keyboard.push([{ text: "☎️ Get Number", url: `https://t.me/${botInfo.username || "eSIM_OTP_Bot"}` }]);
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
+  // 🟢 User Inbox Message formatting with Markdown Blockquote
   if (reqData) {
     const reqInfo = getCountryInfo(reqData.country);
     let userReplyText = `☁️ **eSIM OTP** ☁️\n✅ **New OTP Received!**\n🌍 **Country:** ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n\n🌐 **Platform:** ${platName}\n📞 **Number:** \`${number}\`\n💌 **Full SMS:**\n> ${message}`;
+    
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `OTP`, copy_text: { text: otpCode } }]);
     
@@ -866,7 +872,7 @@ setInterval(async () => {
     } catch (e) {}
 }, 2500); 
 
-// MK SMS Background Polling Logic (with Auto Cookie Updater)
+// MK SMS Background Polling Logic
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
@@ -878,13 +884,6 @@ setInterval(async () => {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
         
-        // Auto Cookie Updater check
-        const updatedCookies = mk.getCookies();
-        if (updatedCookies && updatedCookies !== db.mkCookies) {
-            db.mkCookies = updatedCookies;
-            saveDB();
-        }
-
         if (Array.isArray(records)) {
             records.forEach(rec => {
                 let rawNum = String(rec.phone_number || rec.number || "");
@@ -904,4 +903,4 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 2500);
+}, 2500); 
