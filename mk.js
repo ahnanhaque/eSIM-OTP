@@ -7,10 +7,15 @@ function setCookies(cookies) {
     COOKIES = cookies;
 }
 
+// 🟢 Auto Cookie Tracker function
+function getCookies() {
+    return COOKIES;
+}
+
 function makeRequest(method, path, body, extraHeaders = {}) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "*/*",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
             "cookie": COOKIES || "",
             ...extraHeaders
@@ -24,6 +29,18 @@ function makeRequest(method, path, body, extraHeaders = {}) {
         }
 
         const req = https.request(BASE_URL + path, { method, headers }, res => {
+            // 🟢 Auto Cookie Saver Logic: Server notun cookie dile auto update korbe
+            if (res.headers["set-cookie"]) {
+                let currentCookies = COOKIES ? COOKIES.split("; ") : [];
+                res.headers["set-cookie"].forEach(c => {
+                    let cookiePair = c.split(";")[0];
+                    let cookieName = cookiePair.split("=")[0];
+                    currentCookies = currentCookies.filter(existing => !existing.startsWith(cookieName + "="));
+                    currentCookies.push(cookiePair);
+                });
+                COOKIES = currentCookies.join("; ");
+            }
+
             let chunks = [];
             res.on("data", d => chunks.push(d));
             res.on("end", () => {
@@ -42,17 +59,24 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 MK SMS Cookie Verification
 async function verifyCookies(cookieStr) {
-    setCookies(cookieStr);
-    const res = await makeRequest("GET", "/getnum_test.php", null, {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
-    });
-    
-    if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
-        throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember from your browser.");
+    const oldCookies = COOKIES;
+    COOKIES = cookieStr;
+    try {
+        const res = await makeRequest("GET", "/getnum_test.php");
+        if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
+            COOKIES = oldCookies;
+            throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember.");
+        }
+        if (res.data && typeof res.data === 'string' && !res.data.includes('get_number')) {
+            COOKIES = oldCookies;
+            throw new Error("Dashboard load failed. Please ensure your account is active.");
+        }
+        return true; 
+    } catch (err) {
+        COOKIES = oldCookies;
+        throw err;
     }
-    return true; 
 }
 
 async function getNumber(range) {
@@ -94,4 +118,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { setCookies, verifyCookies, getNumber, checkInfo };
+module.exports = { setCookies, getCookies, verifyCookies, getNumber, checkInfo };
