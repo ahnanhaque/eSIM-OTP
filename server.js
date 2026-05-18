@@ -182,7 +182,6 @@ bot.on('message', async (msg) => {
   if (!text || text.startsWith('/')) return;
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-  // 🟢 Temp mail e kono validation thakbena, tai eta chara bakigulote isUserMember check hobe
   const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
   if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
       return sendJoinPrompt(chatId);
@@ -192,7 +191,6 @@ bot.on('message', async (msg) => {
 
   if (text === "☎️ Get Number") { 
     clearPendingForChat(chatId); 
-    // Get number e click korle aager number delete hobe na, assign e gele hobe
     bot.sendMessage(chatId, `🛠 Please select the platform you want to receive an OTP for:`, { reply_markup: platformMenu }).catch(()=>{}); 
   } 
   else if (text === "📧 Temp Mail") {
@@ -353,25 +351,25 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
+  // 🟢 Updated to ask for Email|Password instead of Cookies
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
-         bot.sendMessage(chatId, "⏳ Verifying MK SMS Cookies on the server...").catch(()=>{});
-         const cookieStr = `mk_lang=en; PHPSESSID=${parts[0].trim()}; mk_remember=${parts[1].trim()}`;
-         
-         mk.verifyCookies(cookieStr).then(() => {
+         bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
+         mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
              db.mkCookies = cookieStr; 
              saveDB();
-             bot.sendMessage(chatId, "✅ **MK SMS Cookies Verified & Saved Successfully!**\nYou can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
+             bot.sendMessage(chatId, "✅ **MK SMS Login Successful!**\nCookies are auto-saved. You can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
          }).catch(e => {
              bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
          });
 
       } else { 
-         bot.sendMessage(chatId, "❌ Invalid format. Use `PHPSESSID|mk_remember`").catch(()=>{}); 
+         bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); 
       }
       delete userStates[chatId];
   }
+  
   else if (userStates[chatId] === "WAITING_FOR_MK_RANGE" && isAdmin(chatId, username)) {
       const range = text.trim();
       const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -426,9 +424,10 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 Updated MK SMS prompt to ask for Email|Password
   else if (data === "placeholder_mk_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
-      bot.sendMessage(chatId, "📧 **Send MK cookies format:**\n`PHPSESSID|mk_remember`\n_(Get these from your browser's Developer Tools)_", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.sendMessage(chatId, "📧 **Send MK SMS credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
 
@@ -461,7 +460,6 @@ bot.on('callback_query', async (query) => {
 
     if (btns.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers/ranges to remove.", show_alert: true });
     
-    // 🟢 Single Unified Remove All Button
     btns.push([{ text: "🗑️ REMOVE ALL", callback_data: "delall_everything" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
     
@@ -535,7 +533,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Direct Add Range Prompt implementation
   else if (data === "placeholder_stex") {
     const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
     userStates[chatId] = "WAITING_FOR_STEX_RANGE";
@@ -581,7 +578,6 @@ bot.on('callback_query', async (query) => {
     stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(stexPlatformDB[r]) }));
     mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(mkPlatformDB[r]) }));
 
-    // 🟢 Alphabetical Sort based on Country Name
     combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
     let globalCountryCount = {};
@@ -611,7 +607,6 @@ bot.on('callback_query', async (query) => {
   else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data.startsWith("assign_")) {
-    // 🟢 Sathe sathe aager number er message delete kora (Assign e asle)
     if (activeNumberMessages[chatId]) {
         bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(()=>{});
         delete activeNumberMessages[chatId];
@@ -650,8 +645,6 @@ bot.on('callback_query', async (query) => {
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
             activeNumberMessages[chatId] = messageId; 
-            
-            // 🟢 Strikethrough for 15M Expired
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 
@@ -698,8 +691,6 @@ bot.on('callback_query', async (query) => {
         
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
             activeNumberMessages[chatId] = messageId;
-            
-            // 🟢 Strikethrough for 15M Expired
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
@@ -736,8 +727,6 @@ bot.on('callback_query', async (query) => {
     
     bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
         activeNumberMessages[chatId] = messageId;
-        
-        // 🟢 Strikethrough for 15M Expired
         setTimeout(() => {
             assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
@@ -793,7 +782,6 @@ bot.on('callback_query', async (query) => {
   else if (data.startsWith("deladmin_")) { if (!isSuperAdmin(chatId)) return; let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true }); bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] }, parse_mode: "Markdown" }).catch(()=>{}); }
 });
 
-// 🟢 Fully Styled Final OTP Message Function
 function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
@@ -805,26 +793,18 @@ function processFoundOTP(number, time, message, range) {
   let reqData = pendingRequests[number];
   let platCode = reqData ? reqData.platform : "unknown";
   let platName = platCode.toUpperCase();
-  if(platCode === 'fb') platName = "FACEBOOK";
-  else if(platCode === 'ig') platName = "INSTAGRAM";
-  else if(platCode === 'wa') platName = "WHATSAPP";
+  if(platCode === 'fb') platName = "Facebook";
+  else if(platCode === 'ig') platName = "Instagram";
+  else if(platCode === 'wa') platName = "WhatsApp";
 
-  // Group Message Format
   let groupReplyText = `☁️ eSIM OTP ☁️\n🔥 New OTP Received✉️\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
-  
   let groupMarkup = { inline_keyboard: [] };
-  if (otpCode) {
-      groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-  }
+  if (otpCode) { groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]); }
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
-  // User Inbox Format
   if (reqData) {
     const reqInfo = getCountryInfo(reqData.country);
-    
-    // 🟢 user inbox e number click to copy korar jonno (monospaced backtick) kora holo
     let userReplyText = `☁️ eSIM OTP ☁️\n🔥 New OTP Received✉️\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
-    
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
     
