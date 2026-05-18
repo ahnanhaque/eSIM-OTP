@@ -327,7 +327,6 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 
-  // 🟢 Manual Login info save for Stex
   else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -354,7 +353,6 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
-  // 🟢 Manual Login info save for MK
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -422,13 +420,12 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Saved Quick Login logic for Stex
   else if (data === "stex_login") {
       if (db.stexCreds && db.stexCreds.email) {
           bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
               inline_keyboard: [
                   [{ text: `👤 ${db.stexCreds.email}`, callback_data: "stex_quick_login" }],
-                  [{ text: "Add Account", callback_data: "stex_manual_login" }],
+                  [{ text: "➕ Another account", callback_data: "stex_manual_login" }],
                   [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
               ]
           }}).catch(()=>{});
@@ -452,13 +449,12 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Saved Quick Login logic for MK
   else if (data === "placeholder_mk_login") {
       if (db.mkCreds && db.mkCreds.email) {
           bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
               inline_keyboard: [
                   [{ text: `👤 ${db.mkCreds.email}`, callback_data: "mk_quick_login" }],
-                  [{ text: "➕ Add Account", callback_data: "mk_manual_login" }],
+                  [{ text: "➕ Another account", callback_data: "mk_manual_login" }],
                   [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
               ]
           }}).catch(()=>{});
@@ -477,7 +473,7 @@ bot.on('callback_query', async (query) => {
       bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
       mk.login(db.mkCreds.email, db.mkCreds.password).then(cookieStr => {
           db.mkCookies = cookieStr; saveDB();
-          bot.sendMessage(chatId, "✅MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
+          bot.sendMessage(chatId, "✅ MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
       }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}));
       bot.answerCallbackQuery(query.id);
   }
@@ -658,10 +654,12 @@ bot.on('callback_query', async (query) => {
   else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`Please select the platform:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data.startsWith("assign_")) {
-    if (activeNumberMessages[chatId]) {
+    
+    // 🟢 Update: Next/Change e click korle message delete hobe na, assign e asle hobe
+    if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId) {
         bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(()=>{});
-        delete activeNumberMessages[chatId];
     }
+    delete activeNumberMessages[chatId];
     
     const pureData = data.replace("assign_next_", "").replace("assign_", ""); 
     const firstUnderscore = pureData.indexOf('_');
@@ -671,7 +669,7 @@ bot.on('callback_query', async (query) => {
     clearPendingForChat(chatId);
     
     if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
-        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); // 🟢 Hidden Panel Name
+        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); 
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
         bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
@@ -686,7 +684,7 @@ bot.on('callback_query', async (query) => {
             } catch (e) { break; }
         }
 
-        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); // 🟢 Hidden Panel Name
+        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
 
         const info = getCountryInfo(db.stexRanges[platform][sel]);
         let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
@@ -713,7 +711,7 @@ bot.on('callback_query', async (query) => {
     }
 
     if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
-        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); // 🟢 Hidden Panel Name
+        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); 
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
         bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
@@ -732,7 +730,7 @@ bot.on('callback_query', async (query) => {
             } catch (e) { break; }
         }
 
-        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); // 🟢 Hidden Panel Name
+        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
 
         const info = getCountryInfo(db.mkRanges[platform][sel]);
         let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
@@ -957,4 +955,4 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 2500);
+}, 2500); 
