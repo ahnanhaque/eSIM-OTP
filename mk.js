@@ -42,6 +42,32 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
+// 🟢 Auto Login Function for MK SMS
+async function login(email, password) {
+    const body = new URLSearchParams({
+        login_id: email,
+        password: password
+    }).toString();
+
+    const res = await makeRequest("POST", "/login.php", body, {
+        "content-type": "application/x-www-form-urlencoded",
+        "referer": "https://mknetworkbd.com/login.php"
+    });
+
+    if (res.headers && res.headers["set-cookie"]) {
+        let extractedCookies = [];
+        res.headers["set-cookie"].forEach(c => {
+            extractedCookies.push(c.split(";")[0]);
+        });
+        COOKIES = extractedCookies.join("; ");
+        
+        if (COOKIES.includes("mk_remember") || COOKIES.includes("PHPSESSID")) {
+            return COOKIES;
+        }
+    }
+    throw new Error("Login failed. Please check your email and password.");
+}
+
 async function verifyCookies(cookieStr) {
     const oldCookies = COOKIES;
     COOKIES = cookieStr;
@@ -101,4 +127,4 @@ async function checkInfo(date) {
     return [];
 }
 
-module.exports = { setCookies, verifyCookies, getNumber, checkInfo };
+module.exports = { setCookies, verifyCookies, getNumber, checkInfo, login };
