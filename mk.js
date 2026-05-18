@@ -42,8 +42,17 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 Auto Login Function for MK SMS
+// 🟢 Auto Login Function for MK SMS (2-Step Process)
 async function login(email, password) {
+    // Step 1: GET request to grab initial PHPSESSID
+    const getRes = await makeRequest("GET", "/login.php");
+    if (getRes.headers && getRes.headers["set-cookie"]) {
+        let initialCookies = [];
+        getRes.headers["set-cookie"].forEach(c => initialCookies.push(c.split(";")[0]));
+        COOKIES = initialCookies.join("; ");
+    }
+
+    // Step 2: POST request to submit login credentials
     const body = new URLSearchParams({
         login_id: email,
         password: password
@@ -54,17 +63,24 @@ async function login(email, password) {
         "referer": "https://mknetworkbd.com/login.php"
     });
 
+    // Step 3: Update cookies if server sends new ones (like mk_remember)
     if (res.headers && res.headers["set-cookie"]) {
-        let extractedCookies = [];
+        let extractedCookies = COOKIES ? COOKIES.split("; ") : [];
         res.headers["set-cookie"].forEach(c => {
-            extractedCookies.push(c.split(";")[0]);
+            let cookiePair = c.split(";")[0];
+            let cookieName = cookiePair.split("=")[0];
+            // Remove old cookie with same name
+            extractedCookies = extractedCookies.filter(existing => !existing.startsWith(cookieName + "="));
+            extractedCookies.push(cookiePair);
         });
         COOKIES = extractedCookies.join("; ");
-        
-        if (COOKIES.includes("mk_remember") || COOKIES.includes("PHPSESSID")) {
-            return COOKIES;
-        }
     }
+    
+    // A successful login in PHP redirects (302) to the dashboard or sets mk_remember
+    if (res.status === 302 || COOKIES.includes("mk_remember") || (res.headers && res.headers.location)) {
+        return COOKIES;
+    }
+
     throw new Error("Login failed. Please check your email and password.");
 }
 
