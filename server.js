@@ -478,7 +478,7 @@ bot.on('callback_query', async (query) => {
       mk.login(db.mkCreds.email, db.mkCreds.password).then(cookieStr => {
           db.mkCookies = cookieStr; saveDB();
           bot.sendMessage(chatId, "✅ **MK SMS Login Successful!**\nCookies are auto-saved. You can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
-      }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}););
+      }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}));
       bot.answerCallbackQuery(query.id);
   }
 
