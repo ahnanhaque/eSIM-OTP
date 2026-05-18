@@ -37,10 +37,10 @@ bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { comma
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
 
-const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String, mkRanges: Object, mkCookies: String }, { strict: false });
+const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String, mkRanges: Object, mkCookies: String, stexCreds: Object, mkCreds: Object }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "" };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "", stexCreds: null, mkCreds: null };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 let activeNumberMessages = {}; 
@@ -327,12 +327,15 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 
+  // 🟢 Manual Login info save for Stex
   else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
          bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(()=>{});
          stex.login(parts[0].trim(), parts[1].trim()).then(token => {
-             db.stexToken = token; saveDB();
+             db.stexToken = token;
+             db.stexCreds = { email: parts[0].trim(), password: parts[1].trim() };
+             saveDB();
              bot.sendMessage(chatId, "✅ Stex Login Successful! Token is saved.").catch(()=>{});
          }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
       } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
@@ -351,13 +354,14 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
-  // 🟢 Updated to ask for Email|Password instead of Cookies
+  // 🟢 Manual Login info save for MK
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
          bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
          mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
              db.mkCookies = cookieStr; 
+             db.mkCreds = { email: parts[0].trim(), password: parts[1].trim() };
              saveDB();
              bot.sendMessage(chatId, "✅ **MK SMS Login Successful!**\nCookies are auto-saved. You can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
          }).catch(e => {
@@ -418,16 +422,63 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 Saved Quick Login logic for Stex
   else if (data === "stex_login") {
+      if (db.stexCreds && db.stexCreds.email) {
+          bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
+              inline_keyboard: [
+                  [{ text: `👤 ${db.stexCreds.email}`, callback_data: "stex_quick_login" }],
+                  [{ text: "➕ Another account", callback_data: "stex_manual_login" }],
+                  [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
+              ]
+          }}).catch(()=>{});
+      } else {
+          userStates[chatId] = "WAITING_FOR_STEX_CREDS";
+          bot.sendMessage(chatId, "📧 **Send Stex credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      }
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "stex_manual_login") {
       userStates[chatId] = "WAITING_FOR_STEX_CREDS";
       bot.sendMessage(chatId, "📧 **Send Stex credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
+  else if (data === "stex_quick_login") {
+      bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(()=>{});
+      stex.login(db.stexCreds.email, db.stexCreds.password).then(token => {
+          db.stexToken = token; saveDB();
+          bot.sendMessage(chatId, "✅ Stex Login Successful! Token is saved.").catch(()=>{});
+      }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
+      bot.answerCallbackQuery(query.id);
+  }
 
-  // 🟢 Updated MK SMS prompt to ask for Email|Password
+  // 🟢 Saved Quick Login logic for MK
   else if (data === "placeholder_mk_login") {
+      if (db.mkCreds && db.mkCreds.email) {
+          bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
+              inline_keyboard: [
+                  [{ text: `👤 ${db.mkCreds.email}`, callback_data: "mk_quick_login" }],
+                  [{ text: "➕ Another account", callback_data: "mk_manual_login" }],
+                  [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
+              ]
+          }}).catch(()=>{});
+      } else {
+          userStates[chatId] = "WAITING_FOR_MK_CREDS";
+          bot.sendMessage(chatId, "📧 **Send MK SMS credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      }
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "mk_manual_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
       bot.sendMessage(chatId, "📧 **Send MK SMS credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "mk_quick_login") {
+      bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
+      mk.login(db.mkCreds.email, db.mkCreds.password).then(cookieStr => {
+          db.mkCookies = cookieStr; saveDB();
+          bot.sendMessage(chatId, "✅ **MK SMS Login Successful!**\nCookies are auto-saved. You can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
+      }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}););
       bot.answerCallbackQuery(query.id);
   }
 
@@ -620,10 +671,10 @@ bot.on('callback_query', async (query) => {
     clearPendingForChat(chatId);
     
     if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
-        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from Stex...", show_alert: false });
+        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); // 🟢 Hidden Panel Name
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
-        bot.editMessageText(`⏳ **Fetching ${limit} numbers from Stex...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+        bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
         for(let i=0; i<limit; i++) {
             try {
@@ -635,7 +686,7 @@ bot.on('callback_query', async (query) => {
             } catch (e) { break; }
         }
 
-        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching from Stex.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{});
+        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); // 🟢 Hidden Panel Name
 
         const info = getCountryInfo(db.stexRanges[platform][sel]);
         let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
@@ -662,10 +713,10 @@ bot.on('callback_query', async (query) => {
     }
 
     if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
-        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers from MK...", show_alert: false });
+        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); // 🟢 Hidden Panel Name
         const limit = db.settings.maxNumbers || 4;
         let fetchedNums = [];
-        bot.editMessageText(`⏳ **Fetching ${limit} numbers from MK SMS...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+        bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
         if (db.mkCookies) mk.setCookies(db.mkCookies); 
 
@@ -681,7 +732,7 @@ bot.on('callback_query', async (query) => {
             } catch (e) { break; }
         }
 
-        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching from MK.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{});
+        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); // 🟢 Hidden Panel Name
 
         const info = getCountryInfo(db.mkRanges[platform][sel]);
         let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
@@ -793,18 +844,23 @@ function processFoundOTP(number, time, message, range) {
   let reqData = pendingRequests[number];
   let platCode = reqData ? reqData.platform : "unknown";
   let platName = platCode.toUpperCase();
-  if(platCode === 'fb') platName = "Facebook";
-  else if(platCode === 'ig') platName = "Instagram";
-  else if(platCode === 'wa') platName = "WhatsApp";
+  if(platCode === 'fb') platName = "FACEBOOK";
+  else if(platCode === 'ig') platName = "INSTAGRAM";
+  else if(platCode === 'wa') platName = "WHATSAPP";
 
   let groupReplyText = `☁️ eSIM OTP ☁️\n🔥 New OTP Received✉️\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
+  
   let groupMarkup = { inline_keyboard: [] };
-  if (otpCode) { groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]); }
+  if (otpCode) {
+      groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
+  }
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
   if (reqData) {
     const reqInfo = getCountryInfo(reqData.country);
+    
     let userReplyText = `☁️ eSIM OTP ☁️\n🔥 New OTP Received✉️\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
+    
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
     
@@ -838,6 +894,8 @@ mongoose.connect(MONGODB_URI).then(async () => {
           db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
       }
       if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
+      if (!db.stexCreds) db.stexCreds = null;
+      if (!db.mkCreds) db.mkCreds = null;
   } else {
       await BotDB.create(db);
   }
@@ -848,7 +906,6 @@ mongoose.connect(MONGODB_URI).then(async () => {
   isDbLoaded = true; app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
 }).catch(err => console.log(err));
 
-// Stex Background Polling
 setInterval(async () => {
     if (!db.stexToken) return;
     const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
@@ -870,7 +927,6 @@ setInterval(async () => {
     } catch (e) {}
 }, 2500); 
 
-// MK SMS Background Polling Logic
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
