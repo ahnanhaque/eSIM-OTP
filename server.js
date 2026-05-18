@@ -276,7 +276,7 @@ bot.on('message', async (msg) => {
       } catch (err) { bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid format.", { parse_mode: "Markdown" }).catch(()=>{}); }
       delete userStates[chatId]; 
   }
-  else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin for any assistance. (@Excellentzqlt)", { parse_mode: "Markdown" }).catch(()=>{});
+  else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin @ahnan_haque_mahi for any assistance.", { parse_mode: "Markdown" }).catch(()=>{});
   else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); }
   else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
     const limit = parseInt(text);
@@ -363,7 +363,7 @@ bot.on('message', async (msg) => {
              db.mkCookies = cookieStr; 
              db.mkCreds = { email: parts[0].trim(), password: parts[1].trim() };
              saveDB();
-             bot.sendMessage(chatId, "✅ **MK SMS Login Successful!**\nCookies are auto-saved. You can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
+             bot.sendMessage(chatId, "✅ MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
          }).catch(e => {
              bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
          });
@@ -428,7 +428,7 @@ bot.on('callback_query', async (query) => {
           bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
               inline_keyboard: [
                   [{ text: `👤 ${db.stexCreds.email}`, callback_data: "stex_quick_login" }],
-                  [{ text: "➕ Another account", callback_data: "stex_manual_login" }],
+                  [{ text: "Add Account", callback_data: "stex_manual_login" }],
                   [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
               ]
           }}).catch(()=>{});
@@ -458,7 +458,7 @@ bot.on('callback_query', async (query) => {
           bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
               inline_keyboard: [
                   [{ text: `👤 ${db.mkCreds.email}`, callback_data: "mk_quick_login" }],
-                  [{ text: "➕ Another account", callback_data: "mk_manual_login" }],
+                  [{ text: "➕ Add Account", callback_data: "mk_manual_login" }],
                   [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
               ]
           }}).catch(()=>{});
@@ -477,7 +477,7 @@ bot.on('callback_query', async (query) => {
       bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
       mk.login(db.mkCreds.email, db.mkCreds.password).then(cookieStr => {
           db.mkCookies = cookieStr; saveDB();
-          bot.sendMessage(chatId, "✅ **MK SMS Login Successful!**\nCookies are auto-saved. You can now fetch numbers smoothly.", {parse_mode: "Markdown"}).catch(()=>{});
+          bot.sendMessage(chatId, "✅MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
       }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}));
       bot.answerCallbackQuery(query.id);
   }
@@ -580,7 +580,7 @@ bot.on('callback_query', async (query) => {
 
   else if (data.startsWith("admin_sel_plat_")) {
     tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split('_')[3] };
-    bot.editMessageText(`🛠 **Managing ${data.split('_')[3].toUpperCase()} Panel:**`, { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
+    bot.editMessageText(`🛠 Manage ${data.split('_')[3].toUpperCase()} Panel:`, { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
 
@@ -655,7 +655,7 @@ bot.on('callback_query', async (query) => {
     countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
     bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }).catch(()=>{}); bot.answerCallbackQuery(query.id);
   }
-  else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`🛠 Please select the platform you want to receive an OTP for:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
+  else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`Please select the platform:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data.startsWith("assign_")) {
     if (activeNumberMessages[chatId]) {
@@ -689,7 +689,7 @@ bot.on('callback_query', async (query) => {
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); // 🟢 Hidden Panel Name
 
         const info = getCountryInfo(db.stexRanges[platform][sel]);
-        let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
+        let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
         let actionMenu = { inline_keyboard: [] };
         fetchedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
         actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
@@ -699,7 +699,7 @@ bot.on('callback_query', async (query) => {
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 
-                let expiredText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
 
                 let expiredMenu = { inline_keyboard: [
@@ -745,7 +745,7 @@ bot.on('callback_query', async (query) => {
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
-                let expiredText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
 
                 let expiredMenu = { inline_keyboard: [
@@ -770,7 +770,7 @@ bot.on('callback_query', async (query) => {
     });
 
     const info = getCountryInfo(sel);
-    let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n👇 _Click a number below to copy:_`;
+    let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n👇 _Click a number below to copy:_`;
     let actionMenu = { inline_keyboard: [] };
     assignedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
     actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }]);
@@ -781,7 +781,7 @@ bot.on('callback_query', async (query) => {
         setTimeout(() => {
             assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
-            let expiredText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+            let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
             assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
 
             let expiredMenu = { inline_keyboard: [
@@ -848,7 +848,7 @@ function processFoundOTP(number, time, message, range) {
   else if(platCode === 'ig') platName = "INSTAGRAM";
   else if(platCode === 'wa') platName = "WHATSAPP";
 
-  let groupReplyText = `☁️ eSIM OTP ☁️\n🔥 New OTP Received✉️\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
+  let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
   
   let groupMarkup = { inline_keyboard: [] };
   if (otpCode) {
@@ -859,7 +859,7 @@ function processFoundOTP(number, time, message, range) {
   if (reqData) {
     const reqInfo = getCountryInfo(reqData.country);
     
-    let userReplyText = `☁️ eSIM OTP ☁️\n🔥 New OTP Received✉️\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
+    let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
     
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
