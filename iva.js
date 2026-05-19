@@ -1,11 +1,4 @@
-const { HttpClient } = require("tls-client");
-
-// Initialize client with custom browser identifier to mimic a real browser fingerprint
-const client = new HttpClient({
-    clientIdentifier: "chrome_120",
-    followRedirects: true,
-    timeout: 15000
-});
+const { gotScraping } = require('got-scraping');
 
 let COOKIES = "";
 
@@ -13,59 +6,49 @@ function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// 🟢 Auto Login Function for iVAS using tls-client (Cloudflare Bypass)
+// 🟢 Auto Login Function for iVAS (Cloudflare Bypass using got-scraping)
 async function login(email, password) {
-    let tempCookies = ""; 
     try {
-        // Step 1: GET request to get initial sessions
-        const getRes = await client.get("https://ivasms.com/login.php", {
+        const response = await gotScraping({
+            url: "https://ivasms.com/login.php",
+            method: "POST",
+            form: {
+                login_id: email,
+                password: password
+            },
             headers: {
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-        });
-
-        // Step 2: POST request to submit login credentials
-        const body = new URLSearchParams({
-            login_id: email,
-            password: password
-        }).toString();
-
-        const res = await client.post("https://ivasms.com/login.php", body, {
-            headers: {
-                "content-type": "application/x-www-form-urlencoded",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "referer": "https://ivasms.com/login.php"
             }
         });
 
-        if (res.headers && res.headers["set-cookie"]) {
+        // কুকি এক্সট্র্যাক্ট করা
+        let tempCookies = "";
+        const setCookieHeader = response.headers['set-cookie'];
+        if (setCookieHeader) {
             let extracted = [];
-            let cookiesHeader = res.headers["set-cookie"];
-            if (Array.isArray(cookiesHeader)) {
-                cookiesHeader.forEach(c => extracted.push(c.split(";")[0]));
+            if (Array.isArray(setCookieHeader)) {
+                setCookieHeader.forEach(c => extracted.push(c.split(";")[0]));
             } else {
-                extracted.push(cookiesHeader.split(";")[0]);
+                extracted.push(setCookieHeader.split(";")[0]);
             }
             tempCookies = extracted.join("; ");
-        } else if (res.cookies) {
-            tempCookies = res.cookies.map(c => `${c.name}=${c.value}`).join("; ");
         }
 
-        if (res.status === 302 || tempCookies.includes("remember") || res.status === 200) {
+        if (response.statusCode === 302 || tempCookies.includes("remember") || response.statusCode === 200) {
             COOKIES = tempCookies;
             return COOKIES;
         }
-        throw new Error("Invalid credentials or Cloudflare block");
+        throw new Error("Invalid credentials or Cloudflare blocked the login.");
     } catch (err) {
         throw new Error(err.message || "iVAS Login Failed");
     }
 }
 
-// 🟢 Get Number Function using tls-client
+// 🟢 Get Number Function (Cloudflare Bypass)
 async function getNumber(range) {
     try {
         const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
-        const body = [
+        const bodyStr = [
             `--${boundary}`,
             `Content-Disposition: form-data; name="action"`,
             ``,
@@ -78,21 +61,31 @@ async function getNumber(range) {
             ``
         ].join("\r\n");
 
-        const res = await client.post("https://ivasms.com/API/api_handler.php", body, {
+        const response = await gotScraping({
+            url: "https://ivasms.com/API/api_handler.php",
+            method: "POST",
+            body: bodyStr,
             headers: {
                 "content-type": `multipart/form-data; boundary=${boundary}`,
-                "cookie": COOKIES || "",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "cookie": COOKIES || ""
             }
         });
 
-        if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
+        let resData;
+        try {
+            resData = JSON.parse(response.body);
+        } catch {
+            resData = response.body; // JSON না হলে HTML হিসেবে ধরবে
+        }
+
+        // 🔴 সেশন এক্সপায়ার বা ক্লাউডফ্লেয়ার ব্লক ডিটেকশন
+        if (response.statusCode === 302 || (typeof resData === 'string' && resData.includes('login_id'))) {
             throw new Error("SESSION_EXPIRED");
         }
-        if (res.data && res.data.status === "success" && res.data.number) {
-            return res.data;
+        if (resData && resData.status === "success" && resData.number) {
+            return resData;
         }
-        throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
+        throw new Error((resData && resData.message) ? resData.message : "SESSION_EXPIRED");
     } catch (err) {
         if (err.message === "SESSION_EXPIRED") throw err;
         throw new Error("SESSION_EXPIRED");
