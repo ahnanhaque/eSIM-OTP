@@ -81,8 +81,6 @@ const countryPrefixes = {
     "1": "USA", "7": "RUSSIA", "20": "EGYPT", "27": "SOUTH AFRICA", "30": "GREECE", "31": "NETHERLANDS", "32": "BELGIUM", "33": "FRANCE", "34": "SPAIN", "36": "HUNGARY", "39": "ITALY", "40": "ROMANIA", "43": "AUSTRIA", "44": "UK", "45": "DENMARK", "46": "SWEDEN", "47": "NORWAY", "48": "POLAND", "49": "GERMANY", "51": "PERU", "52": "MEXICO", "53": "CUBA", "54": "ARGENTINA", "55": "BRAZIL", "56": "CHILE", "57": "COLOMBIA", "58": "VENEZUELA", "60": "MALAYSIA", "61": "AUSTRALIA", "62": "INDONESIA", "63": "PHILIPPINES", "64": "NEW ZEALAND", "65": "SINGAPORE", "66": "THAILAND", "81": "JAPAN", "82": "SOUTH KOREA", "84": "VIETNAM", "86": "CHINA", "90": "TURKEY", "91": "INDIA", "92": "PAKISTAN", "93": "AFGHANISTAN", "94": "SRI LANKA", "95": "MYANMAR", "98": "IRAN", "211": "SOUTH SUDAN", "212": "MOROCCO", "213": "ALGERIA", "216": "TUNISIA", "218": "LIBYA", "220": "GAMBIA", "221": "SENEGAL", "222": "MAURITANIA", "223": "MALI", "224": "GUINEA", "225": "IVORY COAST", "226": "BURKINA FASO", "227": "NIGER", "228": "TOGO", "229": "BENIN", "230": "MAURITIUS", "231": "LIBERIA", "232": "SIERRA LEONE", "233": "GHANA", "234": "NIGERIA", "235": "CHAD", "236": "CENTRAL AFRICA", "237": "CAMEROON", "238": "CAPE VERDE", "239": "SAO TOME", "240": "EQUATORIAL GUINEA", "241": "GABON", "242": "CONGO", "243": "DR CONGO", "244": "ANGOLA", "245": "GUINEA BISSAU", "246": "DIEGO GARCIA", "248": "SEYCHELLES", "249": "SUDAN", "250": "RWANDA", "251": "ETHIOPIA", "252": "SOMALIA", "253": "DJIBOUTI", "254": "KENYA", "255": "TANZANIA", "256": "UGANDA", "257": "BURUNDI", "258": "MOZAMBIQUE", "260": "ZAMBIA", "261": "MADAGASCAR", "262": "REUNION", "263": "ZIMBABWE", "264": "NAMIBIA", "265": "MALAWI", "266": "LESOTHO", "267": "BOTSWANA", "268": "ESWATINI", "269": "COMOROS", "351": "PORTUGAL", "352": "LUXEMBOURG", "353": "IRELAND", "354": "ICELAND", "355": "ALBANIA", "356": "MALTA", "357": "CYPRUS", "358": "FINLAND", "359": "BULGARIA", "370": "LITHUANIA", "371": "LATVIA", "372": "ESTONIA", "373": "MOLDOVA", "374": "ARMENIA", "375": "BELARUS", "376": "ANDORRA", "377": "MONACO", "378": "SAN MARINO", "380": "UKRAINE", "381": "SERBIA", "382": "MONTENEGRO", "385": "CROATIA", "386": "SLOVENIA", "387": "BOSNIA", "389": "MACEDONIA", "852": "HONG KONG", "853": "MACAU", "855": "CAMBODIA", "856": "LAOS", "880": "BANGLADESH", "960": "MALDIVES", "961": "LEBANON", "962": "JORDAN", "963": "SYRIA", "964": "IRAQ", "965": "KUWAIT", "966": "SAUDI ARABIA", "967": "YEMEN", "968": "OMAN", "971": "UAE", "972": "ISRAEL", "973": "BAHRAIN", "974": "QATAR", "975": "BHUTAN", "976": "MONGOLIA", "977": "NEPAL", "992": "TAJIKISTAN", "993": "TURKMENISTAN", "994": "AZERBAIJAN", "995": "GEORGIA", "996": "KYRGYZSTAN", "998": "UZBEKISTAN"
 };
 
-const countryData = { "SIERRA LEONE": { flag: "🇸🇱" }, "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "TOGO": { flag: "🇹🇬" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
-
 function detectCountryFromRange(range) {
     let cleanRange = range.replace(/\D/g, ''); 
     for (let i = 4; i >= 1; i--) {
@@ -327,7 +325,6 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 
-  // 🟢 Login creds wait logic with multiple account saving
   else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -439,7 +436,6 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Stex Multi-Login Menu
   else if (data === "stex_login") {
       let btns = [];
       if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
@@ -522,7 +518,6 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 MK Multi-Login Menu
   else if (data === "placeholder_mk_login") {
       let btns = [];
       if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
@@ -807,7 +802,31 @@ bot.on('callback_query', async (query) => {
                 fetchedNums.push(n);
                 inUseNumbers[n] = true;
                 pendingRequests[n] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true, platform: platform };
-            } catch (e) { break; }
+            } catch (e) { 
+                console.log(`[STEX Fetch Error - Attempt ${i+1}]:`, e.message); 
+                if (i === 0 && e.message.includes("SESSION_EXPIRED") && db.stexCreds && db.stexCreds.email) {
+                    try {
+                        console.log(`[STEX On-Demand Auto-Login]: Trying re-login for ${db.stexCreds.email}`);
+                        const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
+                        db.stexToken = token;
+                        stex.setAuthToken(token);
+                        saveDB();
+                        
+                        const retryData = await stex.getNumber(sel);
+                        const retryN = retryData.full_number || retryData.number.replace('+', '');
+                        if(retryN) {
+                            fetchedNums.push(retryN);
+                            inUseNumbers[retryN] = true;
+                            pendingRequests[retryN] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true, platform: platform };
+                            continue;
+                        }
+                    } catch (err2) { 
+                        console.log(`[STEX On-Demand Login Failed]:`, err2.message);
+                        break; 
+                    }
+                }
+                break; 
+            }
         }
 
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
@@ -853,7 +872,32 @@ bot.on('callback_query', async (query) => {
                     inUseNumbers[n] = true;
                     pendingRequests[n] = { chatId: chatId, country: db.mkRanges[platform][sel], isMk: true, platform: platform };
                 }
-            } catch (e) { break; }
+            } catch (e) { 
+                console.log(`[MK Fetch Error - Attempt ${i+1}]:`, e.message); 
+                // 🔴 শুধু SESSION_EXPIRED হলেই অন-ডিমান্ড লগইন করবে, জেনুইন Out of stock এ করবে না!
+                if (i === 0 && e.message === "SESSION_EXPIRED" && db.mkCreds && db.mkCreds.email) {
+                    try {
+                        console.log(`[MK On-Demand Auto-Login]: Trying re-login for ${db.mkCreds.email}`);
+                        const newCookie = await mk.login(db.mkCreds.email, db.mkCreds.password);
+                        db.mkCookies = newCookie;
+                        mk.setCookies(newCookie);
+                        saveDB();
+                        
+                        const retryData = await mk.getNumber(sel);
+                        const retryN = retryData.number ? retryData.number.replace('+', '') : '';
+                        if(retryN) {
+                            fetchedNums.push(retryN);
+                            inUseNumbers[retryN] = true;
+                            pendingRequests[retryN] = { chatId: chatId, country: db.mkRanges[platform][sel], isMk: true, platform: platform };
+                            continue; 
+                        }
+                    } catch (err2) { 
+                        console.log(`[MK On-Demand Login Failed]:`, err2.message);
+                        break; 
+                    } 
+                }
+                break; 
+            }
         }
 
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
@@ -1004,7 +1048,7 @@ app.post('/api/ivas-data', (req, res) => {
 
 app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
-// 🟢 Auto Login System Logic (1.5 Hours interval)
+// 🟢 Auto Login System Logic
 async function autoLoginPanels() {
     if (!isDbLoaded) return;
     
@@ -1016,7 +1060,7 @@ async function autoLoginPanels() {
                 stex.setAuthToken(token);
                 saveDB();
             }
-        } catch (e) { }
+        } catch (e) { console.log("[Auto-Login Loop Error STEX]:", e.message); }
     }
     
     if (db.mkCreds && db.mkCreds.email) {
@@ -1027,7 +1071,7 @@ async function autoLoginPanels() {
                 mk.setCookies(cookieStr);
                 saveDB();
             }
-        } catch (e) { }
+        } catch (e) { console.log("[Auto-Login Loop Error MK]:", e.message); }
     }
 }
 
@@ -1049,7 +1093,6 @@ mongoose.connect(MONGODB_URI).then(async () => {
       if (!db.savedStexAccounts) db.savedStexAccounts = [];
       if (!db.savedMkAccounts) db.savedMkAccounts = [];
 
-      // Migrate existing single accounts to array list if empty
       if (db.stexCreds && db.stexCreds.email && db.savedStexAccounts.length === 0) {
           db.savedStexAccounts.push(db.stexCreds);
       }
@@ -1071,7 +1114,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
 }).catch(err => console.log(err));
 
-setInterval(autoLoginPanels, 1.5 * 60 * 60 * 1000);
+setInterval(autoLoginPanels, 20 * 60 * 1000); 
 
 setInterval(async () => {
     if (!db.stexToken) return;
