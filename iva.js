@@ -1,103 +1,82 @@
+const { gotScraping } = require('got-scraping');
+const cheerio = require('cheerio'); // HTML Parsing এর জন্য এটি লাগবে
+
+const BASE_URL = "https://www.ivasms.com";
 let COOKIES = "";
 
 function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// 🟢 Dynamic Import for Modern ESM Package (Fixes the Export Error)
-async function fetchGot() {
-    const mod = await import('got-scraping');
-    return mod.gotScraping;
-}
+// 🟢 Cloudflare Bypass Helper
+async function request(method, path, body = null, headers = {}, isForm = false) {
+    const options = {
+        url: BASE_URL + path,
+        method: method,
+        headers: {
+            "Cookie": COOKIES,
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            ...headers
+        },
+        throwHttpErrors: false
+    };
 
-// 🟢 Auto Login Function for iVAS (Cloudflare Bypass)
-async function login(email, password) {
-    try {
-        const gotScraping = await fetchGot(); // ডাইনামিক লোড
-        
-        const response = await gotScraping({
-            url: "https://ivasms.com/login.php",
-            method: "POST",
-            form: {
-                login_id: email,
-                password: password
-            },
-            headers: {
-                "referer": "https://ivasms.com/login.php"
-            }
-        });
-
-        // কুকি এক্সট্র্যাক্ট করা
-        let tempCookies = "";
-        const setCookieHeader = response.headers['set-cookie'];
-        if (setCookieHeader) {
-            let extracted = [];
-            if (Array.isArray(setCookieHeader)) {
-                setCookieHeader.forEach(c => extracted.push(c.split(";")[0]));
-            } else {
-                extracted.push(setCookieHeader.split(";")[0]);
-            }
-            tempCookies = extracted.join("; ");
-        }
-
-        if (response.statusCode === 302 || tempCookies.includes("remember") || response.statusCode === 200) {
-            COOKIES = tempCookies;
-            return COOKIES;
-        }
-        throw new Error("Invalid credentials or Cloudflare blocked the login.");
-    } catch (err) {
-        throw new Error(err.message || "iVAS Login Failed");
+    if (body) {
+        if (isForm) options.form = body;
+        else options.body = body;
     }
+
+    const resp = await gotScraping(options);
+    if (resp.statusCode === 401 || resp.statusCode === 419) throw new Error("SESSION_EXPIRED");
+    return resp;
 }
 
-// 🟢 Get Number Function (Cloudflare Bypass)
-async function getNumber(range) {
-    try {
-        const gotScraping = await fetchGot(); // ডাইনামিক লোড
-        
-        const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
-        const bodyStr = [
-            `--${boundary}`,
-            `Content-Disposition: form-data; name="action"`,
-            ``,
-            `get_number`,
-            `--${boundary}`,
-            `Content-Disposition: form-data; name="range"`,
-            ``,
-            `${range}`,
-            `--${boundary}--`,
-            ``
-        ].join("\r\n");
+async function fetchToken() {
+    const resp = await request("GET", "/portal");
+    const $ = cheerio.load(resp.body);
+    return $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val();
+}
 
-        const response = await gotScraping({
-            url: "https://ivasms.com/API/api_handler.php",
-            method: "POST",
-            body: bodyStr,
-            headers: {
-                "content-type": `multipart/form-data; boundary=${boundary}`,
-                "cookie": COOKIES || ""
-            }
-        });
+async function getNumbers(token) {
+    const ts = Date.now();
+    const resp = await request("GET", `/portal/numbers?draw=1&length=5000&_=${ts}`, null, { "X-CSRF-TOKEN": token });
+    const json = JSON.parse(resp.body);
+    if (!json.data) return { aaData: [] };
+    return { aaData: json.data.map(r => [r.range || "", "", String(r.Number || ""), "Weekly", ""]) };
+}
 
-        let resData;
-        try {
-            resData = JSON.parse(response.body);
-        } catch {
-            resData = response.body; // JSON না হলে HTML হিসেবে ধরবে
-        }
+// 🟢 SMS পার্সিং লজিক আগের মতোই রাখা হয়েছে
+async function getSMS(token) {
+    const today = new Date().toISOString().split('T')[0];
+    const r1 = await request("POST", "/portal/sms/received/getsms", { from: today, to: today, _token: token }, {}, true);
+    
+    const ranges = [...r1.body.matchAll(/toggleRange\('([^']+)'/g)].map(m => m[1]);
+    let allRows = [];
 
-        // 🔴 সেশন এক্সপায়ার বা ক্লাউডফ্লেয়ার ব্লক ডিটেকশন
-        if (response.statusCode === 302 || (typeof resData === 'string' && resData.includes('login_id'))) {
-            throw new Error("SESSION_EXPIRED");
+    for (const range of ranges) {
+        const r2 = await request("POST", "/portal/sms/received/getsms/number", { _token: token, start: today, end: today, range }, {}, true);
+        const numbers = [...r2.body.matchAll(/toggleNum[^(]+\('(\d+)'/g)].map(m => m[1]);
+
+        for (const number of numbers) {
+            const r3 = await request("POST", "/portal/sms/received/getsms/number/sms", { _token: token, start: today, end: today, Number: number, Range: range }, {}, true);
+            const msgs = parseSMSMessages(r3.body, range, number, today);
+            allRows.push(...msgs);
         }
-        if (resData && resData.status === "success" && resData.number) {
-            return resData;
-        }
-        throw new Error((resData && resData.message) ? resData.message : "SESSION_EXPIRED");
-    } catch (err) {
-        if (err.message === "SESSION_EXPIRED") throw err;
-        throw new Error("SESSION_EXPIRED");
     }
+    return { aaData: allRows.sort((a, b) => new Date(b[0]) - new Date(a[0])) };
 }
 
-module.exports = { setCookies, login, getNumber };
+function parseSMSMessages(html, range, number, date) {
+    const $ = cheerio.load(html);
+    let rows = [];
+    $('tr').each((i, el) => {
+        if ($(el).find('th').length) return;
+        const sender = $(el).find('.cli-tag').text().trim() || "SMS";
+        const message = $(el).find('.msg-text').text().trim();
+        const time = $(el).find('.time-cell').text().trim();
+        if (message) rows.push([`${date} ${time}`, range, number, sender, message, "$", 0]);
+    });
+    return rows;
+}
+
+module.exports = { setCookies, fetchToken, getNumbers, getSMS };
