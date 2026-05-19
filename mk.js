@@ -7,12 +7,12 @@ function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-function makeRequest(method, path, body, extraHeaders = {}) {
+function makeRequest(method, path, body, extraHeaders = {}, customCookies = null) {
     return new Promise((resolve, reject) => {
         const headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-            "cookie": COOKIES || "",
+            "cookie": customCookies !== null ? customCookies : (COOKIES || ""),
             ...extraHeaders
         };
 
@@ -42,19 +42,17 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 Auto Login Function for MK SMS (2-Step Process with Session Clear)
+// 🟢 Auto Login Function (Race Condition Fixed!)
 async function login(email, password) {
-    COOKIES = ""; // 🔴 পুরানো সেশন ক্লিয়ার করার জন্য!
+    let tempCookies = ""; // লোকাল ভেরিয়েবল ব্যবহার করা হয়েছে যেন ব্যাকগ্রাউন্ড প্রসেস ক্র্যাশ না করে
 
-    // Step 1: GET request to grab initial PHPSESSID
-    const getRes = await makeRequest("GET", "/login.php");
+    const getRes = await makeRequest("GET", "/login.php", null, {}, tempCookies);
     if (getRes.headers && getRes.headers["set-cookie"]) {
         let initialCookies = [];
         getRes.headers["set-cookie"].forEach(c => initialCookies.push(c.split(";")[0]));
-        COOKIES = initialCookies.join("; ");
+        tempCookies = initialCookies.join("; ");
     }
 
-    // Step 2: POST request to submit login credentials
     const body = new URLSearchParams({
         login_id: email,
         password: password
@@ -63,24 +61,21 @@ async function login(email, password) {
     const res = await makeRequest("POST", "/login.php", body, {
         "content-type": "application/x-www-form-urlencoded",
         "referer": "https://mknetworkbd.com/login.php"
-    });
+    }, tempCookies);
 
-    // Step 3: Update cookies if server sends new ones (like mk_remember)
     if (res.headers && res.headers["set-cookie"]) {
-        let extractedCookies = COOKIES ? COOKIES.split("; ") : [];
+        let extractedCookies = tempCookies ? tempCookies.split("; ") : [];
         res.headers["set-cookie"].forEach(c => {
             let cookiePair = c.split(";")[0];
             let cookieName = cookiePair.split("=")[0];
-            // Remove old cookie with same name
             extractedCookies = extractedCookies.filter(existing => !existing.startsWith(cookieName + "="));
             extractedCookies.push(cookiePair);
         });
-        COOKIES = extractedCookies.join("; ");
+        tempCookies = extractedCookies.join("; ");
     }
     
-    // A successful login in PHP redirects (302) to the dashboard or sets mk_remember
-    if (res.status === 302 || COOKIES.includes("mk_remember") || (res.headers && res.headers.location)) {
-        return COOKIES;
+    if (res.status === 302 || tempCookies.includes("mk_remember") || (res.headers && res.headers.location)) {
+        return tempCookies; // শুধু সাকসেস হলেই কুকি রিটার্ন করবে
     }
 
     throw new Error("Login failed. Please check your email and password.");
@@ -128,10 +123,14 @@ async function getNumber(range) {
         "origin": "https://mknetworkbd.com"
     });
     
+    // 🔴 নির্দিষ্ট এরর ডিটেকশন (যাতে শুধু এক্সপায়ার হলেই লগইন করে)
+    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
+        throw new Error("SESSION_EXPIRED");
+    }
     if (res.data && res.data.status === "success" && res.data.number) {
         return res.data;
     }
-    throw new Error((res.data && res.data.message) ? res.data.message : "Session Expired or Out of Stock.");
+    throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
 async function checkInfo(date) {
@@ -139,6 +138,10 @@ async function checkInfo(date) {
         "accept": "*/*",
         "referer": "https://mknetworkbd.com/getnum_test.php"
     });
+    
+    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
+        throw new Error("SESSION_EXPIRED");
+    }
     if (res.data && res.data.status === "success" && res.data.data) {
         return res.data.data; 
     }
