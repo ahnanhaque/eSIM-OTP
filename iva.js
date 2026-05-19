@@ -1,17 +1,23 @@
-const { gotScraping } = require('got-scraping');
-const cheerio = require('cheerio'); // HTML Parsing এর জন্য এটি লাগবে
+// iva.js
 
-const BASE_URL = "https://www.ivasms.com";
 let COOKIES = "";
 
 function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// 🟢 Cloudflare Bypass Helper
+// 🟢 Dynamic Helper to load the ESM package
+async function getGot() {
+    const { gotScraping } = await import('got-scraping');
+    return gotScraping;
+}
+
+// 🟢 Cloudflare Bypass Helper using dynamic import
 async function request(method, path, body = null, headers = {}, isForm = false) {
+    const gotScraping = await getGot(); // ডাইনামিক্যালি লোড করা
+    
     const options = {
-        url: BASE_URL + path,
+        url: "https://www.ivasms.com" + path,
         method: method,
         headers: {
             "Cookie": COOKIES,
@@ -32,8 +38,9 @@ async function request(method, path, body = null, headers = {}, isForm = false) 
 }
 
 async function fetchToken() {
+    const { load } = await import('cheerio'); // ডাইনামিক্যালি লোড করা
     const resp = await request("GET", "/portal");
-    const $ = cheerio.load(resp.body);
+    const $ = load(resp.body);
     return $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val();
 }
 
@@ -45,8 +52,8 @@ async function getNumbers(token) {
     return { aaData: json.data.map(r => [r.range || "", "", String(r.Number || ""), "Weekly", ""]) };
 }
 
-// 🟢 SMS পার্সিং লজিক আগের মতোই রাখা হয়েছে
 async function getSMS(token) {
+    const { load } = await import('cheerio'); // ডাইনামিক্যালি লোড করা
     const today = new Date().toISOString().split('T')[0];
     const r1 = await request("POST", "/portal/sms/received/getsms", { from: today, to: today, _token: token }, {}, true);
     
@@ -59,24 +66,17 @@ async function getSMS(token) {
 
         for (const number of numbers) {
             const r3 = await request("POST", "/portal/sms/received/getsms/number/sms", { _token: token, start: today, end: today, Number: number, Range: range }, {}, true);
-            const msgs = parseSMSMessages(r3.body, range, number, today);
-            allRows.push(...msgs);
+            const $ = load(r3.body);
+            $('tr').each((i, el) => {
+                if ($(el).find('th').length) return;
+                const sender = $(el).find('.cli-tag').text().trim() || "SMS";
+                const message = $(el).find('.msg-text').text().trim();
+                const time = $(el).find('.time-cell').text().trim();
+                if (message) allRows.push([`${today} ${time}`, range, number, sender, message, "$", 0]);
+            });
         }
     }
     return { aaData: allRows.sort((a, b) => new Date(b[0]) - new Date(a[0])) };
-}
-
-function parseSMSMessages(html, range, number, date) {
-    const $ = cheerio.load(html);
-    let rows = [];
-    $('tr').each((i, el) => {
-        if ($(el).find('th').length) return;
-        const sender = $(el).find('.cli-tag').text().trim() || "SMS";
-        const message = $(el).find('.msg-text').text().trim();
-        const time = $(el).find('.time-cell').text().trim();
-        if (message) rows.push([`${date} ${time}`, range, number, sender, message, "$", 0]);
-    });
-    return rows;
 }
 
 module.exports = { setCookies, fetchToken, getNumbers, getSMS };
