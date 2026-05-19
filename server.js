@@ -1115,21 +1115,35 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
 setInterval(autoLoginPanels, 20 * 60 * 1000); 
 
+// 🟢 Stex OTP Checker (Timezone Bug Fixed!)
 setInterval(async () => {
     if (!db.stexToken) return;
     const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
     if (!hasStexPending) return;
     try {
+        // 🔴 Timezone Fix: BD Time is UTC+6, Stex is 4 hours behind
         const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
+        d.setHours(d.getHours() - 4); // Stex সার্ভারের সময়ের সাথে মেলানোর জন্য ৪ ঘণ্টা মাইনাস
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+        
         const records = await stex.checkInfo(dateStr);
         if (Array.isArray(records)) {
             records.forEach(rec => {
-                let num = rec.number ? rec.number.replace('+', '') : null;
-                if (num && pendingRequests[num] && rec.status === 'success') {
-                    let msg = rec.message || rec.otp || "OTP Received";
-                    let reqData = pendingRequests[num];
-                    processFoundOTP(num, Date.now(), msg, reqData.country);
+                let num = rec.number ? String(rec.number).replace('+', '') : null;
+                if (num && pendingRequests[num]) {
+                    
+                    let status = String(rec.status || "").toLowerCase();
+                    let msg = rec.sms || rec.message || rec.otp || rec.text; 
+                    
+                    if (status === 'success' || status === 'completed' || msg) {
+                        if (msg) {
+                            msg = String(msg);
+                            if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                let reqData = pendingRequests[num];
+                                processFoundOTP(num, Date.now(), msg, reqData.country);
+                            }
+                        }
+                    }
                 }
             });
         }
