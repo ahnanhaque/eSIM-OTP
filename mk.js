@@ -42,8 +42,10 @@ function makeRequest(method, path, body, extraHeaders = {}) {
     });
 }
 
-// 🟢 Auto Login Function for MK SMS (2-Step Process)
+// 🟢 Auto Login Function for MK SMS (2-Step Process with Session Clear)
 async function login(email, password) {
+    COOKIES = ""; // 🔴 পুরানো সেশন ক্লিয়ার করার জন্য!
+
     // Step 1: GET request to grab initial PHPSESSID
     const getRes = await makeRequest("GET", "/login.php");
     if (getRes.headers && getRes.headers["set-cookie"]) {
