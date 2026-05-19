@@ -339,10 +339,10 @@ bot.on('message', async (msg) => {
              db.stexCreds = { email: email, password: password };
              if (!db.savedStexAccounts) db.savedStexAccounts = [];
              let existing = db.savedStexAccounts.find(a => a.email === email);
-             if (existing) existing.password = password; // update password if same email
+             if (existing) existing.password = password; 
              else {
                  db.savedStexAccounts.push({ email: email, password: password });
-                 if (db.savedStexAccounts.length > 5) db.savedStexAccounts.shift(); // keep max 5 accounts
+                 if (db.savedStexAccounts.length > 5) db.savedStexAccounts.shift(); 
              }
              saveDB();
              bot.sendMessage(chatId, "✅ Stex Login Successful! Account saved.").catch(()=>{});
@@ -374,10 +374,10 @@ bot.on('message', async (msg) => {
              db.mkCreds = { email: email, password: password };
              if (!db.savedMkAccounts) db.savedMkAccounts = [];
              let existing = db.savedMkAccounts.find(a => a.email === email);
-             if (existing) existing.password = password; // update password
+             if (existing) existing.password = password; 
              else {
                  db.savedMkAccounts.push({ email: email, password: password });
-                 if (db.savedMkAccounts.length > 5) db.savedMkAccounts.shift(); // keep max 5 accounts
+                 if (db.savedMkAccounts.length > 5) db.savedMkAccounts.shift(); 
              }
              saveDB();
              bot.sendMessage(chatId, "✅ MK SMS Login Successful! Account saved.", {parse_mode: "Markdown"}).catch(()=>{});
@@ -447,6 +447,7 @@ bot.on('callback_query', async (query) => {
               let activeMark = (db.stexCreds && db.stexCreds.email === acc.email) ? "✅ " : "👤 ";
               btns.push([{ text: `${activeMark}${acc.email}`, callback_data: `stex_qlogin_${idx}` }]);
           });
+          btns.push([{ text: "Remove Account", callback_data: "stex_remove_menu" }]);
       }
       btns.push([{ text: "Add Account", callback_data: "stex_manual_login" }]);
       btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
@@ -456,6 +457,50 @@ bot.on('callback_query', async (query) => {
           reply_markup: { inline_keyboard: btns }
       }).catch(()=>{});
       bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "stex_remove_menu") {
+      let btns = [];
+      if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
+          db.savedStexAccounts.forEach((acc, idx) => {
+              btns.push([{ text: `❌ ${acc.email}`, callback_data: `stex_delacc_${idx}` }]);
+          });
+      }
+      btns.push([{ text: "⬅️ Back", callback_data: "stex_login" }]);
+      bot.editMessageText("🗑️ **Select an account to remove:**", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data.startsWith("stex_delacc_")) {
+      const idx = parseInt(data.replace("stex_delacc_", ""));
+      const acc = db.savedStexAccounts[idx];
+      if (acc) {
+          if (db.stexCreds && db.stexCreds.email === acc.email) {
+              db.stexCreds = null;
+              db.stexToken = "";
+          }
+          db.savedStexAccounts.splice(idx, 1);
+          saveDB();
+          bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
+      } else {
+          bot.answerCallbackQuery(query.id);
+      }
+      
+      let btns = [];
+      if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
+          db.savedStexAccounts.forEach((a, i) => {
+              let activeMark = (db.stexCreds && db.stexCreds.email === a.email) ? "✅ " : "👤 ";
+              btns.push([{ text: `${activeMark}${a.email}`, callback_data: `stex_qlogin_${i}` }]);
+          });
+          btns.push([{ text: "Remove Account", callback_data: "stex_remove_menu" }]);
+      }
+      btns.push([{ text: "Add Account", callback_data: "stex_manual_login" }]);
+      btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+      bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login or add a new one:", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
   }
   else if (data === "stex_manual_login") {
       userStates[chatId] = "WAITING_FOR_STEX_CREDS";
@@ -485,6 +530,7 @@ bot.on('callback_query', async (query) => {
               let activeMark = (db.mkCreds && db.mkCreds.email === acc.email) ? "✅ " : "👤 ";
               btns.push([{ text: `${activeMark}${acc.email}`, callback_data: `mk_qlogin_${idx}` }]);
           });
+          btns.push([{ text: "Remove Account", callback_data: "mk_remove_menu" }]);
       }
       btns.push([{ text: "Add Account", callback_data: "mk_manual_login" }]);
       btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
@@ -494,6 +540,50 @@ bot.on('callback_query', async (query) => {
           reply_markup: { inline_keyboard: btns }
       }).catch(()=>{});
       bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "mk_remove_menu") {
+      let btns = [];
+      if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
+          db.savedMkAccounts.forEach((acc, idx) => {
+              btns.push([{ text: `❌ ${acc.email}`, callback_data: `mk_delacc_${idx}` }]);
+          });
+      }
+      btns.push([{ text: "⬅️ Back", callback_data: "placeholder_mk_login" }]);
+      bot.editMessageText("🗑️ **Select an account to remove:**", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data.startsWith("mk_delacc_")) {
+      const idx = parseInt(data.replace("mk_delacc_", ""));
+      const acc = db.savedMkAccounts[idx];
+      if (acc) {
+          if (db.mkCreds && db.mkCreds.email === acc.email) {
+              db.mkCreds = null;
+              db.mkCookies = "";
+          }
+          db.savedMkAccounts.splice(idx, 1);
+          saveDB();
+          bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
+      } else {
+          bot.answerCallbackQuery(query.id);
+      }
+      
+      let btns = [];
+      if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
+          db.savedMkAccounts.forEach((a, i) => {
+              let activeMark = (db.mkCreds && db.mkCreds.email === a.email) ? "✅ " : "👤 ";
+              btns.push([{ text: `${activeMark}${a.email}`, callback_data: `mk_qlogin_${i}` }]);
+          });
+          btns.push([{ text: "Remove Account", callback_data: "mk_remove_menu" }]);
+      }
+      btns.push([{ text: "Add Account", callback_data: "mk_manual_login" }]);
+      btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+      bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login or add a new one:", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
   }
   else if (data === "mk_manual_login") {
       userStates[chatId] = "WAITING_FOR_MK_CREDS";
