@@ -37,10 +37,10 @@ bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { comma
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
 
-const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String, mkRanges: Object, mkCookies: String, stexCreds: Object, mkCreds: Object }, { strict: false });
+const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String, mkRanges: Object, mkCookies: String, stexCreds: Object, mkCreds: Object, savedStexAccounts: Array, savedMkAccounts: Array }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "", stexCreds: null, mkCreds: null };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "", stexCreds: null, mkCreds: null, savedStexAccounts: [], savedMkAccounts: [] };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 let activeNumberMessages = {}; 
@@ -327,15 +327,25 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 
+  // 🟢 Login creds wait logic with multiple account saving
   else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
+         let email = parts[0].trim();
+         let password = parts[1].trim();
          bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(()=>{});
-         stex.login(parts[0].trim(), parts[1].trim()).then(token => {
+         stex.login(email, password).then(token => {
              db.stexToken = token;
-             db.stexCreds = { email: parts[0].trim(), password: parts[1].trim() };
+             db.stexCreds = { email: email, password: password };
+             if (!db.savedStexAccounts) db.savedStexAccounts = [];
+             let existing = db.savedStexAccounts.find(a => a.email === email);
+             if (existing) existing.password = password; // update password if same email
+             else {
+                 db.savedStexAccounts.push({ email: email, password: password });
+                 if (db.savedStexAccounts.length > 5) db.savedStexAccounts.shift(); // keep max 5 accounts
+             }
              saveDB();
-             bot.sendMessage(chatId, "✅ Stex Login Successful! Token is saved.").catch(()=>{});
+             bot.sendMessage(chatId, "✅ Stex Login Successful! Account saved.").catch(()=>{});
          }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
       } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
       delete userStates[chatId];
@@ -356,12 +366,21 @@ bot.on('message', async (msg) => {
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
+         let email = parts[0].trim();
+         let password = parts[1].trim();
          bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
-         mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
+         mk.login(email, password).then(cookieStr => {
              db.mkCookies = cookieStr; 
-             db.mkCreds = { email: parts[0].trim(), password: parts[1].trim() };
+             db.mkCreds = { email: email, password: password };
+             if (!db.savedMkAccounts) db.savedMkAccounts = [];
+             let existing = db.savedMkAccounts.find(a => a.email === email);
+             if (existing) existing.password = password; // update password
+             else {
+                 db.savedMkAccounts.push({ email: email, password: password });
+                 if (db.savedMkAccounts.length > 5) db.savedMkAccounts.shift(); // keep max 5 accounts
+             }
              saveDB();
-             bot.sendMessage(chatId, "✅ MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
+             bot.sendMessage(chatId, "✅ MK SMS Login Successful! Account saved.", {parse_mode: "Markdown"}).catch(()=>{});
          }).catch(e => {
              bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
          });
@@ -420,19 +439,22 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 Stex Multi-Login Menu
   else if (data === "stex_login") {
-      if (db.stexCreds && db.stexCreds.email) {
-          bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
-              inline_keyboard: [
-                  [{ text: `👤 ${db.stexCreds.email}`, callback_data: "stex_quick_login" }],
-                  [{ text: "➕ Another account", callback_data: "stex_manual_login" }],
-                  [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
-              ]
-          }}).catch(()=>{});
-      } else {
-          userStates[chatId] = "WAITING_FOR_STEX_CREDS";
-          bot.sendMessage(chatId, "📧 **Send Stex credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      let btns = [];
+      if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
+          db.savedStexAccounts.forEach((acc, idx) => {
+              let activeMark = (db.stexCreds && db.stexCreds.email === acc.email) ? "✅ " : "👤 ";
+              btns.push([{ text: `${activeMark}${acc.email}`, callback_data: `stex_qlogin_${idx}` }]);
+          });
       }
+      btns.push([{ text: "Add Account", callback_data: "stex_manual_login" }]);
+      btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+      
+      bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login or add a new one:", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
   else if (data === "stex_manual_login") {
@@ -440,28 +462,37 @@ bot.on('callback_query', async (query) => {
       bot.sendMessage(chatId, "📧 **Send Stex credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
-  else if (data === "stex_quick_login") {
-      bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(()=>{});
-      stex.login(db.stexCreds.email, db.stexCreds.password).then(token => {
-          db.stexToken = token; saveDB();
-          bot.sendMessage(chatId, "✅ Stex Login Successful! Token is saved.").catch(()=>{});
-      }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
+  else if (data.startsWith("stex_qlogin_")) {
+      const idx = parseInt(data.replace("stex_qlogin_", ""));
+      const acc = db.savedStexAccounts[idx];
+      if (acc) {
+          bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(()=>{});
+          stex.login(acc.email, acc.password).then(token => {
+              db.stexToken = token;
+              db.stexCreds = acc;
+              saveDB();
+              bot.sendMessage(chatId, "✅ Stex Login Successful! Token is saved.").catch(()=>{});
+          }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(()=>{}));
+      }
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 MK Multi-Login Menu
   else if (data === "placeholder_mk_login") {
-      if (db.mkCreds && db.mkCreds.email) {
-          bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login:", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: {
-              inline_keyboard: [
-                  [{ text: `👤 ${db.mkCreds.email}`, callback_data: "mk_quick_login" }],
-                  [{ text: "➕ Another account", callback_data: "mk_manual_login" }],
-                  [{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]
-              ]
-          }}).catch(()=>{});
-      } else {
-          userStates[chatId] = "WAITING_FOR_MK_CREDS";
-          bot.sendMessage(chatId, "📧 **Send MK SMS credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      let btns = [];
+      if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
+          db.savedMkAccounts.forEach((acc, idx) => {
+              let activeMark = (db.mkCreds && db.mkCreds.email === acc.email) ? "✅ " : "👤 ";
+              btns.push([{ text: `${activeMark}${acc.email}`, callback_data: `mk_qlogin_${idx}` }]);
+          });
       }
+      btns.push([{ text: "Add Account", callback_data: "mk_manual_login" }]);
+      btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+      
+      bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login or add a new one:", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
   else if (data === "mk_manual_login") {
@@ -469,12 +500,18 @@ bot.on('callback_query', async (query) => {
       bot.sendMessage(chatId, "📧 **Send MK SMS credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
       bot.answerCallbackQuery(query.id);
   }
-  else if (data === "mk_quick_login") {
-      bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
-      mk.login(db.mkCreds.email, db.mkCreds.password).then(cookieStr => {
-          db.mkCookies = cookieStr; saveDB();
-          bot.sendMessage(chatId, "✅ MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
-      }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}));
+  else if (data.startsWith("mk_qlogin_")) {
+      const idx = parseInt(data.replace("mk_qlogin_", ""));
+      const acc = db.savedMkAccounts[idx];
+      if (acc) {
+          bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(()=>{});
+          mk.login(acc.email, acc.password).then(cookieStr => {
+              db.mkCookies = cookieStr; 
+              db.mkCreds = acc;
+              saveDB();
+              bot.sendMessage(chatId, "✅ MK SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
+          }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}));
+      }
       bot.answerCallbackQuery(query.id);
   }
 
@@ -655,7 +692,6 @@ bot.on('callback_query', async (query) => {
   
   else if (data.startsWith("assign_")) {
     
-    // 🟢 Update: Next/Change e click korle message delete hobe na, assign e asle hobe
     if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId) {
         bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(()=>{});
     }
@@ -878,6 +914,33 @@ app.post('/api/ivas-data', (req, res) => {
 
 app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
+// 🟢 Auto Login System Logic (1.5 Hours interval)
+async function autoLoginPanels() {
+    if (!isDbLoaded) return;
+    
+    if (db.stexCreds && db.stexCreds.email) {
+        try {
+            const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
+            if (token) {
+                db.stexToken = token;
+                stex.setAuthToken(token);
+                saveDB();
+            }
+        } catch (e) { }
+    }
+    
+    if (db.mkCreds && db.mkCreds.email) {
+        try {
+            const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password);
+            if (cookieStr) {
+                db.mkCookies = cookieStr;
+                mk.setCookies(cookieStr);
+                saveDB();
+            }
+        } catch (e) { }
+    }
+}
+
 mongoose.connect(MONGODB_URI).then(async () => {
   const data = await BotDB.findOne(); 
   if (data) {
@@ -892,8 +955,18 @@ mongoose.connect(MONGODB_URI).then(async () => {
           db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
       }
       if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
-      if (!db.stexCreds) db.stexCreds = null;
-      if (!db.mkCreds) db.mkCreds = null;
+      
+      if (!db.savedStexAccounts) db.savedStexAccounts = [];
+      if (!db.savedMkAccounts) db.savedMkAccounts = [];
+
+      // Migrate existing single accounts to array list if empty
+      if (db.stexCreds && db.stexCreds.email && db.savedStexAccounts.length === 0) {
+          db.savedStexAccounts.push(db.stexCreds);
+      }
+      if (db.mkCreds && db.mkCreds.email && db.savedMkAccounts.length === 0) {
+          db.savedMkAccounts.push(db.mkCreds);
+      }
+
   } else {
       await BotDB.create(db);
   }
@@ -901,8 +974,14 @@ mongoose.connect(MONGODB_URI).then(async () => {
   if (db.stexToken) stex.setAuthToken(db.stexToken);
   if (db.mkCookies) mk.setCookies(db.mkCookies); 
 
-  isDbLoaded = true; app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
+  isDbLoaded = true; 
+  app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
+
+  setTimeout(autoLoginPanels, 10000);
+
 }).catch(err => console.log(err));
+
+setInterval(autoLoginPanels, 1.5 * 60 * 60 * 1000);
 
 setInterval(async () => {
     if (!db.stexToken) return;
@@ -955,4 +1034,4 @@ setInterval(async () => {
             });
         }
     } catch (e) {}
-}, 2500); 
+}, 2500);
