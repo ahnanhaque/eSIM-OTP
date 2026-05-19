@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const { authenticator } = require("otplib"); 
 const stex = require("./stex.js"); 
 const mk = require("./mk.js"); 
+const iva = require("./iva.js"); 
 
 const botToken = "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; 
 const ADMIN_ID = 8278612952; 
@@ -37,10 +38,10 @@ bot.setMyCommands([{ command: 'start', description: 'Restart the bot' }, { comma
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
 
-const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String, mkRanges: Object, mkCookies: String, stexCreds: Object, mkCreds: Object, savedStexAccounts: Array, savedMkAccounts: Array }, { strict: false });
+const dbSchema = new mongoose.Schema({ balances: Object, lastAssigned: Object, adminUsernames: Array, users: Array, referred: Object, settings: Object, availableNumbers: Object, cookies: Object, stexRanges: Object, stexToken: String, mkRanges: Object, mkCookies: String, stexCreds: Object, mkCreds: Object, ivaCreds: Object, ivaCookies: String, ivaRanges: Object, savedStexAccounts: Array, savedMkAccounts: Array, savedIvaAccounts: Array }, { strict: false });
 const BotDB = mongoose.model("BotData", dbSchema);
 
-let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "", stexCreds: null, mkCreds: null, savedStexAccounts: [], savedMkAccounts: [] };
+let db = { balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {}, settings: { maxNumbers: 4 }, availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {}, stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "", mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "", ivaRanges: { fb: {}, ig: {}, wa: {} }, ivaCookies: "", stexCreds: null, mkCreds: null, ivaCreds: null, savedStexAccounts: [], savedMkAccounts: [], savedIvaAccounts: [] };
 let isDbLoaded = false, latestRangesFromExtension = {}; 
 let pendingRequests = {}, lastProcessedOTPTime = {}, inUseNumbers = {}, userStates = {}, tempAdminData = {}, activeTempMails = {};
 let activeNumberMessages = {}; 
@@ -140,7 +141,7 @@ const adminPlatformMenu = {
 
 const manageNumberPanel = {
   inline_keyboard: [
-    [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
+    [{ text: "IVA SMS 📨", callback_data: "placeholder_iva_range" }],
     [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }],
     [{ text: "MK SMS 💬", callback_data: "placeholder_mk" }],
     [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
@@ -327,6 +328,7 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); delete userStates[chatId];
   }
 
+  // 🟢 Stex Creds Wait
   else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -362,6 +364,7 @@ bot.on('message', async (msg) => {
       delete userStates[chatId];
   }
 
+  // 🟢 MK Creds Wait
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
       const parts = text.split('|');
       if(parts.length === 2) {
@@ -389,7 +392,6 @@ bot.on('message', async (msg) => {
       }
       delete userStates[chatId];
   }
-  
   else if (userStates[chatId] === "WAITING_FOR_MK_RANGE" && isAdmin(chatId, username)) {
       const range = text.trim();
       const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -400,6 +402,47 @@ bot.on('message', async (msg) => {
           db.mkRanges[platform][range] = country; 
           saveDB();
           bot.sendMessage(chatId, `✅ Successfully added MK Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
+      delete userStates[chatId];
+  }
+
+  // 🟢 iVAS Creds Wait Panel
+  else if (userStates[chatId] === "WAITING_FOR_IVA_CREDS" && isAdmin(chatId, username)) {
+      const parts = text.split('|');
+      if(parts.length === 2) {
+         let email = parts[0].trim();
+         let password = parts[1].trim();
+         bot.sendMessage(chatId, "⏳ Logging into iVAS SMS Server (Cloudflare Bypass)...").catch(()=>{});
+         iva.login(email, password).then(cookieStr => {
+             db.ivaCookies = cookieStr; 
+             db.ivaCreds = { email: email, password: password };
+             if (!db.savedIvaAccounts) db.savedIvaAccounts = [];
+             let existing = db.savedIvaAccounts.find(a => a.email === email);
+             if (existing) existing.password = password; 
+             else {
+                 db.savedIvaAccounts.push({ email: email, password: password });
+                 if (db.savedIvaAccounts.length > 5) db.savedIvaAccounts.shift(); 
+             }
+             saveDB();
+             bot.sendMessage(chatId, "✅ iVAS SMS Login Successful! Account saved.", {parse_mode: "Markdown"}).catch(()=>{});
+         }).catch(e => {
+             bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{});
+         });
+      } else { 
+         bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); 
+      }
+      delete userStates[chatId];
+  }
+  else if (userStates[chatId] === "WAITING_FOR_IVA_RANGE" && isAdmin(chatId, username)) {
+      const range = text.trim();
+      const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+      if(range.length >= 5) {
+          const country = detectCountryFromRange(range);
+          if (!db.ivaRanges) db.ivaRanges = { fb: {}, ig: {}, wa: {} };
+          if (!db.ivaRanges[platform]) db.ivaRanges[platform] = {}; 
+          db.ivaRanges[platform][range] = country; 
+          saveDB();
+          bot.sendMessage(chatId, `✅ Successfully added iVAS Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
       } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
       delete userStates[chatId];
   }
@@ -414,7 +457,7 @@ bot.on('callback_query', async (query) => {
   }
   if (!await isUserMember(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
   
-  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_", "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
+  const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_", "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_", "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delivarng_", "delall_"];
   if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa") return bot.answerCallbackQuery(query.id, {text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true});
 
   if (data === "close_menu") { bot.deleteMessage(chatId, messageId).catch(()=>{}); return bot.answerCallbackQuery(query.id); }
@@ -430,7 +473,7 @@ bot.on('callback_query', async (query) => {
 
   else if (data === "admin_manage_panel") {
       bot.editMessageText("⚙️ **Login to panel :**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [
-          [{ text: "IVA SMS 📩", callback_data: "placeholder_iva" }],
+          [{ text: "IVA SMS 📩", callback_data: "iva_login" }],
           [{ text: "Stex SMS 📨", callback_data: "stex_login" }],
           [{ text: "MK SMS ✉️", callback_data: "placeholder_mk_login" }],
           [{ text: "⬅️ Back", callback_data: "admin_panel" }]
@@ -438,6 +481,87 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 iVAS Multi-Login Menu Callback
+  else if (data === "iva_login") {
+      let btns = [];
+      if (db.savedIvaAccounts && db.savedIvaAccounts.length > 0) {
+          db.savedIvaAccounts.forEach((acc, idx) => {
+              let activeMark = (db.ivaCreds && db.ivaCreds.email === acc.email) ? "✅ " : "👤 ";
+              btns.push([{ text: `${activeMark}${acc.email}`, callback_data: `iva_qlogin_${idx}` }]);
+          });
+          btns.push([{ text: "Remove Account", callback_data: "iva_remove_menu" }]);
+      }
+      btns.push([{ text: "Add Account", callback_data: "iva_manual_login" }]);
+      btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+      
+      bot.editMessageText("🔑 **iVAS SMS Login:**\nChoose an account to login or add a new one:", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data === "iva_remove_menu") {
+      let btns = [];
+      if (db.savedIvaAccounts && db.savedIvaAccounts.length > 0) {
+          db.savedIvaAccounts.forEach((acc, idx) => {
+              btns.push([{ text: `❌ ${acc.email}`, callback_data: `iva_delacc_${idx}` }]);
+          });
+      }
+      btns.push([{ text: "⬅️ Back", callback_data: "iva_login" }]);
+      bot.editMessageText("🗑️ **Select an account to remove:**", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
+          reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data.startsWith("iva_delacc_")) {
+      const idx = parseInt(data.replace("iva_delacc_", ""));
+      const acc = db.savedIvaAccounts[idx];
+      if (acc) {
+          if (db.ivaCreds && db.ivaCreds.email === acc.email) {
+              db.ivaCreds = null;
+              db.ivaCookies = "";
+          }
+          db.savedIvaAccounts.splice(idx, 1);
+          saveDB();
+          bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
+      } else { bot.answerCallbackQuery(query.id); }
+      
+      let btns = [];
+      if (db.savedIvaAccounts && db.savedIvaAccounts.length > 0) {
+          db.savedIvaAccounts.forEach((a, i) => {
+              let activeMark = (db.ivaCreds && db.ivaCreds.email === a.email) ? "✅ " : "👤 ";
+              btns.push([{ text: `${activeMark}${a.email}`, callback_data: `iva_qlogin_${i}` }]);
+          });
+          btns.push([{ text: "Remove Account", callback_data: "iva_remove_menu" }]);
+      }
+      btns.push([{ text: "Add Account", callback_data: "iva_manual_login" }]);
+      btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+      bot.editMessageText("🔑 **iVAS SMS Login:**\nChoose an account to login or add a new one:", {
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns }
+      }).catch(()=>{});
+  }
+  else if (data === "iva_manual_login") {
+      userStates[chatId] = "WAITING_FOR_IVA_CREDS";
+      bot.sendMessage(chatId, "📧 **Send iVAS credentials format:**\n`email|password`", {parse_mode: "Markdown"}).catch(()=>{});
+      bot.answerCallbackQuery(query.id);
+  }
+  else if (data.startsWith("iva_qlogin_")) {
+      const idx = parseInt(data.replace("iva_qlogin_", ""));
+      const acc = db.savedIvaAccounts[idx];
+      if (acc) {
+          bot.sendMessage(chatId, "⏳ Logging into iVAS SMS Server...").catch(()=>{});
+          iva.login(acc.email, acc.password).then(cookieStr => {
+              db.ivaCookies = cookieStr; 
+              db.ivaCreds = acc;
+              saveDB();
+              bot.sendMessage(chatId, "✅ iVAS SMS Login Successful!", {parse_mode: "Markdown"}).catch(()=>{});
+          }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, {parse_mode: "Markdown"}).catch(()=>{}));
+      }
+      bot.answerCallbackQuery(query.id);
+  }
+
+  // 🟢 Stex Multi-Login Menu
   else if (data === "stex_login") {
       let btns = [];
       if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
@@ -481,9 +605,7 @@ bot.on('callback_query', async (query) => {
           db.savedStexAccounts.splice(idx, 1);
           saveDB();
           bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
-      } else {
-          bot.answerCallbackQuery(query.id);
-      }
+      } else { bot.answerCallbackQuery(query.id); }
       
       let btns = [];
       if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
@@ -496,8 +618,7 @@ bot.on('callback_query', async (query) => {
       btns.push([{ text: "Add Account", callback_data: "stex_manual_login" }]);
       btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
       bot.editMessageText("🔑 **Stex SMS Login:**\nChoose an account to login or add a new one:", {
-          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
-          reply_markup: { inline_keyboard: btns }
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns }
       }).catch(()=>{});
   }
   else if (data === "stex_manual_login") {
@@ -520,6 +641,7 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 MK Multi-Login Menu
   else if (data === "placeholder_mk_login") {
       let btns = [];
       if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
@@ -563,9 +685,7 @@ bot.on('callback_query', async (query) => {
           db.savedMkAccounts.splice(idx, 1);
           saveDB();
           bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
-      } else {
-          bot.answerCallbackQuery(query.id);
-      }
+      } else { bot.answerCallbackQuery(query.id); }
       
       let btns = [];
       if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
@@ -578,8 +698,7 @@ bot.on('callback_query', async (query) => {
       btns.push([{ text: "Add Account", callback_data: "mk_manual_login" }]);
       btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
       bot.editMessageText("🔑 **MK SMS Login:**\nChoose an account to login or add a new one:", {
-          chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
-          reply_markup: { inline_keyboard: btns }
+          chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns }
       }).catch(()=>{});
   }
   else if (data === "mk_manual_login") {
@@ -622,10 +741,16 @@ bot.on('callback_query', async (query) => {
             btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${plat}_${r}` }]);
         });
 
+        const ivaPList = db.ivaRanges && db.ivaRanges[plat] ? Object.keys(db.ivaRanges[plat]) : [];
+        ivaPList.forEach(r => {
+            const info = getCountryInfo(db.ivaRanges[plat][r]);
+            btns.push([{ text: `iVAS Panel : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delivarng_${plat}_${r}` }]);
+        });
+
         const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
         ivaList.forEach(r => {
             const info = getCountryInfo(r);
-            btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${plat}_${r}` }]);
+            btns.push([{ text: `IVA Manual : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${plat}_${r}` }]);
         });
     });
 
@@ -640,17 +765,23 @@ bot.on('callback_query', async (query) => {
   else if (data === "delall_everything") {
       db.stexRanges = { fb: {}, ig: {}, wa: {} };
       db.mkRanges = { fb: {}, ig: {}, wa: {} };
+      db.ivaRanges = { fb: {}, ig: {}, wa: {} };
       db.availableNumbers = { fb: {}, ig: {}, wa: {} };
       saveDB();
       bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
       bot.editMessageText("🗑️ **All numbers/ranges have been removed.**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]] }, parse_mode: "Markdown" }).catch(()=>{});
   }
-  else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_")) {
+  else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_") || data.startsWith("delivarng_")) {
     const isStex = data.startsWith("delstexrng_");
     const isMk = data.startsWith("delmkrng_");
-    const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : "delnumrng_");
-    const payload = data.replace(prefixStr, "");
+    const isIvaP = data.startsWith("delivarng_");
     
+    let prefixStr = "delnumrng_";
+    if (isStex) prefixStr = "delstexrng_";
+    else if (isMk) prefixStr = "delmkrng_";
+    else if (isIvaP) prefixStr = "delivarng_";
+
+    const payload = data.replace(prefixStr, "");
     const parts = payload.split('_');
     const plat = parts[0];
     const target = parts.slice(1).join('_');
@@ -661,9 +792,12 @@ bot.on('callback_query', async (query) => {
     } else if (isMk) {
         if (db.mkRanges && db.mkRanges[plat] && db.mkRanges[plat][target]) { delete db.mkRanges[plat][target]; saveDB(); }
         bot.answerCallbackQuery(query.id, { text: `✅ MK range ${target} removed from ${plat.toUpperCase()}!` }); 
+    } else if (isIvaP) {
+        if (db.ivaRanges && db.ivaRanges[plat] && db.ivaRanges[plat][target]) { delete db.ivaRanges[plat][target]; saveDB(); }
+        bot.answerCallbackQuery(query.id, { text: `✅ iVAS range ${target} removed from ${plat.toUpperCase()}!` }); 
     } else { 
         if (db.availableNumbers[plat] && db.availableNumbers[plat][target]) { delete db.availableNumbers[plat][target]; saveDB(); }
-        bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed from ${plat.toUpperCase()}!` }); 
+        bot.answerCallbackQuery(query.id, { text: `✅ ${target} manual numbers removed from ${plat.toUpperCase()}!` }); 
     }
     
     let btns = [];
@@ -680,10 +814,16 @@ bot.on('callback_query', async (query) => {
             btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${p}_${r}` }]);
         });
 
+        const ivaPList = db.ivaRanges && db.ivaRanges[p] ? Object.keys(db.ivaRanges[p]) : [];
+        ivaPList.forEach(r => {
+            const info = getCountryInfo(db.ivaRanges[p][r]);
+            btns.push([{ text: `iVAS Panel : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delivarng_${p}_${r}` }]);
+        });
+
         const ivaList = db.availableNumbers[p] ? Object.keys(db.availableNumbers[p]).filter(k => db.availableNumbers[p][k].length > 0) : [];
         ivaList.forEach(r => {
             const info = getCountryInfo(r);
-            btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${p}_${r}` }]);
+            btns.push([{ text: `IVA Manual : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${p}_${r}` }]);
         });
     });
 
@@ -694,8 +834,7 @@ bot.on('callback_query', async (query) => {
 
     btns.push([{ text: "🗑️ REMOVE ALL", callback_data: "delall_everything" }]);
     btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
-    
-    bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
+    bot.editMessageText("🗑️ **Select a range to remove:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(()=>{});
   }
 
   else if (data.startsWith("admin_sel_plat_")) {
@@ -707,19 +846,20 @@ bot.on('callback_query', async (query) => {
   else if (data === "placeholder_stex") {
     const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
     userStates[chatId] = "WAITING_FOR_STEX_RANGE";
-    bot.sendMessage(chatId, `🔢 **Enter Stex Range for ${platform.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``, {parse_mode: "Markdown"}).catch(()=>{});
+    bot.sendMessage(chatId, `🔢 **Enter Stex Range for ${platform.toUpperCase()}:**\nExample: \`23276XXX\``, {parse_mode: "Markdown"}).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
-  
   else if (data === "placeholder_mk") {
     const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
     userStates[chatId] = "WAITING_FOR_MK_RANGE";
-    bot.sendMessage(chatId, `🔢 **Enter MK Range for ${platform.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``, {parse_mode: "Markdown"}).catch(()=>{});
+    bot.sendMessage(chatId, `🔢 **Enter MK Range for ${platform.toUpperCase()}:**\nExample: \`23276XXX\``, {parse_mode: "Markdown"}).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
-
-  else if (data === "placeholder_iva") {
-      bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
+  else if (data === "placeholder_iva_range") {
+    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+    userStates[chatId] = "WAITING_FOR_IVA_RANGE";
+    bot.sendMessage(chatId, `🔢 **Enter iVAS Range for ${platform.toUpperCase()}:**\nExample: \`23276XXX\``, {parse_mode: "Markdown"}).catch(()=>{});
+    bot.answerCallbackQuery(query.id);
   }
 
   else if (data === "admin_add_number_manual") {
@@ -737,17 +877,20 @@ bot.on('callback_query', async (query) => {
     const availPlatformDB = db.availableNumbers[platform] || {};
     const stexPlatformDB = db.stexRanges[platform] || {};
     const mkPlatformDB = db.mkRanges && db.mkRanges[platform] ? db.mkRanges[platform] : {};
+    const ivaPlatformDB = db.ivaRanges && db.ivaRanges[platform] ? db.ivaRanges[platform] : {};
     
     const ranges = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
     const stexRangesList = Object.keys(stexPlatformDB);
     const mkRangesList = Object.keys(mkPlatformDB);
+    const ivaRangesList = Object.keys(ivaPlatformDB);
     
-    if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
+    if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && ivaRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
     
     let combinedRanges = [];
     ranges.forEach(r => combinedRanges.push({ type: 'iva', range: r, info: getCountryInfo(r) }));
     stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(stexPlatformDB[r]) }));
     mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(mkPlatformDB[r]) }));
+    ivaRangesList.forEach(r => combinedRanges.push({ type: 'iva_panel', range: r, info: getCountryInfo(ivaPlatformDB[r]) }));
 
     combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
@@ -778,7 +921,6 @@ bot.on('callback_query', async (query) => {
   else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`Please select the platform:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data.startsWith("assign_")) {
-    
     if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId) {
         bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(()=>{});
     }
@@ -791,6 +933,72 @@ bot.on('callback_query', async (query) => {
     
     clearPendingForChat(chatId);
     
+    // 🟢 iVAS Panel Automated assign handler
+    if (db.ivaRanges && db.ivaRanges[platform] && db.ivaRanges[platform][sel]) {
+        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); 
+        const limit = db.settings.maxNumbers || 4;
+        let fetchedNums = [];
+        bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+
+        if (db.ivaCookies) iva.setCookies(db.ivaCookies); 
+
+        for(let i=0; i<limit; i++) {
+            try {
+                const numData = await iva.getNumber(sel);
+                const n = numData.number ? numData.number.replace('+', '') : '';
+                if(n) {
+                    fetchedNums.push(n);
+                    inUseNumbers[n] = true;
+                    pendingRequests[n] = { chatId: chatId, country: db.ivaRanges[platform][sel], isIvaPanel: true, platform: platform };
+                }
+            } catch (e) { 
+                console.log(`[IVA Fetch Error - Attempt ${i+1}]:`, e.message); 
+                if (i === 0 && e.message === "SESSION_EXPIRED" && db.ivaCreds && db.ivaCreds.email) {
+                    try {
+                        console.log(`[IVA On-Demand Auto-Login]: Trying re-login for ${db.ivaCreds.email}`);
+                        const newCookie = await iva.login(db.ivaCreds.email, db.ivaCreds.password);
+                        db.ivaCookies = newCookie;
+                        iva.setCookies(newCookie);
+                        saveDB();
+                        
+                        const retryData = await iva.getNumber(sel);
+                        const retryN = retryData.number ? retryData.number.replace('+', '') : '';
+                        if(retryN) {
+                            fetchedNums.push(retryN);
+                            inUseNumbers[retryN] = true;
+                            pendingRequests[retryN] = { chatId: chatId, country: db.ivaRanges[platform][sel], isIvaPanel: true, platform: platform };
+                            continue; 
+                        }
+                    } catch (err2) { 
+                        console.log(`[IVA On-Demand Login Failed]:`, err2.message);
+                        break; 
+                    } 
+                }
+                break; 
+            }
+        }
+
+        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
+
+        const info = getCountryInfo(db.ivaRanges[platform][sel]);
+        let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
+        let actionMenu = { inline_keyboard: [] };
+        fetchedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
+        actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
+        
+        bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+            activeNumberMessages[chatId] = messageId;
+            setTimeout(() => {
+                fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
+                let expiredMenu = { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]};
+                bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: expiredMenu, parse_mode: "Markdown" }).catch(()=>{});
+            }, 15 * 60 * 1000);
+        }).catch(()=>{});
+        return;
+    }
+
     if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
         bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); 
         const limit = db.settings.maxNumbers || 4;
@@ -808,12 +1016,10 @@ bot.on('callback_query', async (query) => {
                 console.log(`[STEX Fetch Error - Attempt ${i+1}]:`, e.message); 
                 if (i === 0 && e.message.includes("SESSION_EXPIRED") && db.stexCreds && db.stexCreds.email) {
                     try {
-                        console.log(`[STEX On-Demand Auto-Login]: Trying re-login for ${db.stexCreds.email}`);
                         const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
                         db.stexToken = token;
                         stex.setAuthToken(token);
                         saveDB();
-                        
                         const retryData = await stex.getNumber(sel);
                         const retryN = retryData.full_number || retryData.number.replace('+', '');
                         if(retryN) {
@@ -822,10 +1028,7 @@ bot.on('callback_query', async (query) => {
                             pendingRequests[retryN] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true, platform: platform };
                             continue;
                         }
-                    } catch (err2) { 
-                        console.log(`[STEX On-Demand Login Failed]:`, err2.message);
-                        break; 
-                    }
+                    } catch (err2) { break; }
                 }
                 break; 
             }
@@ -843,14 +1046,9 @@ bot.on('callback_query', async (query) => {
             activeNumberMessages[chatId] = messageId; 
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                
                 let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-
-                let expiredMenu = { inline_keyboard: [
-                    [{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }],
-                    [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
-                ]};
+                let expiredMenu = { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]};
                 bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: expiredMenu, parse_mode: "Markdown" }).catch(()=>{});
             }, 15 * 60 * 1000);
         }).catch(()=>{});
@@ -878,12 +1076,10 @@ bot.on('callback_query', async (query) => {
                 console.log(`[MK Fetch Error - Attempt ${i+1}]:`, e.message); 
                 if (i === 0 && e.message === "SESSION_EXPIRED" && db.mkCreds && db.mkCreds.email) {
                     try {
-                        console.log(`[MK On-Demand Auto-Login]: Trying re-login for ${db.mkCreds.email}`);
                         const newCookie = await mk.login(db.mkCreds.email, db.mkCreds.password);
                         db.mkCookies = newCookie;
                         mk.setCookies(newCookie);
                         saveDB();
-                        
                         const retryData = await mk.getNumber(sel);
                         const retryN = retryData.number ? retryData.number.replace('+', '') : '';
                         if(retryN) {
@@ -892,10 +1088,7 @@ bot.on('callback_query', async (query) => {
                             pendingRequests[retryN] = { chatId: chatId, country: db.mkRanges[platform][sel], isMk: true, platform: platform };
                             continue; 
                         }
-                    } catch (err2) { 
-                        console.log(`[MK On-Demand Login Failed]:`, err2.message);
-                        break; 
-                    } 
+                    } catch (err2) { break; } 
                 }
                 break; 
             }
@@ -913,14 +1106,9 @@ bot.on('callback_query', async (query) => {
             activeNumberMessages[chatId] = messageId;
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-
                 let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-
-                let expiredMenu = { inline_keyboard: [
-                    [{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }],
-                    [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
-                ]};
+                let expiredMenu = { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]};
                 bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: expiredMenu, parse_mode: "Markdown" }).catch(()=>{});
             }, 15 * 60 * 1000);
         }).catch(()=>{});
@@ -949,14 +1137,9 @@ bot.on('callback_query', async (query) => {
         activeNumberMessages[chatId] = messageId;
         setTimeout(() => {
             assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-
             let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
             assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-
-            let expiredMenu = { inline_keyboard: [
-                [{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }],
-                [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
-            ]};
+            let expiredMenu = { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]};
             bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: expiredMenu, parse_mode: "Markdown" }).catch(()=>{});
         }, 15 * 60 * 1000);
     }).catch(()=>{});
@@ -1018,21 +1201,15 @@ function processFoundOTP(number, time, message, range) {
   else if(platCode === 'wa') platName = "WHATSAPP";
 
   let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
-  
   let groupMarkup = { inline_keyboard: [] };
-  if (otpCode) {
-      groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-  }
+  if (otpCode) groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
   if (reqData) {
     const reqInfo = getCountryInfo(reqData.country);
-    
     let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
-    
     let userMarkup = { inline_keyboard: [] };
     if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-    
     bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(()=>{});
     addBalance(reqData.chatId, 0.50); 
     delete pendingRequests[number]; 
@@ -1049,28 +1226,26 @@ app.post('/api/ivas-data', (req, res) => {
 
 app.get('/', (req, res) => res.status(200).send('Bot is successfully running on Hybrid Mode!'));
 
+// 🟢 Auto Login System Logic (Race Condition & Overwrite bugs fixed!)
 async function autoLoginPanels() {
     if (!isDbLoaded) return;
     
+    if (db.ivaCreds && db.ivaCreds.email) {
+        try {
+            const cookieStr = await iva.login(db.ivaCreds.email, db.ivaCreds.password);
+            if (cookieStr) { db.ivaCookies = cookieStr; iva.setCookies(cookieStr); saveDB(); }
+        } catch (e) { console.log("[Auto-Login Loop Error IVA]:", e.message); }
+    }
     if (db.stexCreds && db.stexCreds.email) {
         try {
             const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
-            if (token) {
-                db.stexToken = token;
-                stex.setAuthToken(token);
-                saveDB();
-            }
+            if (token) { db.stexToken = token; stex.setAuthToken(token); saveDB(); }
         } catch (e) { console.log("[Auto-Login Loop Error STEX]:", e.message); }
     }
-    
     if (db.mkCreds && db.mkCreds.email) {
         try {
             const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password);
-            if (cookieStr) {
-                db.mkCookies = cookieStr;
-                mk.setCookies(cookieStr);
-                saveDB();
-            }
+            if (cookieStr) { db.mkCookies = cookieStr; mk.setCookies(cookieStr); saveDB(); }
         } catch (e) { console.log("[Auto-Login Loop Error MK]:", e.message); }
     }
 }
@@ -1084,36 +1259,31 @@ mongoose.connect(MONGODB_URI).then(async () => {
           db.availableNumbers = { fb: oldData, ig: {}, wa: {} };
       }
       if (!db.stexRanges) db.stexRanges = { fb: {}, ig: {}, wa: {} };
-      if (!db.stexRanges.fb && !db.stexRanges.ig && !db.stexRanges.wa) {
-          const oldStex = { ...db.stexRanges };
-          db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
-      }
       if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
+      if (!db.ivaRanges) db.ivaRanges = { fb: {}, ig: {}, wa: {} };
       
       if (!db.savedStexAccounts) db.savedStexAccounts = [];
       if (!db.savedMkAccounts) db.savedMkAccounts = [];
+      if (!db.savedIvaAccounts) db.savedIvaAccounts = [];
 
-      if (db.stexCreds && db.stexCreds.email && db.savedStexAccounts.length === 0) {
-          db.savedStexAccounts.push(db.stexCreds);
-      }
-      if (db.mkCreds && db.mkCreds.email && db.savedMkAccounts.length === 0) {
-          db.savedMkAccounts.push(db.mkCreds);
-      }
+      // Migration checks
+      if (db.stexCreds && db.stexCreds.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
+      if (db.mkCreds && db.mkCreds.email && db.savedMkAccounts.length === 0) db.savedMkAccounts.push(db.mkCreds);
+      if (db.ivaCreds && db.ivaCreds.email && db.savedIvaAccounts.length === 0) db.savedIvaAccounts.push(db.ivaCreds);
   } else {
       await BotDB.create(db);
   }
   
   if (db.stexToken) stex.setAuthToken(db.stexToken);
   if (db.mkCookies) mk.setCookies(db.mkCookies); 
+  if (db.ivaCookies) iva.setCookies(db.ivaCookies); 
 
   isDbLoaded = true; 
   app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
-
   setTimeout(autoLoginPanels, 10000);
-
 }).catch(err => console.log(err));
 
-setInterval(autoLoginPanels, 20 * 60 * 1000); 
+setInterval(autoLoginPanels, 20 * 60 * 1000); // 20 Mins interval auto background refresh
 
 setInterval(async () => {
     if (!db.stexToken) return;
@@ -1140,21 +1310,17 @@ setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
     if (!hasMkPending) return;
-
     try {
         if (db.mkCookies) mk.setCookies(db.mkCookies); 
         const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         const records = await mk.checkInfo(dateStr); 
-        
         if (Array.isArray(records)) {
             records.forEach(rec => {
                 let rawNum = String(rec.phone_number || rec.number || "");
                 let cleanRecNum = rawNum.replace(/\D/g, '');
-                
                 if (cleanRecNum) {
                     let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isMk);
-                    
                     if (pendingKey) {
                         let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
                         if (msg && typeof msg === 'string' && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
