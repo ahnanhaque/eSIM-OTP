@@ -1,14 +1,20 @@
-const { gotScraping } = require('got-scraping');
-
 let COOKIES = "";
 
 function setCookies(cookies) {
     COOKIES = cookies;
 }
 
-// 🟢 Auto Login Function for iVAS (Cloudflare Bypass using got-scraping)
+// 🟢 Dynamic Import for Modern ESM Package (Fixes the Export Error)
+async function fetchGot() {
+    const mod = await import('got-scraping');
+    return mod.gotScraping;
+}
+
+// 🟢 Auto Login Function for iVAS (Cloudflare Bypass)
 async function login(email, password) {
     try {
+        const gotScraping = await fetchGot(); // ডাইনামিক লোড
+        
         const response = await gotScraping({
             url: "https://ivasms.com/login.php",
             method: "POST",
@@ -47,6 +53,8 @@ async function login(email, password) {
 // 🟢 Get Number Function (Cloudflare Bypass)
 async function getNumber(range) {
     try {
+        const gotScraping = await fetchGot(); // ডাইনামিক লোড
+        
         const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
         const bodyStr = [
             `--${boundary}`,
