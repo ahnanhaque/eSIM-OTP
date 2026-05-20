@@ -82,7 +82,7 @@ const countryPrefixes = {
 };
 
 function detectCountryFromRange(range) {
-    let cleanRange = range.replace(/\D/g, ''); 
+    let cleanRange = String(range).replace(/\D/g, ''); // String দিয়ে ফোর্স করা হলো
     for (let i = 4; i >= 1; i--) {
         let prefix = cleanRange.substring(0, i);
         if (countryPrefixes[prefix]) {
@@ -94,11 +94,13 @@ function detectCountryFromRange(range) {
 
 function getCountryInfo(countryName) {
   if (!countryName) return { flag: "🌍", cleanName: "Unknown" };
-  let flag = "🌍", cleanName = countryName.replace(/\s*[vV]?\d+.*$/, '').trim();
-  for (const key in countryData) if (countryName.toUpperCase().includes(key)) { flag = countryData[key].flag; cleanName = key.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); break; }
+  let strName = String(countryName); // ডাটাবেজ থেকে নাম্বার এলেও ক্র্যাশ করবে না
+  let flag = "🌍", cleanName = strName.replace(/\s*[vV]?\d+.*$/, '').trim();
+  for (const key in countryData) if (strName.toUpperCase().includes(key)) { flag = countryData[key].flag; cleanName = key.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); break; }
   if (flag === "🌍") cleanName = cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
   return { flag, cleanName };
 }
+
 
 function clearPendingForChat(chatId) { for (let num in pendingRequests) if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } }
 
