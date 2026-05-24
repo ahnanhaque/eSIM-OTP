@@ -1282,18 +1282,7 @@ setInterval(async () => {
     } catch (e) {}
 }, 2500);
 
-// 🟢 Hadi Checker (DEBUG MODE)
-setInterval(async () => {
-    if (!db.hadiCookies) return;
-    const hasHadiPending = Object.values(pendingRequests).some(req => req.isHadi);
-    if (!hasHadiPending) return;
-    
-    try {
-        if (db.hadiCookies) hadi.setCookies(db.hadiCookies); 
-        
-        // Check if hadi.js requires date strings like MK does
-        const records = await hadi.checkInfo(); 
-  // 🟢 Hadi Checker (Timezone Adjusted - 6 Hours Behind BD)
+// 🟢 Hadi Checker (Timezone Adjusted - 6 Hours Behind BD)
 setInterval(async () => {
     if (!db.hadiCookies) return;
     const hasHadiPending = Object.values(pendingRequests).some(req => req.isHadi);
