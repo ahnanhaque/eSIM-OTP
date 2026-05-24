@@ -1282,22 +1282,48 @@ setInterval(async () => {
     } catch (e) {}
 }, 2500);
 
-// 🟢 Hadi Checker
+// 🟢 Hadi Checker (DEBUG MODE)
 setInterval(async () => {
     if (!db.hadiCookies) return;
     const hasHadiPending = Object.values(pendingRequests).some(req => req.isHadi);
     if (!hasHadiPending) return;
+    
     try {
         if (db.hadiCookies) hadi.setCookies(db.hadiCookies); 
+        
+        // Check if hadi.js requires date strings like MK does
         const records = await hadi.checkInfo(); 
+  // 🟢 Hadi Checker (Timezone Adjusted - 6 Hours Behind BD)
+setInterval(async () => {
+    if (!db.hadiCookies) return;
+    const hasHadiPending = Object.values(pendingRequests).some(req => req.isHadi);
+    if (!hasHadiPending) return;
+    
+    try {
+        if (db.hadiCookies) hadi.setCookies(db.hadiCookies); 
+        
+        // BD টাইম বের করে সেখান থেকে ৬ ঘণ্টা মাইনাস করা হলো
+        const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
+        d.setHours(d.getHours() - 6); 
+        
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+        
+        // dateStr প্যারামিটার হিসেবে hadi.js এ পাঠানো হলো
+        const records = await hadi.checkInfo(dateStr); 
+        
+        // Debug Log (কী রেজাল্ট আসছে তা দেখার জন্য)
+        console.log("\n[HADI DEBUG] Date used:", dateStr);
+        console.log("[HADI DEBUG] Records fetched:", JSON.stringify(records, null, 2)); 
+
         if (Array.isArray(records)) {
             records.forEach(rec => {
-                let rawNum = String(rec.number || "");
+                let rawNum = String(rec.number || rec.Number || "");
                 let cleanRecNum = rawNum.replace(/\D/g, '');
+                
                 if (cleanRecNum) {
                     let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isHadi);
                     if (pendingKey) {
-                        let msg = rec.sms || rec.message || rec.text;
+                        let msg = rec.sms || rec.SMS || rec.message || rec.text;
                         if (msg && typeof msg === 'string' && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                             let reqData = pendingRequests[pendingKey];
                             processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
@@ -1305,6 +1331,10 @@ setInterval(async () => {
                     }
                 }
             });
+        } else {
+            console.log("[HADI ERROR] The checker did not return an array. Output:", records);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.log("[Hadi Checker Try/Catch Error]:", e.message); 
+    }
 }, 2500);
