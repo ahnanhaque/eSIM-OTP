@@ -148,7 +148,7 @@ const manageNumberPanel = {
     [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
     [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }],
     [{ text: "MK SMS ✉️", callback_data: "placeholder_mk" }],
-    [{ text: "Hadi SMS 💬", callback_data: "placeholder_hadi" }], // 🟢 Hadi Added
+    [{ text: "Hadi SMS 💬", callback_data: "placeholder_hadi" }], 
     [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
     [{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]
   ]
@@ -336,6 +336,35 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel }).catch(()=>{});
     delete userStates[chatId]; delete tempAdminData[chatId];
   }
+  else if (userStates[chatId] === "WAITING_FOR_HADI_COUNTRY" && isAdmin(chatId, username)) {
+      const info = getCountryInfo(text.trim().toUpperCase());
+      tempAdminData[chatId] = { ...tempAdminData[chatId], hadiCountry: text.trim().toUpperCase() };
+      userStates[chatId] = "WAITING_FOR_HADI_NUMBERS";
+      bot.sendMessage(chatId, `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the Hadi numbers below (each on a new line):`, { parse_mode: "Markdown" }).catch(()=>{});
+  }
+  else if (userStates[chatId] === "WAITING_FOR_HADI_NUMBERS" && isAdmin(chatId, username)) {
+      const country = tempAdminData[chatId]?.hadiCountry;
+      const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+      if (!country) { delete userStates[chatId]; return; }
+
+      const numbers = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
+      if (!db.hadiRanges) db.hadiRanges = { fb: {}, ig: {}, wa: {} };
+      if (!db.hadiRanges[platform]) db.hadiRanges[platform] = {};
+      if (!db.hadiRanges[platform][country]) db.hadiRanges[platform][country] = [];
+
+      let added = 0;
+      numbers.forEach(num => {
+          if (!db.hadiRanges[platform][country].includes(num)) {
+              db.hadiRanges[platform][country].push(num);
+              added++;
+          }
+      });
+      saveDB();
+
+      bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to Hadi (${country}) for **${platform.toUpperCase()}**.`, { parse_mode: "Markdown" }).catch(()=>{});
+      bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel }).catch(()=>{});
+      delete userStates[chatId]; delete tempAdminData[chatId]?.hadiCountry;
+  }
   else if (userStates[chatId] === "WAITING_FOR_BKASH") {
     if (/^(01[3-9]\d{8})$/.test(text)) {
       const currentBalance = getBalance(chatId); if (currentBalance < 50) { bot.sendMessage(chatId, `⚠️ Insufficient balance. You need at least 50 BDT to withdraw.`).catch(()=>{}); delete userStates[chatId]; return; }
@@ -419,16 +448,6 @@ bot.on('message', async (msg) => {
       } else { bot.sendMessage(chatId, "❌ Invalid format.").catch(()=>{}); }
   }
 
-  else if (userStates[chatId] === "WAITING_FOR_HADI_RANGE" && isAdmin(chatId, username)) {
-      const range = text.trim();
-      if(range.length >= 5) {
-          const country = detectCountryFromRange(range);
-          tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: 'hadi' };
-          userStates[chatId] = "WAITING_FOR_METHOD_NAME";
-          bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`, {parse_mode: "Markdown"}).catch(()=>{});
-      } else { bot.sendMessage(chatId, "❌ Invalid format.").catch(()=>{}); }
-  }
-
   else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
       const method = text.trim();
       const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -444,11 +463,6 @@ bot.on('message', async (msg) => {
           if (!db.mkRanges[platform]) db.mkRanges[platform] = {}; 
           db.mkRanges[platform][range] = { country: country, method: method }; 
           bot.sendMessage(chatId, `✅ MK Range **${range}** added.`, {parse_mode: "Markdown"}).catch(()=>{});
-      } else if (panel === 'hadi') {
-          if (!db.hadiRanges) db.hadiRanges = { fb: {}, ig: {}, wa: {} };
-          if (!db.hadiRanges[platform]) db.hadiRanges[platform] = {}; 
-          db.hadiRanges[platform][range] = { country: country, method: method }; 
-          bot.sendMessage(chatId, `✅ Hadi Range **${range}** added.`, {parse_mode: "Markdown"}).catch(()=>{});
       }
       saveDB();
       delete userStates[chatId];
@@ -667,8 +681,15 @@ bot.on('callback_query', async (query) => {
 
         const hadiList = db.hadiRanges && db.hadiRanges[plat] ? Object.keys(db.hadiRanges[plat]) : [];
         hadiList.forEach(r => {
-            const info = getCountryInfo(db.hadiRanges[plat][r]);
-            btns.push([{ text: `Hadi : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delhadirng_${plat}_${r}` }]);
+            if (Array.isArray(db.hadiRanges[plat][r])) {
+                if (db.hadiRanges[plat][r].length > 0) {
+                    const info = getCountryInfo(r);
+                    btns.push([{ text: `Hadi : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delhadirng_${plat}_${r}` }]);
+                }
+            } else {
+                const info = getCountryInfo(db.hadiRanges[plat][r]);
+                btns.push([{ text: `Hadi : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delhadirng_${plat}_${r}` }]);
+            }
         });
 
         const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
@@ -739,8 +760,8 @@ bot.on('callback_query', async (query) => {
   }
   else if (data === "placeholder_hadi") {
     const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
-    userStates[chatId] = "WAITING_FOR_HADI_RANGE";
-    bot.sendMessage(chatId, `🔢 **Enter Hadi Range for ${platform.toUpperCase()}:**`, {parse_mode: "Markdown"}).catch(()=>{});
+    userStates[chatId] = "WAITING_FOR_HADI_COUNTRY";
+    bot.sendMessage(chatId, `🌍 **Enter the country name for Hadi (${platform.toUpperCase()}):**\n(For example: PAKISTAN, USA, BANGLADESH)`, {parse_mode: "Markdown"}).catch(()=>{});
     bot.answerCallbackQuery(query.id);
   }
 
@@ -766,7 +787,7 @@ bot.on('callback_query', async (query) => {
     const ranges = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
     const stexRangesList = Object.keys(stexPlatformDB);
     const mkRangesList = Object.keys(mkPlatformDB);
-    const hadiRangesList = Object.keys(hadiPlatformDB);
+    const hadiRangesList = Object.keys(hadiPlatformDB).filter(k => Array.isArray(hadiPlatformDB[k]) ? hadiPlatformDB[k].length > 0 : true);
     
     if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && hadiRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock for this platform.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(()=>{});
     
@@ -774,7 +795,13 @@ bot.on('callback_query', async (query) => {
     ranges.forEach(r => combinedRanges.push({ type: 'iva', range: r, info: getCountryInfo(r) }));
     stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(stexPlatformDB[r]) }));
     mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(mkPlatformDB[r]) }));
-    hadiRangesList.forEach(r => combinedRanges.push({ type: 'hadi', range: r, info: getCountryInfo(hadiPlatformDB[r]) }));
+    hadiRangesList.forEach(r => {
+        if (Array.isArray(hadiPlatformDB[r])) {
+            combinedRanges.push({ type: 'hadi', range: r, info: getCountryInfo(r) });
+        } else {
+            combinedRanges.push({ type: 'hadi', range: r, info: getCountryInfo(hadiPlatformDB[r]) });
+        }
+    });
 
     combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
@@ -796,6 +823,10 @@ bot.on('callback_query', async (query) => {
         }
 
         let stock = item.type === 'iva' ? availPlatformDB[item.range].length : '∞';
+        if (item.type === 'hadi' && Array.isArray(hadiPlatformDB[item.range])) {
+            stock = hadiPlatformDB[item.range].length;
+        }
+
         countryButtons.push([{ text: `${dName} | 📦: ${stock}`, callback_data: `assign_${platform}_${item.range}` }]);
     });
 
@@ -818,73 +849,109 @@ bot.on('callback_query', async (query) => {
     
     // 🟢 HADI ASSIGN LOGIC
     if (db.hadiRanges && db.hadiRanges[platform] && db.hadiRanges[platform][sel]) {
-        bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); 
-        const limit = db.settings.maxNumbers || 4;
-        let fetchedNums = [];
-        bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+        if (Array.isArray(db.hadiRanges[platform][sel])) {
+            const nums = db.hadiRanges[platform][sel];
+            if (nums.length === 0) return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
 
-        if (db.hadiCookies) hadi.setCookies(db.hadiCookies); 
+            bot.answerCallbackQuery(query.id, { text: "⏳ Assigning numbers...", show_alert: false });
+            const limit = db.settings.maxNumbers || 4;
+            const assignedNums = nums.splice(0, limit);
+            db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] }; saveDB();
 
-        const hadiEntry = db.hadiRanges[platform][sel];
-        const countryName = typeof hadiEntry === 'object' ? hadiEntry.country : hadiEntry;
-        const methodName = typeof hadiEntry === 'object' ? hadiEntry.method : "";
+            assignedNums.forEach(n => {
+                inUseNumbers[n] = true;
+                pendingRequests[n] = { chatId: chatId, country: sel, isHadi: true, platform: platform };
+            });
 
-        for(let i=0; i<limit; i++) {
-            try {
-                const numData = await hadi.getNumber(sel);
-                const n = numData.number ? numData.number.replace('+', '') : '';
-                if(n) {
-                    fetchedNums.push(n);
-                    inUseNumbers[n] = true;
-                    pendingRequests[n] = { chatId: chatId, country: countryName, isHadi: true, platform: platform };
+            const info = getCountryInfo(sel);
+            let platName = platform.toUpperCase(); if(platform === 'fb') platName = "FACEBOOK"; else if(platform === 'ig') platName = "INSTAGRAM"; else if(platform === 'wa') platName = "WHATSAPP";
+
+            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n👇 _Click a number below to copy:_`;
+
+            let actionMenu = { inline_keyboard: [] };
+            assignedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
+            actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
+
+            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+                activeNumberMessages[chatId] = messageId;
+                setTimeout(() => {
+                    assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                    assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]}, parse_mode: "Markdown" }).catch(()=>{});
+                }, 15 * 60 * 1000);
+            }).catch(()=>{});
+            return;
+        } else {
+            // Legacy Hadi Object support fallback
+            bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false }); 
+            const limit = db.settings.maxNumbers || 4;
+            let fetchedNums = [];
+            bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
+
+            if (db.hadiCookies) hadi.setCookies(db.hadiCookies); 
+
+            const hadiEntry = db.hadiRanges[platform][sel];
+            const countryName = typeof hadiEntry === 'object' ? hadiEntry.country : hadiEntry;
+            const methodName = typeof hadiEntry === 'object' ? hadiEntry.method : "";
+
+            for(let i=0; i<limit; i++) {
+                try {
+                    const numData = await hadi.getNumber(sel);
+                    const n = numData.number ? numData.number.replace('+', '') : '';
+                    if(n) {
+                        fetchedNums.push(n);
+                        inUseNumbers[n] = true;
+                        pendingRequests[n] = { chatId: chatId, country: countryName, isHadi: true, platform: platform };
+                    }
+                } catch (e) { 
+                    console.log(`[Hadi Fetch Error - Attempt ${i+1}]:`, e.message); 
+                    if (i === 0 && e.message.includes("EXPIRED") && db.hadiCreds && db.hadiCreds.email) {
+                        try {
+                            const newCookie = await hadi.login(db.hadiCreds.email, db.hadiCreds.password);
+                            db.hadiCookies = newCookie;
+                            saveDB();
+                            
+                            const retryData = await hadi.getNumber(sel);
+                            const retryN = retryData.number ? retryData.number.replace('+', '') : '';
+                            if(retryN) {
+                                fetchedNums.push(retryN);
+                                inUseNumbers[retryN] = true;
+                                pendingRequests[retryN] = { chatId: chatId, country: countryName, isHadi: true, platform: platform };
+                                continue; 
+                            }
+                        } catch (err2) { break; } 
+                    }
+                    break; 
                 }
-            } catch (e) { 
-                console.log(`[Hadi Fetch Error - Attempt ${i+1}]:`, e.message); 
-                if (i === 0 && e.message.includes("EXPIRED") && db.hadiCreds && db.hadiCreds.email) {
-                    try {
-                        const newCookie = await hadi.login(db.hadiCreds.email, db.hadiCreds.password);
-                        db.hadiCookies = newCookie;
-                        saveDB();
-                        
-                        const retryData = await hadi.getNumber(sel);
-                        const retryN = retryData.number ? retryData.number.replace('+', '') : '';
-                        if(retryN) {
-                            fetchedNums.push(retryN);
-                            inUseNumbers[retryN] = true;
-                            pendingRequests[retryN] = { chatId: chatId, country: countryName, isHadi: true, platform: platform };
-                            continue; 
-                        }
-                    } catch (err2) { break; } 
-                }
-                break; 
             }
+
+            if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
+
+            const info = getCountryInfo(countryName);
+            let platName = platform.toUpperCase(); if(platform === 'fb') platName = "FACEBOOK"; else if(platform === 'ig') platName = "INSTAGRAM"; else if(platform === 'wa') platName = "WHATSAPP";
+
+            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+            if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
+            replyText += `\n\n👇 _Click a number below to copy:_`;
+
+            let actionMenu = { inline_keyboard: [] };
+            fetchedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
+            actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
+            
+            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+                activeNumberMessages[chatId] = messageId;
+                setTimeout(() => {
+                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+                    if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
+                    expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                    fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]}, parse_mode: "Markdown" }).catch(()=>{});
+                }, 15 * 60 * 1000);
+            }).catch(()=>{});
+            return;
         }
-
-        if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
-
-        const info = getCountryInfo(countryName);
-        let platName = platform.toUpperCase(); if(platform === 'fb') platName = "FACEBOOK"; else if(platform === 'ig') platName = "INSTAGRAM"; else if(platform === 'wa') platName = "WHATSAPP";
-
-        let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-        if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-        replyText += `\n\n👇 _Click a number below to copy:_`;
-
-        let actionMenu = { inline_keyboard: [] };
-        fetchedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
-        actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
-        
-        bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
-            activeNumberMessages[chatId] = messageId;
-            setTimeout(() => {
-                fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-                fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]]}, parse_mode: "Markdown" }).catch(()=>{});
-            }, 15 * 60 * 1000);
-        }).catch(()=>{});
-        return;
     }
 
     if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
@@ -1042,7 +1109,7 @@ bot.on('callback_query', async (query) => {
 });
 
 function processFoundOTP(number, time, message, range) {
-  const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
+  const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;       
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
   
   const cName = typeof range === 'object' ? range.country : range;
