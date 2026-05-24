@@ -190,7 +190,7 @@ bot.on('message', async (msg) => {
 
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-  // 🟢 Broadcast Logic
+  // 🟢 Broadcast Logic Updated: Broadcasts everything including Files/Photos/Videos
   if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
       if (text === "✖ Close Menu" || text.startsWith('/')) { 
           delete userStates[chatId]; 
@@ -200,7 +200,8 @@ bot.on('message', async (msg) => {
       let successCount = 0;
       for (let uId of db.users) { 
           try { 
-              await bot.copyMessage(uId, chatId, msg.message_id); 
+              // বাটন রিমুভ করে কপি করা হচ্ছে
+              await bot.copyMessage(uId, chatId, msg.message_id, { reply_markup: { remove_keyboard: true } }); 
               successCount++; 
           } catch(e) {} 
       }
@@ -209,7 +210,6 @@ bot.on('message', async (msg) => {
       return;
   }
 
-  // If not broadcasting, ignore non-text or commands
   if (!text || text.startsWith('/')) return;
 
   const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
@@ -648,7 +648,6 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
-  // 🟢 Admin Broadcast Feature Prompt Setup
   else if (data === "admin_broadcast") { 
       userStates[chatId] = "WAITING_FOR_BROADCAST"; 
       bot.sendMessage(chatId, "📢 **Please send the message you want to broadcast:**\n_(You can send Text, Photo, Video, Voice, or Document)_", {parse_mode: "Markdown"}).catch(()=>{}); 
@@ -665,13 +664,15 @@ bot.on('callback_query', async (query) => {
     ['fb', 'ig', 'wa'].forEach(plat => {
         const stexList = db.stexRanges[plat] ? Object.keys(db.stexRanges[plat]) : [];
         stexList.forEach(r => {
-            const info = getCountryInfo(db.stexRanges[plat][r]);
+            const cName = typeof db.stexRanges[plat][r] === 'object' ? db.stexRanges[plat][r].country : db.stexRanges[plat][r];
+            const info = getCountryInfo(cName);
             btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${plat}_${r}` }]);
         });
 
         const mkList = db.mkRanges && db.mkRanges[plat] ? Object.keys(db.mkRanges[plat]) : [];
         mkList.forEach(r => {
-            const info = getCountryInfo(db.mkRanges[plat][r]);
+            const cName = typeof db.mkRanges[plat][r] === 'object' ? db.mkRanges[plat][r].country : db.mkRanges[plat][r];
+            const info = getCountryInfo(cName);
             btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${plat}_${r}` }]);
         });
 
@@ -723,13 +724,15 @@ bot.on('callback_query', async (query) => {
     ['fb', 'ig', 'wa'].forEach(p => {
         const stexList = db.stexRanges[p] ? Object.keys(db.stexRanges[p]) : [];
         stexList.forEach(r => {
-            const info = getCountryInfo(db.stexRanges[p][r]);
+            const cName = typeof db.stexRanges[p][r] === 'object' ? db.stexRanges[p][r].country : db.stexRanges[p][r];
+            const info = getCountryInfo(cName);
             btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${p}_${r}` }]);
         });
 
         const mkList = db.mkRanges && db.mkRanges[p] ? Object.keys(db.mkRanges[p]) : [];
         mkList.forEach(r => {
-            const info = getCountryInfo(db.mkRanges[p][r]);
+            const cName = typeof db.mkRanges[p][r] === 'object' ? db.mkRanges[p][r].country : db.mkRanges[p][r];
+            const info = getCountryInfo(cName);
             btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${p}_${r}` }]);
         });
 
@@ -798,8 +801,8 @@ bot.on('callback_query', async (query) => {
     
     let combinedRanges = [];
     ranges.forEach(r => combinedRanges.push({ type: 'iva', range: r, info: getCountryInfo(r) }));
-    stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(stexPlatformDB[r]) }));
-    mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(mkPlatformDB[r]) }));
+    stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(typeof stexPlatformDB[r] === 'object' ? stexPlatformDB[r].country : stexPlatformDB[r]) }));
+    mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(typeof mkPlatformDB[r] === 'object' ? mkPlatformDB[r].country : mkPlatformDB[r]) }));
 
     combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
@@ -1094,7 +1097,9 @@ function processFoundOTP(number, time, message, range) {
   const uniqueId = `${number}_${time}`; if (lastProcessedOTPTime[uniqueId]) return; lastProcessedOTPTime[uniqueId] = true;      
   let otpMatch = message.match(/\b\d{5,8}\b/), otpCode = otpMatch ? otpMatch[0] : null;
   
-  const info = getCountryInfo(range || "UNKNOWN");
+  // 🟢 Handle range object extraction
+  const cName = typeof range === 'object' ? range.country : range;
+  const info = getCountryInfo(cName || "UNKNOWN");
   const numStr = String(number);
   const maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
 
@@ -1121,7 +1126,7 @@ function processFoundOTP(number, time, message, range) {
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
   if (reqData) {
-    const reqInfo = getCountryInfo(reqData.country);
+    const reqInfo = getCountryInfo(cName);
     
     let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
     
