@@ -86,14 +86,14 @@ const countryPrefixes = {
 const countryData = { "SIERRA LEONE": { flag: "🇸🇱" }, "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "TOGO": { flag: "🇹🇬" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
 
 function detectCountryFromRange(range) {
-    let cleanRange = String(range || "").replace(/\D/g, ''); 
-    for (let i = 4; i >= 1; i--) {
-        let prefix = cleanRange.substring(0, i);
-        if (countryPrefixes[prefix]) {
-            return countryPrefixes[prefix];
-        }
-    }
-    return "UNKNOWN";
+  let cleanRange = String(range || "").replace(/\D/g, ''); 
+  for (let i = 4; i >= 1; i--) {
+      let prefix = cleanRange.substring(0, i);
+      if (countryPrefixes[prefix]) {
+          return countryPrefixes[prefix];
+      }
+  }
+  return "UNKNOWN";
 }
 
 function getCountryInfo(data) {
@@ -1282,7 +1282,7 @@ setInterval(async () => {
     } catch (e) {}
 }, 2500);
 
-// 🟢 Hadi Checker (Timezone Adjusted - 6 Hours Behind BD)
+// 🟢 Hadi Checker (Timezone Adjusted & Array Parsed)
 setInterval(async () => {
     if (!db.hadiCookies) return;
     const hasHadiPending = Object.values(pendingRequests).some(req => req.isHadi);
@@ -1291,39 +1291,42 @@ setInterval(async () => {
     try {
         if (db.hadiCookies) hadi.setCookies(db.hadiCookies); 
         
-        // BD টাইম বের করে সেখান থেকে ৬ ঘণ্টা মাইনাস করা হলো
         const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
         d.setHours(d.getHours() - 6); 
-        
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         
-        // dateStr প্যারামিটার হিসেবে hadi.js এ পাঠানো হলো
         const records = await hadi.checkInfo(dateStr); 
         
-        // Debug Log (কী রেজাল্ট আসছে তা দেখার জন্য)
-        console.log("\n[HADI DEBUG] Date used:", dateStr);
-        console.log("[HADI DEBUG] Records fetched:", JSON.stringify(records, null, 2)); 
-
-        if (Array.isArray(records)) {
-            records.forEach(rec => {
-                let rawNum = String(rec.number || rec.Number || "");
-                let cleanRecNum = rawNum.replace(/\D/g, '');
-                
-                if (cleanRecNum) {
-                    let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isHadi);
-                    if (pendingKey) {
-                        let msg = rec.sms || rec.SMS || rec.message || rec.text;
-                        if (msg && typeof msg === 'string' && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                            let reqData = pendingRequests[pendingKey];
-                            processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
+        // ডাটা যদি aaData এর ভেতরে থাকে (Network tab অনুযায়ী)
+        let smsList = [];
+        if (records && Array.isArray(records.aaData)) {
+            smsList = records.aaData;
+        } else if (Array.isArray(records)) {
+            smsList = records;
+        }
+        
+        if (smsList.length > 0) {
+            smsList.forEach(row => {
+                // row যদি অ্যারে হয় (যেমন: ["Date", "Peru MIX", "519...", "FACEBOOK", "SMS text", ...])
+                if (Array.isArray(row) && row.length >= 5) {
+                    let rawNum = String(row[2] || ""); // ইনডেক্স 2 হলো নাম্বার
+                    let cleanRecNum = rawNum.replace(/\D/g, '');
+                    
+                    // লাস্ট সামারি রো (যেখানে নাম্বার 0 থাকে) ইগনোর করার জন্য
+                    if (cleanRecNum && cleanRecNum !== "0") {
+                        let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, '') === cleanRecNum && pendingRequests[k].isHadi);
+                        if (pendingKey) {
+                            let msg = String(row[4] || ""); // ইনডেক্স 4 হলো এসএমএস টেক্সট
+                            if (msg && msg !== "0" && msg !== "$" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                let reqData = pendingRequests[pendingKey];
+                                processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
+                            }
                         }
                     }
                 }
             });
-        } else {
-            console.log("[HADI ERROR] The checker did not return an array. Output:", records);
         }
     } catch (e) {
-        console.log("[Hadi Checker Try/Catch Error]:", e.message); 
+        console.log("[Hadi Checker Error]:", e.message); 
     }
 }, 2500);
