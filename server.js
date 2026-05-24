@@ -81,11 +81,8 @@ const countryPrefixes = {
     "1": "USA", "7": "RUSSIA", "20": "EGYPT", "27": "SOUTH AFRICA", "30": "GREECE", "31": "NETHERLANDS", "32": "BELGIUM", "33": "FRANCE", "34": "SPAIN", "36": "HUNGARY", "39": "ITALY", "40": "ROMANIA", "43": "AUSTRIA", "44": "UK", "45": "DENMARK", "46": "SWEDEN", "47": "NORWAY", "48": "POLAND", "49": "GERMANY", "51": "PERU", "52": "MEXICO", "53": "CUBA", "54": "ARGENTINA", "55": "BRAZIL", "56": "CHILE", "57": "COLOMBIA", "58": "VENEZUELA", "60": "MALAYSIA", "61": "AUSTRALIA", "62": "INDONESIA", "63": "PHILIPPINES", "64": "NEW ZEALAND", "65": "SINGAPORE", "66": "THAILAND", "81": "JAPAN", "82": "SOUTH KOREA", "84": "VIETNAM", "86": "CHINA", "90": "TURKEY", "91": "INDIA", "92": "PAKISTAN", "93": "AFGHANISTAN", "94": "SRI LANKA", "95": "MYANMAR", "98": "IRAN", "211": "SOUTH SUDAN", "212": "MOROCCO", "213": "ALGERIA", "216": "TUNISIA", "218": "LIBYA", "220": "GAMBIA", "221": "SENEGAL", "222": "MAURITANIA", "223": "MALI", "224": "GUINEA", "225": "IVORY COAST", "226": "BURKINA FASO", "227": "NIGER", "228": "TOGO", "229": "BENIN", "230": "MAURITIUS", "231": "LIBERIA", "232": "SIERRA LEONE", "233": "GHANA", "234": "NIGERIA", "235": "CHAD", "236": "CENTRAL AFRICA", "237": "CAMEROON", "238": "CAPE VERDE", "239": "SAO TOME", "240": "EQUATORIAL GUINEA", "241": "GABON", "242": "CONGO", "243": "DR CONGO", "244": "ANGOLA", "245": "GUINEA BISSAU", "246": "DIEGO GARCIA", "248": "SEYCHELLES", "249": "SUDAN", "250": "RWANDA", "251": "ETHIOPIA", "252": "SOMALIA", "253": "DJIBOUTI", "254": "KENYA", "255": "TANZANIA", "256": "UGANDA", "257": "BURUNDI", "258": "MOZAMBIQUE", "260": "ZAMBIA", "261": "MADAGASCAR", "262": "REUNION", "263": "ZIMBABWE", "264": "NAMIBIA", "265": "MALAWI", "266": "LESOTHO", "267": "BOTSWANA", "268": "ESWATINI", "269": "COMOROS", "351": "PORTUGAL", "352": "LUXEMBOURG", "353": "IRELAND", "354": "ICELAND", "355": "ALBANIA", "356": "MALTA", "357": "CYPRUS", "358": "FINLAND", "359": "BULGARIA", "370": "LITHUANIA", "371": "LATVIA", "372": "ESTONIA", "373": "MOLDOVA", "374": "ARMENIA", "375": "BELARUS", "376": "ANDORRA", "377": "MONACO", "378": "SAN MARINO", "380": "UKRAINE", "381": "SERBIA", "382": "MONTENEGRO", "385": "CROATIA", "386": "SLOVENIA", "387": "BOSNIA", "389": "MACEDONIA", "852": "HONG KONG", "853": "MACAU", "855": "CAMBODIA", "856": "LAOS", "880": "BANGLADESH", "960": "MALDIVES", "961": "LEBANON", "962": "JORDAN", "963": "SYRIA", "964": "IRAQ", "965": "KUWAIT", "966": "SAUDI ARABIA", "967": "YEMEN", "968": "OMAN", "971": "UAE", "972": "ISRAEL", "973": "BAHRAIN", "974": "QATAR", "975": "BHUTAN", "976": "MONGOLIA", "977": "NEPAL", "992": "TAJIKISTAN", "993": "TURKMENISTAN", "994": "AZERBAIJAN", "995": "GEORGIA", "996": "KYRGYZSTAN", "998": "UZBEKISTAN"
 };
 
-const countryData = { "SIERRA LEONE": { flag: "🇸🇱" }, "TUNISIA": { flag: "🇹🇳" }, "ETHIOPIA": { flag: "🇪🇹" }, "CENTRAL AFRICA": { flag: "🇨🇫" }, "MONGOLIA": { flag: "🇲🇳" }, "MYANMAR": { flag: "🇲🇲" }, "CAMEROON": { flag: "🇨🇲" }, "MALI": { flag: "🇲🇱" }, "TOGO": { flag: "🇹🇬" }, "IVORY COAST": { flag: "🇨🇮" }, "SENEGAL": { flag: "🇸🇳" }, "NIGERIA": { flag: "🇳🇬" }, "GHANA": { flag: "🇬🇭" }, "KENYA": { flag: "🇰🇪" }, "SOUTH AFRICA": { flag: "🇿🇦" }, "MOROCCO": { flag: "🇲🇦" }, "BRAZIL": { flag: "🇧🇷" }, "MEXICO": { flag: "🇲🇽" }, "INDIA": { flag: "🇮🇳" }, "BANGLADESH": { flag: "🇧🇩" }, "PAKISTAN": { flag: "🇵🇰" }, "PHILIPPINES": { flag: "🇵🇭" }, "INDONESIA": { flag: "🇮🇩" }, "VIETNAM": { flag: "🇻🇳" }, "THAILAND": { flag: "🇹🇭" }, "USA": { flag: "🇺🇸" }, "UK": { flag: "🇬🇧" }, "FRANCE": { flag: "🇫🇷" }, "GERMANY": { flag: "🇩🇪" }, "ITALY": { flag: "🇮🇹" }, "SPAIN": { flag: "🇪🇸" }, "COLOMBIA": { flag: "🇨🇴" }, "ARGENTINA": { flag: "🇦🇷" }, "TURKEY": { flag: "🇹🇷" }, "RUSSIA": { flag: "🇷🇺" }, "UKRAINE": { flag: "🇺🇦" }, "KAZAKHSTAN": { flag: "🇰🇿" }, "MACAU": { flag: "🇲🇴" }, "HONG KONG": { flag: "🇭🇰" }, "MALAYSIA": { flag: "🇲🇾" }, "CAMBODIA": { flag: "🇰🇭" }, "LAOS": { flag: "🇱🇦" }, "SRI LANKA": { flag: "🇱🇰" }, "NEPAL": { flag: "🇳🇵" }, "ALGERIA": { flag: "🇩🇿" }, "MADAGASCAR": { flag: "🇲🇬" }, "ROMANIA": { flag: "🇷🇴" }, "POLAND": { flag: "🇵🇱" }, "PORTUGAL": { flag: "🇵🇹" }, "NETHERLANDS": { flag: "🇳🇱" }, "SWEDEN": { flag: "🇸🇪" }, "UZBEKISTAN": { flag: "🇺🇿" }, "KYRGYZSTAN": { flag: "🇰🇬" }, "SOUTH KOREA": { flag: "🇰🇷" }, "JAPAN": { flag: "🇯🇵" }, "MACEDONIA": { flag: "🇲🇰" }, "ZAMBIA": { flag: "🇿🇲" }, "ZIMBABWE": { flag: "🇿🇼" }, "CHILE": { flag: "🇨🇱" }, "VENEZUELA": { flag: "🇻🇪" }, "BOLIVIA": { flag: "🇧🇴" }, "PARAGUAY": { flag: "🇵🇾" }, "ECUADOR": { flag: "🇪🇨" }, "ANGOLA": { flag: "🇦🇴" }, "UGANDA": { flag: "🇺🇬" }, "TANZANIA": { flag: "🇹🇿" }, "RWANDA": { flag: "🇷🇼" }, "SAUDI ARABIA": { flag: "🇸🇦" }, "UAE": { flag: "🇦🇪" }, "IRAQ": { flag: "🇮🇶" }, "IRAN": { flag: "🇮🇷" }, "TAIWAN": { flag: "🇹🇼" }, "SINGAPORE": { flag: "🇸🇬" }, "AUSTRALIA": { flag: "🇦🇺" }, "CANADA": { flag: "🇨🇦" }, "CONGO": { flag: "🇨🇩" }, "MOLDOVA": { flag: "🇲🇩" }, "SERBIA": { flag: "🇷🇸" }, "CROATIA": { flag: "🇭🇷" }, "BULGARIA": { flag: "🇧🇬" }, "LITHUANIA": { flag: "🇱🇹" }, "LATVIA": { flag: "🇱🇻" }, "ESTONIA": { flag: "🇪🇪" }, "FINLAND": { flag: "🇫🇮" }, "NORWAY": { flag: "🇳🇴" }, "DENMARK": { flag: "🇩🇰" }, "TAJIKISTAN": { flag: "🇹🇯" }, "BELARUS": { flag: "🇧🇾" }, "GEORGIA": { flag: "🇬🇪" }, "ARMENIA": { flag: "🇬🇪" }, "AFGHANISTAN": { flag: "🇦🇫" }, "SYRIA": { flag: "🇸🇾" }, "YEMEN": { flag: "🇾🇪" }, "OMAN": { flag: "🇴🇲" } };
-
-// 🟢 String Error Crash Fix 
 function detectCountryFromRange(range) {
-    let cleanRange = String(range).replace(/\D/g, ''); 
+    let cleanRange = range.replace(/\D/g, ''); 
     for (let i = 4; i >= 1; i--) {
         let prefix = cleanRange.substring(0, i);
         if (countryPrefixes[prefix]) {
@@ -95,12 +92,10 @@ function detectCountryFromRange(range) {
     return "UNKNOWN";
 }
 
-// 🟢 String Error Crash Fix 
 function getCountryInfo(countryName) {
   if (!countryName) return { flag: "🌍", cleanName: "Unknown" };
-  let strName = String(countryName);
-  let flag = "🌍", cleanName = strName.replace(/\s*[vV]?\d+.*$/, '').trim();
-  for (const key in countryData) if (strName.toUpperCase().includes(key)) { flag = countryData[key].flag; cleanName = key.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); break; }
+  let flag = "🌍", cleanName = countryName.replace(/\s*[vV]?\d+.*$/, '').trim();
+  for (const key in countryData) if (countryName.toUpperCase().includes(key)) { flag = countryData[key].flag; cleanName = key.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' '); break; }
   if (flag === "🌍") cleanName = cleanName.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
   return { flag, cleanName };
 }
@@ -181,9 +176,33 @@ bot.onText(/\/admin/, async (msg) => {
 });
 
 bot.on('message', async (msg) => {
-  const text = msg.text, chatId = msg.chat.id, username = msg.from.username;
-  if (!text || text.startsWith('/')) return;
+  const chatId = msg.chat.id, username = msg.from.username;
+  // 🟢 Media Support: Extracting text from caption if photo/video is sent
+  const text = msg.text || msg.caption || "";
+
   if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
+
+  // 🟢 Broadcast Logic Moved Top: Handle any media seamlessly
+  if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
+      if (text === "✖ Close Menu" || text.startsWith('/')) { 
+          delete userStates[chatId]; 
+          return; 
+      }
+      bot.sendMessage(chatId, `⏳ Broadcasting your message to all users. Please wait...`).catch(()=>{}); 
+      let successCount = 0;
+      for (let uId of db.users) { 
+          try { 
+              await bot.copyMessage(uId, chatId, msg.message_id); 
+              successCount++; 
+          } catch(e) {} 
+      }
+      bot.sendMessage(chatId, `✅ **Broadcast Complete!** Successfully sent to ${successCount} users.`).catch(()=>{}); 
+      delete userStates[chatId];
+      return;
+  }
+
+  // If not broadcasting, ignore non-text or commands
+  if (!text || text.startsWith('/')) return;
 
   const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
   if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
@@ -279,7 +298,7 @@ bot.on('message', async (msg) => {
       } catch (err) { bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid format.", { parse_mode: "Markdown" }).catch(()=>{}); }
       delete userStates[chatId]; 
   }
-  else if (text === "💬 Support") bot.sendMessage(chatId, "💬 <b>Support:</b>\nPlease contact our admin @ahnan_haque_mahi for any assistance.", { parse_mode: "HTML" }).catch(()=>{});
+  else if (text === "💬 Support") bot.sendMessage(chatId, "💬 **Support:**\nPlease contact our admin @ahnan_haque_mahi for any assistance.", { parse_mode: "Markdown" }).catch(()=>{});
   else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) { bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(()=>{}); }
   else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
     const limit = parseInt(text);
@@ -311,11 +330,6 @@ bot.on('message', async (msg) => {
     bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to ${country} for **${platform.toUpperCase()}**.`, { parse_mode: "Markdown" }).catch(()=>{}); 
     bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel }).catch(()=>{});
     delete userStates[chatId]; delete tempAdminData[chatId];
-  }
-  else if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
-    bot.sendMessage(chatId, `⏳ Broadcasting your message to all users. Please wait...`).catch(()=>{}); let successCount = 0;
-    for (let uId of db.users) { try { await bot.sendMessage(uId, `📢 **Broadcast Message:**\n\n${text}`, { parse_mode: "Markdown" }); successCount++; } catch(e) {} }
-    bot.sendMessage(chatId, `✅ **Broadcast Complete!** Your message was successfully sent to ${successCount} users.`).catch(()=>{}); delete userStates[chatId];
   }
   else if (userStates[chatId] === "WAITING_FOR_BKASH") {
     if (/^(01[3-9]\d{8})$/.test(text)) {
@@ -352,16 +366,17 @@ bot.on('message', async (msg) => {
       } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(()=>{}); }
       delete userStates[chatId];
   }
-
-  // 🟢 Method Name Update for STEX & MK
   else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
       const range = text.trim();
+      const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
       if(range.length >= 5) {
           const country = detectCountryFromRange(range);
-          tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: 'stex' };
-          userStates[chatId] = "WAITING_FOR_METHOD_NAME";
-          bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`, {parse_mode: "Markdown"}).catch(()=>{});
+          if (!db.stexRanges[platform]) db.stexRanges[platform] = {}; 
+          db.stexRanges[platform][range] = country; 
+          saveDB();
+          bot.sendMessage(chatId, `✅ Successfully added Stex Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
       } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
+      delete userStates[chatId];
   }
 
   else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
@@ -394,40 +409,16 @@ bot.on('message', async (msg) => {
   
   else if (userStates[chatId] === "WAITING_FOR_MK_RANGE" && isAdmin(chatId, username)) {
       const range = text.trim();
+      const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
       if(range.length >= 5) {
           const country = detectCountryFromRange(range);
-          tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: 'mk' };
-          userStates[chatId] = "WAITING_FOR_METHOD_NAME";
-          bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`, {parse_mode: "Markdown"}).catch(()=>{});
-      } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
-  }
-
-  // 🟢 Handle saving Method Name
-  else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
-      const method = text.trim();
-      const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
-      const range = tempAdminData[chatId]?.pendingRange;
-      const country = tempAdminData[chatId]?.pendingCountry;
-      const panel = tempAdminData[chatId]?.pendingPanel;
-
-      if (panel === 'stex') {
-          if (!db.stexRanges[platform]) db.stexRanges[platform] = {}; 
-          db.stexRanges[platform][range] = { country: country, method: method }; 
-          saveDB();
-          bot.sendMessage(chatId, `✅ Successfully added Stex Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`, {parse_mode: "Markdown"}).catch(()=>{});
-      } else if (panel === 'mk') {
+          if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
           if (!db.mkRanges[platform]) db.mkRanges[platform] = {}; 
-          db.mkRanges[platform][range] = { country: country, method: method }; 
+          db.mkRanges[platform][range] = country; 
           saveDB();
-          bot.sendMessage(chatId, `✅ Successfully added MK Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`, {parse_mode: "Markdown"}).catch(()=>{});
-      }
-      
+          bot.sendMessage(chatId, `✅ Successfully added MK Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Auto-detected Country: **${country}**`, {parse_mode: "Markdown"}).catch(()=>{});
+      } else { bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(()=>{}); }
       delete userStates[chatId];
-      if (tempAdminData[chatId]) {
-          delete tempAdminData[chatId].pendingRange;
-          delete tempAdminData[chatId].pendingCountry;
-          delete tempAdminData[chatId].pendingPanel;
-      }
   }
 });
 
@@ -628,6 +619,13 @@ bot.on('callback_query', async (query) => {
       bot.answerCallbackQuery(query.id);
   }
 
+  // 🟢 Admin Broadcast Feature Prompt Setup
+  else if (data === "admin_broadcast") { 
+      userStates[chatId] = "WAITING_FOR_BROADCAST"; 
+      bot.sendMessage(chatId, "📢 **Please send the message you want to broadcast:**\n_(You can send Text, Photo, Video, Voice, or Document)_", {parse_mode: "Markdown"}).catch(()=>{}); 
+      bot.answerCallbackQuery(query.id); 
+  }
+
   else if (data === "admin_manage_numbers") {
     bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(()=>{});
     bot.answerCallbackQuery(query.id);
@@ -638,15 +636,13 @@ bot.on('callback_query', async (query) => {
     ['fb', 'ig', 'wa'].forEach(plat => {
         const stexList = db.stexRanges[plat] ? Object.keys(db.stexRanges[plat]) : [];
         stexList.forEach(r => {
-            const cName = typeof db.stexRanges[plat][r] === 'object' ? db.stexRanges[plat][r].country : db.stexRanges[plat][r];
-            const info = getCountryInfo(cName);
+            const info = getCountryInfo(db.stexRanges[plat][r]);
             btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${plat}_${r}` }]);
         });
 
         const mkList = db.mkRanges && db.mkRanges[plat] ? Object.keys(db.mkRanges[plat]) : [];
         mkList.forEach(r => {
-            const cName = typeof db.mkRanges[plat][r] === 'object' ? db.mkRanges[plat][r].country : db.mkRanges[plat][r];
-            const info = getCountryInfo(cName);
+            const info = getCountryInfo(db.mkRanges[plat][r]);
             btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${plat}_${r}` }]);
         });
 
@@ -698,15 +694,13 @@ bot.on('callback_query', async (query) => {
     ['fb', 'ig', 'wa'].forEach(p => {
         const stexList = db.stexRanges[p] ? Object.keys(db.stexRanges[p]) : [];
         stexList.forEach(r => {
-            const cName = typeof db.stexRanges[p][r] === 'object' ? db.stexRanges[p][r].country : db.stexRanges[p][r];
-            const info = getCountryInfo(cName);
+            const info = getCountryInfo(db.stexRanges[p][r]);
             btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${p}_${r}` }]);
         });
 
         const mkList = db.mkRanges && db.mkRanges[p] ? Object.keys(db.mkRanges[p]) : [];
         mkList.forEach(r => {
-            const cName = typeof db.mkRanges[p][r] === 'object' ? db.mkRanges[p][r].country : db.mkRanges[p][r];
-            const info = getCountryInfo(cName);
+            const info = getCountryInfo(db.mkRanges[p][r]);
             btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${p}_${r}` }]);
         });
 
@@ -758,7 +752,6 @@ bot.on('callback_query', async (query) => {
     bot.answerCallbackQuery(query.id);
   }
   else if (data === "admin_set_limit") { userStates[chatId] = "WAITING_FOR_LIMIT"; bot.sendMessage(chatId, `🔢 **Please enter the new number limit:**`).catch(()=>{}); bot.answerCallbackQuery(query.id); }
-  else if (data === "admin_broadcast") { userStates[chatId] = "WAITING_FOR_BROADCAST"; bot.sendMessage(chatId, "📢 **Please type the message you want to broadcast:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(()=>{}); bot.answerCallbackQuery(query.id); }
   
   else if (data.startsWith("menu_country_")) {
@@ -776,8 +769,8 @@ bot.on('callback_query', async (query) => {
     
     let combinedRanges = [];
     ranges.forEach(r => combinedRanges.push({ type: 'iva', range: r, info: getCountryInfo(r) }));
-    stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(typeof stexPlatformDB[r] === 'object' ? stexPlatformDB[r].country : stexPlatformDB[r]) }));
-    mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(typeof mkPlatformDB[r] === 'object' ? mkPlatformDB[r].country : mkPlatformDB[r]) }));
+    stexRangesList.forEach(r => combinedRanges.push({ type: 'stex', range: r, info: getCountryInfo(stexPlatformDB[r]) }));
+    mkRangesList.forEach(r => combinedRanges.push({ type: 'mk', range: r, info: getCountryInfo(mkPlatformDB[r]) }));
 
     combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
@@ -789,10 +782,9 @@ bot.on('callback_query', async (query) => {
     let currentV = {};
     let countryButtons = [];
 
-    // 🟢 Thunder Emoji removed from here
     combinedRanges.forEach(item => {
         let info = item.info;
-        let dName = `${info.flag} ${info.cleanName}`;
+        let dName = `${item.type === 'iva' ? '' : '⚡ '}${info.flag} ${info.cleanName}`;
 
         if (globalCountryCount[info.cleanName] > 1) {
             currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1;
@@ -828,18 +820,13 @@ bot.on('callback_query', async (query) => {
         let fetchedNums = [];
         bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(()=>{});
 
-        // 🟢 STEX Object Extract
-        const stexEntry = db.stexRanges[platform][sel];
-        const countryName = typeof stexEntry === 'object' ? stexEntry.country : stexEntry;
-        const methodName = typeof stexEntry === 'object' ? stexEntry.method : "";
-
         for(let i=0; i<limit; i++) {
             try {
                 const numData = await stex.getNumber(sel);
                 const n = numData.full_number || numData.number.replace('+', '');
                 fetchedNums.push(n);
                 inUseNumbers[n] = true;
-                pendingRequests[n] = { chatId: chatId, country: countryName, isStex: true, platform: platform };
+                pendingRequests[n] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true, platform: platform };
             } catch (e) { 
                 console.log(`[STEX Fetch Error - Attempt ${i+1}]:`, e.message); 
                 if (i === 0 && e.message.includes("SESSION_EXPIRED") && db.stexCreds && db.stexCreds.email) {
@@ -855,7 +842,7 @@ bot.on('callback_query', async (query) => {
                         if(retryN) {
                             fetchedNums.push(retryN);
                             inUseNumbers[retryN] = true;
-                            pendingRequests[retryN] = { chatId: chatId, country: countryName, isStex: true, platform: platform };
+                            pendingRequests[retryN] = { chatId: chatId, country: db.stexRanges[platform][sel], isStex: true, platform: platform };
                             continue;
                         }
                     } catch (err2) { 
@@ -869,17 +856,8 @@ bot.on('callback_query', async (query) => {
 
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
 
-        const info = getCountryInfo(countryName);
-        let platName = platform.toUpperCase();
-        if(platform === 'fb') platName = "FACEBOOK";
-        else if(platform === 'ig') platName = "INSTAGRAM";
-        else if(platform === 'wa') platName = "WHATSAPP";
-
-        // 🟢 Added Platform & Method header format
-        let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-        if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-        replyText += `\n\n👇 _Click a number below to copy:_`;
-
+        const info = getCountryInfo(db.stexRanges[platform][sel]);
+        let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
         let actionMenu = { inline_keyboard: [] };
         fetchedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
         actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
@@ -889,10 +867,7 @@ bot.on('callback_query', async (query) => {
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 
-                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-
+                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
 
                 let expiredMenu = { inline_keyboard: [
@@ -913,11 +888,6 @@ bot.on('callback_query', async (query) => {
 
         if (db.mkCookies) mk.setCookies(db.mkCookies); 
 
-        // 🟢 MK Object Extract
-        const mkEntry = db.mkRanges[platform][sel];
-        const countryName = typeof mkEntry === 'object' ? mkEntry.country : mkEntry;
-        const methodName = typeof mkEntry === 'object' ? mkEntry.method : "";
-
         for(let i=0; i<limit; i++) {
             try {
                 const numData = await mk.getNumber(sel);
@@ -925,7 +895,7 @@ bot.on('callback_query', async (query) => {
                 if(n) {
                     fetchedNums.push(n);
                     inUseNumbers[n] = true;
-                    pendingRequests[n] = { chatId: chatId, country: countryName, isMk: true, platform: platform };
+                    pendingRequests[n] = { chatId: chatId, country: db.mkRanges[platform][sel], isMk: true, platform: platform };
                 }
             } catch (e) { 
                 console.log(`[MK Fetch Error - Attempt ${i+1}]:`, e.message); 
@@ -942,7 +912,7 @@ bot.on('callback_query', async (query) => {
                         if(retryN) {
                             fetchedNums.push(retryN);
                             inUseNumbers[retryN] = true;
-                            pendingRequests[retryN] = { chatId: chatId, country: countryName, isMk: true, platform: platform };
+                            pendingRequests[retryN] = { chatId: chatId, country: db.mkRanges[platform][sel], isMk: true, platform: platform };
                             continue; 
                         }
                     } catch (err2) { 
@@ -956,17 +926,8 @@ bot.on('callback_query', async (query) => {
 
         if(fetchedNums.length === 0) return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(()=>{}); 
 
-        const info = getCountryInfo(countryName);
-        let platName = platform.toUpperCase();
-        if(platform === 'fb') platName = "FACEBOOK";
-        else if(platform === 'ig') platName = "INSTAGRAM";
-        else if(platform === 'wa') platName = "WHATSAPP";
-
-        // 🟢 Added Platform & Method header format
-        let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-        if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-        replyText += `\n\n👇 _Click a number below to copy:_`;
-
+        const info = getCountryInfo(db.mkRanges[platform][sel]);
+        let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n👇 _Click a number below to copy:_`;
         let actionMenu = { inline_keyboard: [] };
         fetchedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
         actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]);
@@ -976,10 +937,7 @@ bot.on('callback_query', async (query) => {
             setTimeout(() => {
                 fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
-                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-
+                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()} ⚡\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
 
                 let expiredMenu = { inline_keyboard: [
@@ -1004,13 +962,7 @@ bot.on('callback_query', async (query) => {
     });
 
     const info = getCountryInfo(sel);
-    let platName = platform.toUpperCase();
-    if(platform === 'fb') platName = "FACEBOOK";
-    else if(platform === 'ig') platName = "INSTAGRAM";
-    else if(platform === 'wa') platName = "WHATSAPP";
-
-    let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n👇 _Click a number below to copy:_`;
-    
+    let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n👇 _Click a number below to copy:_`;
     let actionMenu = { inline_keyboard: [] };
     assignedNums.forEach(n => { actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]); });
     actionMenu.inline_keyboard.push([{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }]);
@@ -1021,7 +973,7 @@ bot.on('callback_query', async (query) => {
         setTimeout(() => {
             assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
 
-            let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+            let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
             assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
 
             let expiredMenu = { inline_keyboard: [
@@ -1090,17 +1042,9 @@ function processFoundOTP(number, time, message, range) {
 
   let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
   
-  // 🟢 "Get Number" button added on the left side of "COPY OTP"
   let groupMarkup = { inline_keyboard: [] };
-  let groupButtonRow = [];
-  if (botInfo && botInfo.username) {
-      groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
-  }
   if (otpCode) {
-      groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: otpCode } });
-  }
-  if (groupButtonRow.length > 0) {
-      groupMarkup.inline_keyboard.push(groupButtonRow);
+      groupMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
   }
   bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(()=>{});
 
@@ -1194,13 +1138,15 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
 setInterval(autoLoginPanels, 20 * 60 * 1000); 
 
+// 🟢 Stex OTP Checker (Timezone Bug Fixed!)
 setInterval(async () => {
     if (!db.stexToken) return;
     const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
     if (!hasStexPending) return;
     try {
+        // 🔴 Timezone Fix: BD Time is UTC+6, Stex is 4 hours behind
         const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
-        d.setHours(d.getHours() - 4); 
+        d.setHours(d.getHours() - 4); // Stex সার্ভারের সময়ের সাথে মেলানোর জন্য ৪ ঘণ্টা মাইনাস
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
         
         const records = await stex.checkInfo(dateStr);
