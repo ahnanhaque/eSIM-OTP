@@ -1,5 +1,5 @@
+const BASE_URL = "http://smshadi.net"; 
 let currentCookies = "";
-const BASE_URL = "https://smshadi.net"; // প্যানেলের মূল লিংক
 
 function setCookies(cookies) {
     currentCookies = cookies;
@@ -12,7 +12,6 @@ function getCookies() {
 // 🟢 Auto Math Captcha Solver & Login
 async function login(username, password) {
     try {
-        // ১. প্রথমে লগইন পেজ লোড করে সেশন কুকি এবং ক্যাপচা নিয়ে আসা
         const getRes = await fetch(`${BASE_URL}/`);
         const html = await getRes.text();
 
@@ -22,26 +21,21 @@ async function login(username, password) {
             initialCookie = rawCookies.split(';')[0]; 
         }
 
-        // ২. রেগুলার এক্সপ্রেশন (Regex) দিয়ে ক্যাপচার নাম্বার দুটো খোঁজা
         const mathRegex = /What is (\d+)\s*\+\s*(\d+)\s*=\s*\?/;
         const match = html.match(mathRegex);
         
-        if (!match) {
-            throw new Error("Captcha pattern not found on the login page.");
-        }
+        if (!match) throw new Error("Captcha pattern not found on the login page.");
 
-        // ৩. নাম্বার দুটো যোগ করে রেজাল্ট বের করা
         const num1 = parseInt(match[1], 10);
         const num2 = parseInt(match[2], 10);
         const captAnswer = num1 + num2;
 
         console.log(`[HADI] Captcha Solved: ${num1} + ${num2} = ${captAnswer}`);
 
-        // ৪. লগইন রিকোয়েস্ট পাঠানো
         const formData = new URLSearchParams();
         formData.append('username', username);
         formData.append('password', password);
-        formData.append('capt', captAnswer); // অটোমেটিক যোগফল
+        formData.append('capt', captAnswer); 
 
         const postRes = await fetch(`${BASE_URL}/signin`, {
             method: 'POST',
@@ -49,13 +43,13 @@ async function login(username, password) {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Cookie': initialCookie,
                 'Referer': `${BASE_URL}/`,
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+                'Upgrade-Insecure-Requests': '1'
             },
             body: formData.toString(),
             redirect: 'manual' 
         });
 
-        // ৫. লগইন সাকসেস হলে নতুন কুকি সেভ করা
         const loginCookies = postRes.headers.get('set-cookie');
         if (loginCookies) {
             currentCookies = loginCookies.split(';')[0];
@@ -68,22 +62,70 @@ async function login(username, password) {
         }
 
         return currentCookies;
-
-    } catch (error) {
-        throw error;
-    }
+    } catch (error) { throw error; }
 }
 
-// 🟢 Get Number (API Endpoint দরকার)
-async function getNumber(range) {
+// 🟢 Get Number (cURL থেকে)
+async function getNumber(countryCode) {
     if (!currentCookies) throw new Error("SESSION_EXPIRED");
-    // TODO: Number কেনার API রিকোয়েস্ট এখানে বসবে
+    try {
+        const url = `${BASE_URL}/client/MySMSNumbers`; 
+        const getRes = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9,de-DE;q=0.8,de;q=0.7',
+                'Connection': 'keep-alive',
+                'Cookie': currentCookies,
+                'Referer': `${BASE_URL}/client/SMSDashboard`,
+                'Upgrade-Insecure-Requests': '1',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+            }
+        });
+
+        const html = await getRes.text();
+        const numberMatch = html.match(/\b\d{10,15}\b/); 
+
+        if (numberMatch && numberMatch[0]) return { number: numberMatch[0] };
+        else throw new Error("Out of Stock or Number not found.");
+    } catch (error) { throw error; }
 }
 
-// 🟢 Check SMS (API Endpoint দরকার)
-async function checkInfo(dateStr) {
+// 🟢 Check SMS (cURL থেকে OTP বের করার লজিক)
+async function checkInfo() {
     if (!currentCookies) return [];
-    // TODO: SMS চেক করার API রিকোয়েস্ট এখানে বসবে
+    try {
+        const url = `${BASE_URL}/client/SMSCDRStats`;
+        const getRes = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9,de-DE;q=0.8,de;q=0.7',
+                'Connection': 'keep-alive',
+                'Cookie': currentCookies,
+                'Referer': `${BASE_URL}/client/SMSCDRStats`,
+                'Upgrade-Insecure-Requests': '1',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36'
+            }
+        });
+
+        const html = await getRes.text();
+        const rows = html.match(/<tr[\s\S]*?<\/tr>/gi) || [];
+        let results = [];
+
+        for (let row of rows) {
+            const numMatch = row.match(/\b\d{10,15}\b/);
+            if (numMatch) {
+                const plainText = row.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                results.push({
+                    number: numMatch[0],
+                    sms: plainText,
+                    status: 'completed'
+                });
+            }
+        }
+        return results;
+    } catch (e) { return []; }
 }
 
 module.exports = { login, setCookies, getCookies, getNumber, checkInfo };
