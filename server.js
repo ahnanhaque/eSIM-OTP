@@ -419,32 +419,15 @@ bot.on('message', async (msg) => {
       } else { bot.sendMessage(chatId, "❌ Invalid format.").catch(()=>{}); }
   }
 
-  // ... (baki shob code ageer motoi thakbe)
-
-// 🟢 Admin Panel e Hadi Number Add korar logic
-else if (userStates[chatId] === "WAITING_FOR_HADI_NUMBERS" && isAdmin(chatId, username)) {
-    const country = tempAdminData[chatId]?.addNumberCountry; 
-    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
-    const numbers = text.split('\n').map(n => n.trim()).filter(n => n.length > 0);
-    
-    if (!db.hadiRanges) db.hadiRanges = { fb: {}, ig: {}, wa: {} };
-    if (!db.hadiRanges[platform]) db.hadiRanges[platform] = {};
-    
-    // Hadi e direct number list store kora
-    db.hadiRanges[platform][country] = (db.hadiRanges[platform][country] || []).concat(numbers);
-    
-    saveDB();
-    bot.sendMessage(chatId, `✅ Success! ${numbers.length} numbers added to Hadi for ${platform.toUpperCase()} (${country}).`, { parse_mode: "Markdown" }).catch(()=>{}); 
-    delete userStates[chatId]; delete tempAdminData[chatId];
-}
-
-// 🟢 Callback query te hadi_add_number case (Manage Panel e click korle)
-else if (data === "placeholder_hadi") {
-    userStates[chatId] = "WAITING_FOR_HADI_COUNTRY"; // Country Name chabe
-    bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(For example: BANGLADESH)", { parse_mode: "Markdown" }).catch(()=>{});
-    bot.answerCallbackQuery(query.id);
-}
-// ...
+  else if (userStates[chatId] === "WAITING_FOR_HADI_RANGE" && isAdmin(chatId, username)) {
+      const range = text.trim();
+      if(range.length >= 5) {
+          const country = detectCountryFromRange(range);
+          tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: 'hadi' };
+          userStates[chatId] = "WAITING_FOR_METHOD_NAME";
+          bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`, {parse_mode: "Markdown"}).catch(()=>{});
+      } else { bot.sendMessage(chatId, "❌ Invalid format.").catch(()=>{}); }
+  }
 
   else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
       const method = text.trim();
