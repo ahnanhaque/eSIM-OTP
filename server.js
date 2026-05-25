@@ -39,7 +39,7 @@ app.use((req, res, next) => {
 
 const bot = new TelegramBot(botToken, { webHook: true });
 bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
-let botInfo = { first_name: "eSIM Bot", username: "eSIM_OTP_BOT" };
+let botInfo = { first_name: "eSIM 💭", username: "eSIM_OTP_BOT" };
 bot.getMe().then(info => botInfo = info).catch(console.error);
 
 app.post(`/bot${botToken}`, (req, res) => {
