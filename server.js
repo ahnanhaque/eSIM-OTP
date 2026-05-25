@@ -34,29 +34,25 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// #  TELEGRAM BOT SETUP ( Webhook Mode )
+// #  TELEGRAM BOT SETUP (Webhook Mode)
 // ============================================================
 
 const bot = new TelegramBot(botToken, { webHook: true });
-bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
+
+// Webhook কনফ্লিক্ট এড়ানোর জন্য এই লজিকটি দিন
+bot.getWebHookInfo().then(info => {
+    if (info.url !== `${RENDER_URL}/bot${botToken}`) {
+        bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
+        console.log("✅ Webhook set successfully.");
+    } else {
+        console.log("ℹ️ Webhook already set.");
+    }
+});
 
 app.post(`/bot${botToken}`, (req, res) => {
     bot.processUpdate(req.body);
     res.sendStatus(200);
 });
-
-bot.on("error", (err) => {
-    if (err && err.message && !err.message.includes("message is not modified"))
-        console.log("\n[Telegram Bot Error]", err.message);
-});
-
-bot.setMyCommands([
-    { command: "start", description: "Restart the bot" },
-    { command: "admin", description: "Open admin panel" }
-]);
-
-let botInfo = {};
-bot.getMe().then(info => botInfo = info).catch(console.error);
 
 // ============================================================
 // #  DATABASE SCHEMA & MODEL
