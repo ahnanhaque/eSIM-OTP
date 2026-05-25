@@ -38,15 +38,13 @@ app.use((req, res, next) => {
 // ============================================================
 
 const bot = new TelegramBot(botToken, { webHook: true });
+bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
+let botInfo = { first_name: "eSIM Bot", username: "esim_bot" }; // আপনার বটের ইউজারনেম দিন
+bot.getMe().then(info => botInfo = info).catch(console.error);
 
-// Webhook কনফ্লিক্ট এড়ানোর জন্য এই লজিকটি দিন
-bot.getWebHookInfo().then(info => {
-    if (info.url !== `${RENDER_URL}/bot${botToken}`) {
-        bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
-        console.log("✅ Webhook set successfully.");
-    } else {
-        console.log("ℹ️ Webhook already set.");
-    }
+app.post(`/bot${botToken}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
 
 app.post(`/bot${botToken}`, (req, res) => {
