@@ -14,11 +14,11 @@ const mk             = require("./mk.js");
 // #  CONFIGURATION
 // ============================================================
 
-const botToken        = process.env.BOT_TOKEN        || "YOUR_BOT_TOKEN";
-const ADMIN_ID        = Number(process.env.ADMIN_ID) || 0;
-const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || 0;
+const botToken        = process.env.BOT_TOKEN        || "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg";
+const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
+const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
 const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/your_group";
-const MONGODB_URI     = process.env.MONGODB_URI      || "YOUR_MONGODB_URI";
+const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
 const PORT            = process.env.PORT             || 3000;
 
 
