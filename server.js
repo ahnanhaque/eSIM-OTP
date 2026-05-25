@@ -9,7 +9,6 @@ const { authenticator } = require("otplib");
 const stex           = require("./stex.js");
 const mk             = require("./mk.js");
 
-
 // ============================================================
 // #  CONFIGURATION
 // ============================================================
@@ -20,7 +19,7 @@ const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
 const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1";
 const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
 const PORT            = process.env.PORT             || 3000;
-
+const RENDER_URL      = "https://esim-otp-btup.onrender.com"; 
 
 // ============================================================
 // #  EXPRESS APP SETUP
@@ -34,19 +33,16 @@ app.use((req, res, next) => {
     next();
 });
 
-
 // ============================================================
-// #  TELEGRAM BOT SETUP
+// #  TELEGRAM BOT SETUP ( Webhook Mode )
 // ============================================================
 
-const bot = new TelegramBot(botToken, {
-    polling: { interval: 300, autoStart: true, params: { timeout: 10 } },
-    request: { agentOptions: { keepAlive: true, family: 4 } }
-});
+const bot = new TelegramBot(botToken, { webHook: true });
+bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
 
-bot.on("polling_error", (err) => {
-    if (err && err.message && !err.message.includes("message is not modified"))
-        console.log("\n[Telegram Polling Error]", err.message);
+app.post(`/bot${botToken}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
 
 bot.on("error", (err) => {
@@ -61,7 +57,6 @@ bot.setMyCommands([
 
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
-
 
 // ============================================================
 // #  DATABASE SCHEMA & MODEL
@@ -87,7 +82,6 @@ const dbSchema = new mongoose.Schema({
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
-
 
 // ============================================================
 // #  IN-MEMORY STATE VARIABLES
@@ -122,7 +116,6 @@ let tempAdminData          = {};
 let activeTempMails        = {};
 let activeNumberMessages   = {};
 
-
 // ============================================================
 // #  DATABASE HELPER FUNCTIONS
 // ============================================================
@@ -141,7 +134,6 @@ function addBalance(chatId, amount) {
     db.balances[chatId] += amount;
     saveDB();
 }
-
 
 // ============================================================
 // #  PERMISSION & AUTH HELPER FUNCTIONS
@@ -190,7 +182,6 @@ function clearPendingForChat(chatId) {
         }
     }
 }
-
 
 // ============================================================
 // #  COUNTRY & PLATFORM DETECTION UTILITIES
@@ -318,7 +309,6 @@ function getCountryInfo(data) {
     return { flag, cleanName };
 }
 
-
 // ============================================================
 // #  MENU & KEYBOARD BUILDER FUNCTIONS
 // ============================================================
@@ -411,7 +401,6 @@ function renderManageRangesMenu(chatId, messageId) {
     ).catch(() => {});
 }
 
-
 // ============================================================
 // #  BOT COMMANDS  (/start  /admin)
 // ============================================================
@@ -450,7 +439,6 @@ bot.onText(/\/admin/, async (msg) => {
     ).catch(() => {});
 });
 
-
 // ============================================================
 // #  MESSAGE HANDLER
 // ============================================================
@@ -462,7 +450,7 @@ bot.on("message", async (msg) => {
 
     if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-    // ── Broadcast (Admin Only) ───────────────────────────────
+    // ── Broadcast (Admin Only - Buttons Removed Fix) ─────────
     if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
         if (text === "✖ Close Menu" || text.startsWith("/")) {
             delete userStates[chatId];
@@ -483,7 +471,6 @@ bot.on("message", async (msg) => {
 
     if (!text || text.startsWith("/")) return;
 
-    // ── Group membership check ───────────────────────────────
     const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
     if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
         return sendJoinPrompt(chatId);
@@ -491,7 +478,6 @@ bot.on("message", async (msg) => {
 
     if (restrictedWords.includes(text) || text === "📧 Temp Mail") delete userStates[chatId];
 
-    // ── Get Number ───────────────────────────────────────────
     if (text === "☎️ Get Number") {
         clearPendingForChat(chatId);
         bot.sendMessage(chatId,
@@ -500,7 +486,6 @@ bot.on("message", async (msg) => {
         ).catch(() => {});
     }
 
-    // ── Temp Mail ────────────────────────────────────────────
     else if (text === "📧 Temp Mail") {
         try {
             if (activeTempMails[chatId]) {
@@ -589,7 +574,6 @@ bot.on("message", async (msg) => {
         }
     }
 
-    // ── Profile ──────────────────────────────────────────────
     else if (text === "👤 Profile") {
         bot.sendMessage(chatId,
             `👤 **Profile Info:**\n🆔 **User ID:** \`${chatId}\`\n📛 **Name:** ${msg.from.first_name || "N/A"}\n🎭 **Role:** ${isAdmin(chatId, username) ? (isSuperAdmin(chatId) ? "Super Admin 👑" : "Admin 🛡️") : "User 👤"}\n💰 **Balance:** ${getBalance(chatId).toFixed(2)} BDT\n\n🔗 **Referral Link:**\n\`https://t.me/${botInfo.username}?start=${chatId}\`\n_(Invite friends and earn 10 BDT for each new user!)_`,
@@ -597,7 +581,6 @@ bot.on("message", async (msg) => {
         ).catch(() => {});
     }
 
-    // ── 2FA Authenticator ────────────────────────────────────
     else if (text === "🔑 2FA") {
         userStates[chatId] = "WAITING_FOR_2FA_KEY";
         bot.sendMessage(chatId,
@@ -623,7 +606,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // ── Support ──────────────────────────────────────────────
     else if (text === "💬 Support") {
         bot.sendMessage(chatId,
             "💬 <b>Support:</b>\nPlease contact our admin @ahnan_haque_mahi for any assistance.",
@@ -631,14 +613,12 @@ bot.on("message", async (msg) => {
         ).catch(() => {});
     }
 
-    // ── Admin Panel (text button) ────────────────────────────
     else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) {
         bot.sendMessage(chatId, "⚙️ **Admin Panel:**",
             { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }
         ).catch(() => {});
     }
 
-    // ── Admin: Set Number Limit ──────────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
         const limit = parseInt(text);
         if (isNaN(limit) || limit < 1 || limit > 20) {
@@ -652,7 +632,6 @@ bot.on("message", async (msg) => {
         }
     }
 
-    // ── Admin: Add Manual Country ────────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
         const info = getCountryInfo(text.trim().toUpperCase());
         tempAdminData[chatId] = { ...tempAdminData[chatId], addNumberCountry: text.trim().toUpperCase() };
@@ -663,7 +642,6 @@ bot.on("message", async (msg) => {
         ).catch(() => {});
     }
 
-    // ── Admin: Add Numbers to Country ───────────────────────
     else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
         const country  = tempAdminData[chatId]?.addNumberCountry;
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -690,7 +668,6 @@ bot.on("message", async (msg) => {
         delete tempAdminData[chatId];
     }
 
-    // ── User: Withdraw (bKash/Nagad) ─────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_BKASH") {
         if (/^(01[3-9]\d{8})$/.test(text)) {
             const currentBalance = getBalance(chatId);
@@ -712,7 +689,6 @@ bot.on("message", async (msg) => {
         }
     }
 
-    // ── SuperAdmin: Add New Admin ────────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_ADMIN_USERNAME" && isSuperAdmin(chatId)) {
         let newAdmin = text.trim().toLowerCase();
         if (!newAdmin.startsWith("@")) newAdmin = "@" + newAdmin;
@@ -725,7 +701,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // ── Admin: Stex SMS Credentials ──────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
@@ -751,7 +726,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // ── Admin: Stex Range Input ──────────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
         const range = text.trim();
         if (range.length >= 5) {
@@ -767,7 +741,6 @@ bot.on("message", async (msg) => {
         }
     }
 
-    // ── Admin: MK SMS Credentials ────────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
@@ -793,7 +766,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // ── Admin: MK Range Input ────────────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_MK_RANGE" && isAdmin(chatId, username)) {
         const range = text.trim();
         if (range.length >= 5) {
@@ -809,7 +781,6 @@ bot.on("message", async (msg) => {
         }
     }
 
-    // ── Admin: Method Name for Range ─────────────────────────
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
         const method   = text.trim();
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -844,7 +815,6 @@ bot.on("message", async (msg) => {
     }
 });
 
-
 // ============================================================
 // #  CALLBACK QUERY HANDLER
 // ============================================================
@@ -855,7 +825,6 @@ bot.on("callback_query", async (query) => {
     const data      = query.data;
     const username  = query.from.username;
 
-    // ── Join Check ───────────────────────────────────────────
     if (data === "check_join") {
         if (await isUserMember(query.from.id)) {
             bot.deleteMessage(chatId, messageId).catch(() => {});
@@ -868,20 +837,17 @@ bot.on("callback_query", async (query) => {
     if (!await isUserMember(query.from.id))
         return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
 
-    // ── Admin-only action guard ──────────────────────────────
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
                        "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
         return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true });
 
-    // ── Close Menu ───────────────────────────────────────────
     if (data === "close_menu") {
         bot.deleteMessage(chatId, messageId).catch(() => {});
         return bot.answerCallbackQuery(query.id);
     }
 
-    // ── 2FA Refresh ──────────────────────────────────────────
     else if (data === "refresh_2fa") {
         const secret = tempAdminData[chatId]?.active2FAKey;
         if (!secret) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Please generate a new code.", show_alert: true });
@@ -897,7 +863,6 @@ bot.on("callback_query", async (query) => {
         }
     }
 
-    // ── Admin Panel ──────────────────────────────────────────
     else if (data === "admin_panel") {
         bot.editMessageText("⚙️ **Admin Panel:**",
             { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }
@@ -920,7 +885,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // ── Manage Panel (IVA / Stex / MK Login) ────────────────
     else if (data === "admin_manage_panel") {
         bot.editMessageText("⚙️ **Login to panel :**", {
             chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [
@@ -933,7 +897,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // ── Stex: Account Management ─────────────────────────────
     else if (data === "stex_login") {
         let btns = [];
         if (db.savedStexAccounts && db.savedStexAccounts.length > 0) {
@@ -1006,7 +969,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // ── MK: Account Management ───────────────────────────────
     else if (data === "placeholder_mk_login") {
         let btns = [];
         if (db.savedMkAccounts && db.savedMkAccounts.length > 0) {
@@ -1079,7 +1041,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // ── Manage Numbers ───────────────────────────────────────
     else if (data === "admin_manage_numbers") {
         bot.editMessageText("🛠 **Please select the platform for managing numbers:**",
             { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }
@@ -1128,7 +1089,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
     }
 
-    // ── Remove Number/Range ──────────────────────────────────
     else if (data === "admin_remove_number_menu") {
         let btns = [];
         ["fb", "ig", "wa"].forEach(plat => {
@@ -1220,7 +1180,6 @@ bot.on("callback_query", async (query) => {
         ).catch(() => {});
     }
 
-    // ── IVA Ranges Management ────────────────────────────────
     else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
         bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -1280,7 +1239,6 @@ bot.on("callback_query", async (query) => {
         renderManageRangesMenu(chatId, messageId);
     }
 
-    // ── Manage Admins ────────────────────────────────────────
     else if (data === "admin_manage_admins") {
         if (!isSuperAdmin(chatId)) return;
         bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.",
@@ -1327,14 +1285,12 @@ bot.on("callback_query", async (query) => {
         ).catch(() => {});
     }
 
-    // ── Withdraw ─────────────────────────────────────────────
     else if (data === "withdraw_funds") {
         userStates[chatId] = "WAITING_FOR_BKASH";
         bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
-    // ── Country Selection Menu ───────────────────────────────
     else if (data === "menu_platform") {
         clearPendingForChat(chatId);
         bot.editMessageText(`Please select the platform:`,
@@ -1388,7 +1344,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // ── Number Assignment (IVA / Stex / MK) ─────────────────
     else if (data.startsWith("assign_")) {
         if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId)
             bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(() => {});
@@ -1401,7 +1356,6 @@ bot.on("callback_query", async (query) => {
 
         clearPendingForChat(chatId);
 
-        // ── Stex Assignment
         if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
@@ -1424,7 +1378,6 @@ bot.on("callback_query", async (query) => {
                         pendingRequests[n] = { chatId, country: countryName, isStex: true, platform };
                     }
                 } catch (e) {
-                    console.log(`[STEX Fetch Error - Attempt ${i + 1}]:`, e.message);
                     if (i === 0 && e.message.includes("SESSION_EXPIRED") && db.stexCreds?.email) {
                         try {
                             const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
@@ -1432,7 +1385,7 @@ bot.on("callback_query", async (query) => {
                             const retryData = await stex.getNumber(sel);
                             const retryN    = retryData.full_number || retryData.number.replace("+", "");
                             if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isStex: true, platform }; continue; }
-                        } catch (err2) { console.log(`[STEX On-Demand Login Failed]:`, err2.message); break; }
+                        } catch (err2) { break; }
                     }
                     break;
                 }
@@ -1470,7 +1423,6 @@ bot.on("callback_query", async (query) => {
             return;
         }
 
-        // ── MK Assignment
         if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
@@ -1494,7 +1446,6 @@ bot.on("callback_query", async (query) => {
                         pendingRequests[n] = { chatId, country: countryName, isMk: true, platform };
                     }
                 } catch (e) {
-                    console.log(`[MK Fetch Error - Attempt ${i + 1}]:`, e.message);
                     if (i === 0 && e.message === "SESSION_EXPIRED" && db.mkCreds?.email) {
                         try {
                             const newCookie = await mk.login(db.mkCreds.email, db.mkCreds.password);
@@ -1502,7 +1453,7 @@ bot.on("callback_query", async (query) => {
                             const retryData = await mk.getNumber(sel);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
                             if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform }; continue; }
-                        } catch (err2) { console.log(`[MK On-Demand Login Failed]:`, err2.message); break; }
+                        } catch (err2) { break; }
                     }
                     break;
                 }
@@ -1540,7 +1491,6 @@ bot.on("callback_query", async (query) => {
             return;
         }
 
-        // ── IVA Assignment (Manual Numbers)
         const nums = db.availableNumbers[platform][sel] || [];
         if (nums.length === 0)
             return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
@@ -1576,7 +1526,6 @@ bot.on("callback_query", async (query) => {
     }
 });
 
-
 // ============================================================
 // #  OTP PROCESSING FUNCTION
 // ============================================================
@@ -1598,7 +1547,6 @@ function processFoundOTP(number, time, message, range) {
     let platCode = reqData ? reqData.platform : "unknown";
     let platName = platCode === "fb" ? "FACEBOOK" : platCode === "ig" ? "INSTAGRAM" : platCode === "wa" ? "WHATSAPP" : platCode.toUpperCase();
 
-    // Send to group
     let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
     let groupMarkup    = { inline_keyboard: [] };
     let groupButtonRow = [];
@@ -1609,7 +1557,6 @@ function processFoundOTP(number, time, message, range) {
         { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }
     ).catch(() => {});
 
-    // Send to user
     if (reqData) {
         const reqInfo    = getCountryInfo(cName);
         let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
@@ -1624,12 +1571,10 @@ function processFoundOTP(number, time, message, range) {
     }
 }
 
-
 // ============================================================
 // #  EXPRESS API ROUTES
 // ============================================================
 
-// IVA Extension: Receive Ranges & SMS
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
     if (type === "RANGES") {
@@ -1644,10 +1589,8 @@ app.post("/api/ivas-data", (req, res) => {
     res.status(400).json({ success: false });
 });
 
-// Health check routes
-app.get("/",     (req, res) => res.status(200).send("Bot is successfully running on Hybrid Mode!"));
+app.get("/",     (req, res) => res.status(200).send("Bot is successfully running on Webhook Mode!"));
 app.get("/ping", (req, res) => res.status(200).send("Pong! Bot is alive."));
-
 
 // ============================================================
 // #  AUTO-LOGIN FUNCTION  (Stex & MK)
@@ -1660,17 +1603,16 @@ async function autoLoginPanels() {
         try {
             const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
             if (token) { db.stexToken = token; stex.setAuthToken(token); saveDB(); }
-        } catch (e) { console.log("[Auto-Login Loop Error STEX]:", e.message); }
+        } catch (e) {}
     }
 
     if (db.mkCreds && db.mkCreds.email) {
         try {
             const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password);
             if (cookieStr) { db.mkCookies = cookieStr; mk.setCookies(cookieStr); saveDB(); }
-        } catch (e) { console.log("[Auto-Login Loop Error MK]:", e.message); }
+        } catch (e) {}
     }
 }
-
 
 // ============================================================
 // #  DATABASE CONNECTION & SERVER START
@@ -1681,23 +1623,19 @@ mongoose.connect(MONGODB_URI).then(async () => {
     if (data) {
         db = { ...db, ...data.toObject() };
 
-        // Migration: flat → nested availableNumbers
         if (!db.availableNumbers.fb && !db.availableNumbers.ig && !db.availableNumbers.wa) {
             const oldData = { ...db.availableNumbers };
             db.availableNumbers = { fb: oldData, ig: {}, wa: {} };
         }
-        // Migration: stexRanges
         if (!db.stexRanges) db.stexRanges = { fb: {}, ig: {}, wa: {} };
         if (!db.stexRanges.fb && !db.stexRanges.ig && !db.stexRanges.wa) {
             const oldStex = { ...db.stexRanges };
             db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
         }
-        // Defaults
         if (!db.mkRanges)            db.mkRanges           = { fb: {}, ig: {}, wa: {} };
         if (!db.savedStexAccounts)   db.savedStexAccounts  = [];
         if (!db.savedMkAccounts)     db.savedMkAccounts    = [];
 
-        // Migrate single creds → saved accounts array
         if (db.stexCreds?.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
         if (db.mkCreds?.email   && db.savedMkAccounts.length   === 0) db.savedMkAccounts.push(db.mkCreds);
 
@@ -1709,21 +1647,18 @@ mongoose.connect(MONGODB_URI).then(async () => {
     if (db.mkCookies)  mk.setCookies(db.mkCookies);
 
     isDbLoaded = true;
-    app.listen(PORT, () => console.log(`🚀 Hybrid Mode running on port ${PORT}`));
+    app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
 
     setTimeout(autoLoginPanels, 10000);
 
 }).catch(err => console.log(err));
 
-
 // ============================================================
 // #  BACKGROUND POLLING INTERVALS
 // ============================================================
 
-// Auto re-login every 20 minutes
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
-// Stex OTP polling — every 2.5 seconds
 setInterval(async () => {
     if (!db.stexToken) return;
     const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
@@ -1753,7 +1688,6 @@ setInterval(async () => {
     } catch (e) {}
 }, 2500);
 
-// MK OTP polling — every 2.5 seconds
 setInterval(async () => {
     if (!db.mkCookies) return;
     const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
