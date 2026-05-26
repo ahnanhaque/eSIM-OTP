@@ -24,8 +24,7 @@ const RENDER_URL      = "https://esim-otp-btup.onrender.com";
 // 🟢 NEW: Multiple Mandatory Groups/Channels Configuration
 const REQUIRED_CHANNELS = [
     { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
-    { id: "-1003999876390", link: "https://t.me/+z1VUcqiC1O0wOWRl", name: "📢 Join Group 2" }, // ⚠️ Ei ID ta apnake change korte hobe
-    { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 3" }
+    { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
 ];
 
 // ============================================================
