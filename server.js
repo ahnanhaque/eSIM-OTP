@@ -21,6 +21,13 @@ const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaqu
 const PORT            = process.env.PORT             || 3000;
 const RENDER_URL      = "https://esim-otp-btup.onrender.com"; 
 
+// 🟢 NEW: Multiple Mandatory Groups/Channels Configuration
+const REQUIRED_CHANNELS = [
+    { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
+    { id: "-1003999876390", link: "https://t.me/+z1VUcqiC1O0wOWRl", name: "📢 Join Group 2" }, // ⚠️ Ei ID ta apnake change korte hobe
+    { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 3" }
+];
+
 // ============================================================
 // #  EXPRESS APP SETUP
 // ============================================================
@@ -34,23 +41,29 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// #  TELEGRAM BOT SETUP (Webhook Mode)
+// #  TELEGRAM BOT SETUP ( Webhook Mode )
 // ============================================================
 
 const bot = new TelegramBot(botToken, { webHook: true });
 bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
-let botInfo = { first_name: "eSIM 💭", username: "eSIM_OTP_BOT" };
+
+app.post(`/bot${botToken}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+bot.on("error", (err) => {
+    if (err && err.message && !err.message.includes("message is not modified"))
+        console.log("\n[Telegram Bot Error]", err.message);
+});
+
+bot.setMyCommands([
+    { command: "start", description: "Restart the bot" },
+    { command: "admin", description: "Open admin panel" }
+]);
+
+let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
-
-app.post(`/bot${botToken}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-});
-
-app.post(`/bot${botToken}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-});
 
 // ============================================================
 // #  DATABASE SCHEMA & MODEL
@@ -143,26 +156,34 @@ function isAdmin(chatId, username) {
     return un && db.adminUsernames.includes(un);
 }
 
+// 🟢 UPDATED: Check multiple channels/groups
 async function isUserMember(userId) {
     if (isSuperAdmin(userId)) return true;
-    try {
-        const member = await bot.getChatMember(GROUP_CHAT_ID, userId);
-        return ["creator", "administrator", "member", "restricted"].includes(member.status);
-    } catch (e) {
-        return false;
+    for (let channel of REQUIRED_CHANNELS) {
+        try {
+            const member = await bot.getChatMember(channel.id, userId);
+            if (!["creator", "administrator", "member", "restricted"].includes(member.status)) {
+                return false;
+            }
+        } catch (e) {
+            return false;
+        }
     }
+    return true;
 }
 
+// 🟢 UPDATED: Send multiple invite links dynamically
 function sendJoinPrompt(chatId) {
+    let inline_keyboard = [];
+    REQUIRED_CHANNELS.forEach(ch => {
+        inline_keyboard.push([{ text: ch.name, url: ch.link }]);
+    });
+    inline_keyboard.push([{ text: "🔄 Check Again", callback_data: "check_join" }]);
+
     bot.sendMessage(chatId,
-        `⚠️ **Access Denied!**\n\nYou must join our official group first to use this bot. Once joined, click the check button below.`,
+        `⚠️ **Access Denied!**\n\nYou must join all our official groups and channels first to use this bot. Once joined, click the check button below.`,
         {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "📢 Join Group", url: GROUP_INVITE_LINK }],
-                    [{ text: "🔄 Check Again", callback_data: "check_join" }]
-                ]
-            },
+            reply_markup: { inline_keyboard: inline_keyboard },
             parse_mode: "Markdown"
         }
     ).catch(() => {});
@@ -825,11 +846,11 @@ bot.on("callback_query", async (query) => {
             bot.sendMessage(chatId, `Welcome! 👋`, { reply_markup: getReplyMenu(chatId, username) }).catch(() => {});
             return bot.answerCallbackQuery(query.id, { text: "✅ Thank you for joining! You can now use the bot." });
         }
-        return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet. Please join first!", show_alert: true });
+        return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined all groups yet. Please join first!", show_alert: true });
     }
 
     if (!await isUserMember(query.from.id))
-        return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined the group yet.", show_alert: true });
+        return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined all groups yet.", show_alert: true });
 
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
