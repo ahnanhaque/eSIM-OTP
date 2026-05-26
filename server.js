@@ -121,6 +121,7 @@ let userStates             = {};
 let tempAdminData          = {};
 let activeTempMails        = {};
 let activeNumberMessages   = {};
+let activeTimeouts         = {}; // 🟢 NEW: Overlapping Timeouts Fix এর জন্য
 
 // ============================================================
 // #  DATABASE HELPER FUNCTIONS
@@ -155,7 +156,6 @@ function isAdmin(chatId, username) {
     return un && db.adminUsernames.includes(un);
 }
 
-// 🟢 UPDATED: Check multiple channels/groups
 async function isUserMember(userId) {
     if (isSuperAdmin(userId)) return true;
     for (let channel of REQUIRED_CHANNELS) {
@@ -171,7 +171,6 @@ async function isUserMember(userId) {
     return true;
 }
 
-// 🟢 UPDATED: Send multiple invite links dynamically
 function sendJoinPrompt(chatId) {
     let inline_keyboard = [];
     REQUIRED_CHANNELS.forEach(ch => {
@@ -189,6 +188,11 @@ function sendJoinPrompt(chatId) {
 }
 
 function clearPendingForChat(chatId) {
+    // 🟢 FIX: আগের টাইমার ক্লিয়ার করে দেওয়া হচ্ছে
+    if (activeTimeouts[chatId]) {
+        clearTimeout(activeTimeouts[chatId]);
+        delete activeTimeouts[chatId];
+    }
     for (let num in pendingRequests) {
         if (pendingRequests[num].chatId === chatId) {
             delete inUseNumbers[num];
@@ -420,6 +424,7 @@ function renderManageRangesMenu(chatId, messageId) {
 // ============================================================
 
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
+    if (msg.chat.type !== "private") return;
     const chatId   = msg.chat.id;
     const username = msg.from.username;
 
@@ -446,6 +451,7 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
 });
 
 bot.onText(/\/admin/, async (msg) => {
+    if (msg.chat.type !== "private") return;
     if (!isAdmin(msg.chat.id, msg.from.username))
         return bot.sendMessage(msg.chat.id, "❌ Access Denied. You do not have the required admin rights.").catch(() => {});
     bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**",
@@ -458,13 +464,14 @@ bot.onText(/\/admin/, async (msg) => {
 // ============================================================
 
 bot.on("message", async (msg) => {
+    if (msg.chat.type !== "private") return;
+
     const chatId   = msg.chat.id;
     const username = msg.from.username;
     const text     = msg.text || msg.caption || "";
 
     if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
-    // ── Broadcast (Admin Only - Buttons Removed Fix) ─────────
     if (userStates[chatId] === "WAITING_FOR_BROADCAST" && isAdmin(chatId, username)) {
         if (text === "✖ Close Menu" || text.startsWith("/")) {
             delete userStates[chatId];
@@ -834,6 +841,8 @@ bot.on("message", async (msg) => {
 // ============================================================
 
 bot.on("callback_query", async (query) => {
+    if (query.message.chat.type !== "private") return;
+
     const chatId    = query.message.chat.id;
     const messageId = query.message.message_id;
     const data      = query.data;
@@ -1425,13 +1434,15 @@ bot.on("callback_query", async (query) => {
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
-                setTimeout(() => {
+                // 🟢 FIX: Set activeTimeout for the current chat
+                activeTimeouts[chatId] = setTimeout(() => {
                     fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                     bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    delete activeTimeouts[chatId]; // Cleanup after execution
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
@@ -1493,13 +1504,15 @@ bot.on("callback_query", async (query) => {
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
-                setTimeout(() => {
+                // 🟢 FIX: Set activeTimeout for the current chat
+                activeTimeouts[chatId] = setTimeout(() => {
                     fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                     bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    delete activeTimeouts[chatId]; // Cleanup
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
@@ -1529,11 +1542,13 @@ bot.on("callback_query", async (query) => {
 
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
             activeNumberMessages[chatId] = messageId;
-            setTimeout(() => {
+            // 🟢 FIX: Set activeTimeout for the current chat
+            activeTimeouts[chatId] = setTimeout(() => {
                 assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                 bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                delete activeTimeouts[chatId]; // Cleanup
             }, 15 * 60 * 1000);
         }).catch(() => {});
         bot.answerCallbackQuery(query.id);
