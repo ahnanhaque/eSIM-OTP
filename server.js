@@ -8,6 +8,7 @@ const mongoose       = require("mongoose");
 const { authenticator } = require("otplib");
 const stex           = require("./stex.js");
 const mk             = require("./mk.js");
+const zenex          = require("./zenex.js"); // 🟢 ZENEX Added
 
 // ============================================================
 // #  CONFIGURATION
@@ -21,7 +22,6 @@ const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaqu
 const PORT            = process.env.PORT             || 3000;
 const RENDER_URL      = "https://esim-otp-btup.onrender.com"; 
 
-// 🟢 NEW: Multiple Mandatory Groups/Channels Configuration
 const REQUIRED_CHANNELS = [
     { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
     { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
@@ -81,10 +81,14 @@ const dbSchema = new mongoose.Schema({
     stexToken:          String,
     mkRanges:           Object,
     mkCookies:          String,
+    zenexRanges:        Object, // 🟢 ZENEX
+    zenexCookies:       String, // 🟢 ZENEX
     stexCreds:          Object,
     mkCreds:            Object,
+    zenexCreds:         Object, // 🟢 ZENEX
     savedStexAccounts:  Array,
-    savedMkAccounts:    Array
+    savedMkAccounts:    Array,
+    savedZenexAccounts: Array   // 🟢 ZENEX
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
@@ -106,10 +110,14 @@ let db = {
     stexToken:         "",
     mkRanges:          { fb: {}, ig: {}, wa: {} },
     mkCookies:         "",
+    zenexRanges:       { fb: {}, ig: {}, wa: {} }, // 🟢 ZENEX
+    zenexCookies:      "", // 🟢 ZENEX
     stexCreds:         null,
     mkCreds:           null,
+    zenexCreds:        null, // 🟢 ZENEX
     savedStexAccounts: [],
-    savedMkAccounts:   []
+    savedMkAccounts:   [],
+    savedZenexAccounts:[] // 🟢 ZENEX
 };
 
 let isDbLoaded             = false;
@@ -121,7 +129,7 @@ let userStates             = {};
 let tempAdminData          = {};
 let activeTempMails        = {};
 let activeNumberMessages   = {};
-let activeTimeouts         = {}; // 🟢 NEW: Overlapping Timeouts Fix এর জন্য
+let activeTimeouts         = {}; 
 
 // ============================================================
 // #  DATABASE HELPER FUNCTIONS
@@ -188,7 +196,6 @@ function sendJoinPrompt(chatId) {
 }
 
 function clearPendingForChat(chatId) {
-    // 🟢 FIX: আগের টাইমার ক্লিয়ার করে দেওয়া হচ্ছে
     if (activeTimeouts[chatId]) {
         clearTimeout(activeTimeouts[chatId]);
         delete activeTimeouts[chatId];
@@ -240,7 +247,8 @@ const countryPrefixes = {
     "967": "YEMEN", "968": "OMAN", "971": "UAE", "972": "ISRAEL", "973": "BAHRAIN",
     "974": "QATAR", "975": "BHUTAN", "976": "MONGOLIA", "977": "NEPAL",
     "992": "TAJIKISTAN", "993": "TURKMENISTAN", "994": "AZERBAIJAN", "995": "GEORGIA",
-    "996": "KYRGYZSTAN", "998": "UZBEKISTAN"
+    "996": "KYRGYZSTAN", "998": "UZBEKISTAN",
+    "228": "TOGO" // Explicitly added based on your screenshot
 };
 
 const countryData = {
@@ -368,6 +376,7 @@ const manageNumberPanel = {
         [{ text: "IVA SMS 📨",    callback_data: "admin_manage_ranges" }],
         [{ text: "Stex SMS 📩",   callback_data: "placeholder_stex" }],
         [{ text: "MK SMS 💬",     callback_data: "placeholder_mk" }],
+        [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }], // 🟢 ZENEX added
         [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
         [{ text: "⬅️ Back",       callback_data: "admin_manage_numbers" }]
     ]
@@ -801,6 +810,48 @@ bot.on("message", async (msg) => {
             bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
         }
     }
+    
+    // 🟢 ZENEX LOGIN
+    else if (userStates[chatId] === "WAITING_FOR_ZENEX_CREDS" && isAdmin(chatId, username)) {
+        const parts = text.split("|");
+        if (parts.length === 2) {
+            let email    = parts[0].trim();
+            let password = parts[1].trim();
+            bot.sendMessage(chatId, "⏳ Logging into Zenex SMS Server...").catch(() => {});
+            zenex.login(email, password).then(cookieStr => {
+                db.zenexCookies = cookieStr;
+                db.zenexCreds   = { email, password };
+                if (!db.savedZenexAccounts) db.savedZenexAccounts = [];
+                let existing = db.savedZenexAccounts.find(a => a.email === email);
+                if (existing) existing.password = password;
+                else {
+                    db.savedZenexAccounts.push({ email, password });
+                    if (db.savedZenexAccounts.length > 5) db.savedZenexAccounts.shift();
+                }
+                saveDB();
+                bot.sendMessage(chatId, "✅ Zenex SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
+            }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, { parse_mode: "Markdown" }).catch(() => {}));
+        } else {
+            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
+        }
+        delete userStates[chatId];
+    }
+
+    // 🟢 ZENEX RANGE
+    else if (userStates[chatId] === "WAITING_FOR_ZENEX_RANGE" && isAdmin(chatId, username)) {
+        const range = text.trim();
+        if (range.length >= 5) {
+            const country = detectCountryFromRange(range);
+            tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: "zenex" };
+            userStates[chatId]    = "WAITING_FOR_METHOD_NAME";
+            bot.sendMessage(chatId,
+                `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`,
+                { parse_mode: "Markdown" }
+            ).catch(() => {});
+        } else {
+            bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
+        }
+    }
 
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
         const method   = text.trim();
@@ -823,6 +874,15 @@ bot.on("message", async (msg) => {
             saveDB();
             bot.sendMessage(chatId,
                 `✅ Successfully added MK Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`,
+                { parse_mode: "Markdown" }
+            ).catch(() => {});
+        } else if (panel === "zenex") { // 🟢 ZENEX
+            if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} };
+            if (!db.zenexRanges[platform]) db.zenexRanges[platform] = {};
+            db.zenexRanges[platform][range] = { country, method };
+            saveDB();
+            bot.sendMessage(chatId,
+                `✅ Successfully added Zenex Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`,
                 { parse_mode: "Markdown" }
             ).catch(() => {});
         }
@@ -862,6 +922,7 @@ bot.on("callback_query", async (query) => {
 
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
+                       "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", // 🟢 ZENEX
                        "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
         return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true });
@@ -914,11 +975,78 @@ bot.on("callback_query", async (query) => {
                 [{ text: "IVA SMS 📩",  callback_data: "placeholder_iva" }],
                 [{ text: "Stex SMS 📨", callback_data: "stex_login" }],
                 [{ text: "MK SMS ✉️",  callback_data: "placeholder_mk_login" }],
+                [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], // 🟢 ZENEX
                 [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
             ]}
         }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
+
+    // 🟢 ZENEX LOGIN START
+    else if (data === "zenex_login") {
+        let btns = [];
+        if (db.savedZenexAccounts && db.savedZenexAccounts.length > 0) {
+            db.savedZenexAccounts.forEach((acc, idx) => {
+                let activeMark = (db.zenexCreds && db.zenexCreds.email === acc.email) ? "✅ " : "👤 ";
+                btns.push([{ text: `${activeMark}${acc.email}`, callback_data: `zenex_qlogin_${idx}` }]);
+            });
+            btns.push([{ text: "Remove Account", callback_data: "zenex_remove_menu" }]);
+        }
+        btns.push([{ text: "Add Account", callback_data: "zenex_manual_login" }]);
+        btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_panel" }]);
+        bot.editMessageText("🔑 **Zenex SMS Login:**\nChoose an account to login or add a new one:",
+            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns } }
+        ).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+
+    else if (data === "zenex_remove_menu") {
+        let btns = [];
+        (db.savedZenexAccounts || []).forEach((acc, idx) => {
+            btns.push([{ text: `❌ ${acc.email}`, callback_data: `zenex_delacc_${idx}` }]);
+        });
+        btns.push([{ text: "⬅️ Back", callback_data: "zenex_login" }]);
+        bot.editMessageText("🗑️ **Select an account to remove:**",
+            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns } }
+        ).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+
+    else if (data.startsWith("zenex_delacc_")) {
+        const idx = parseInt(data.replace("zenex_delacc_", ""));
+        const acc = db.savedZenexAccounts[idx];
+        if (acc) {
+            if (db.zenexCreds && db.zenexCreds.email === acc.email) { db.zenexCreds = null; db.zenexCookies = ""; }
+            db.savedZenexAccounts.splice(idx, 1);
+            saveDB();
+            bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
+        } else {
+            bot.answerCallbackQuery(query.id);
+        }
+        bot.editMessageText("🔑 **Zenex SMS Login:**", 
+            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "zenex_login" }]] } }
+        ).catch(() => {});
+    }
+
+    else if (data === "zenex_manual_login") {
+        userStates[chatId] = "WAITING_FOR_ZENEX_CREDS";
+        bot.sendMessage(chatId, "📧 **Send Zenex credentials format:**\n`email|password`", { parse_mode: "Markdown" }).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+
+    else if (data.startsWith("zenex_qlogin_")) {
+        const idx = parseInt(data.replace("zenex_qlogin_", ""));
+        const acc = db.savedZenexAccounts[idx];
+        if (acc) {
+            bot.sendMessage(chatId, "⏳ Logging into Zenex SMS...").catch(() => {});
+            zenex.login(acc.email, acc.password).then(cookieStr => {
+                db.zenexCookies = cookieStr; db.zenexCreds = acc; saveDB();
+                bot.sendMessage(chatId, "✅ Zenex Login Successful! Session is saved.").catch(() => {});
+            }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+        }
+        bot.answerCallbackQuery(query.id);
+    }
+    // 🟢 ZENEX LOGIN END
 
     else if (data === "stex_login") {
         let btns = [];
@@ -1108,6 +1236,17 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
+    // 🟢 ZENEX
+    else if (data === "placeholder_zenex") {
+        const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+        userStates[chatId] = "WAITING_FOR_ZENEX_RANGE";
+        bot.sendMessage(chatId,
+            `🔢 **Enter Zenex Range for ${platform.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``,
+            { parse_mode: "Markdown" }
+        ).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+
     else if (data === "placeholder_iva") {
         bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
     }
@@ -1127,6 +1266,13 @@ bot.on("callback_query", async (query) => {
                 const info  = getCountryInfo(cName);
                 btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${plat}_${r}` }]);
             });
+            // 🟢 ZENEX List
+            const zenexList = db.zenexRanges && db.zenexRanges[plat] ? Object.keys(db.zenexRanges[plat]) : [];
+            zenexList.forEach(r => {
+                const cName = typeof db.zenexRanges[plat][r] === "object" ? db.zenexRanges[plat][r].country : db.zenexRanges[plat][r];
+                const info  = getCountryInfo(cName);
+                btns.push([{ text: `Zenex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delzenexrng_${plat}_${r}` }]);
+            });
             const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
             ivaList.forEach(r => {
                 const info = getCountryInfo(r);
@@ -1145,6 +1291,7 @@ bot.on("callback_query", async (query) => {
     else if (data === "delall_everything") {
         db.stexRanges = { fb: {}, ig: {}, wa: {} };
         db.mkRanges   = { fb: {}, ig: {}, wa: {} };
+        db.zenexRanges = { fb: {}, ig: {}, wa: {} }; // 🟢 ZENEX
         db.availableNumbers = { fb: {}, ig: {}, wa: {} };
         saveDB();
         bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
@@ -1153,10 +1300,11 @@ bot.on("callback_query", async (query) => {
         ).catch(() => {});
     }
 
-    else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_")) {
+    else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_") || data.startsWith("delzenexrng_")) {
         const isStex    = data.startsWith("delstexrng_");
         const isMk      = data.startsWith("delmkrng_");
-        const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : "delnumrng_");
+        const isZenex   = data.startsWith("delzenexrng_"); // 🟢 ZENEX
+        const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : (isZenex ? "delzenexrng_" : "delnumrng_"));
         const payload   = data.replace(prefixStr, "");
         const parts     = payload.split("_");
         const plat      = parts[0];
@@ -1168,38 +1316,16 @@ bot.on("callback_query", async (query) => {
         } else if (isMk) {
             if (db.mkRanges && db.mkRanges[plat] && db.mkRanges[plat][target]) { delete db.mkRanges[plat][target]; saveDB(); }
             bot.answerCallbackQuery(query.id, { text: `✅ MK range ${target} removed from ${plat.toUpperCase()}!` });
+        } else if (isZenex) {
+            if (db.zenexRanges && db.zenexRanges[plat] && db.zenexRanges[plat][target]) { delete db.zenexRanges[plat][target]; saveDB(); }
+            bot.answerCallbackQuery(query.id, { text: `✅ Zenex range ${target} removed from ${plat.toUpperCase()}!` });
         } else {
             if (db.availableNumbers[plat] && db.availableNumbers[plat][target]) { delete db.availableNumbers[plat][target]; saveDB(); }
             bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed from ${plat.toUpperCase()}!` });
         }
 
-        let btns = [];
-        ["fb", "ig", "wa"].forEach(p => {
-            const stexList = db.stexRanges[p] ? Object.keys(db.stexRanges[p]) : [];
-            stexList.forEach(r => {
-                const cName = typeof db.stexRanges[p][r] === "object" ? db.stexRanges[p][r].country : db.stexRanges[p][r];
-                btns.push([{ text: `Stex : ${getCountryInfo(cName).flag} ${getCountryInfo(cName).cleanName} (${r})`, callback_data: `delstexrng_${p}_${r}` }]);
-            });
-            const mkList = db.mkRanges && db.mkRanges[p] ? Object.keys(db.mkRanges[p]) : [];
-            mkList.forEach(r => {
-                const cName = typeof db.mkRanges[p][r] === "object" ? db.mkRanges[p][r].country : db.mkRanges[p][r];
-                btns.push([{ text: `MK : ${getCountryInfo(cName).flag} ${getCountryInfo(cName).cleanName} (${r})`, callback_data: `delmkrng_${p}_${r}` }]);
-            });
-            const ivaList = db.availableNumbers[p] ? Object.keys(db.availableNumbers[p]).filter(k => db.availableNumbers[p][k].length > 0) : [];
-            ivaList.forEach(r => {
-                btns.push([{ text: `IVA : ${getCountryInfo(r).flag} ${getCountryInfo(r).cleanName} (${r})`, callback_data: `delnumrng_${p}_${r}` }]);
-            });
-        });
-        if (btns.length === 0) {
-            bot.editMessageText("🛠 **Please select the platform for managing numbers:**",
-                { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }
-            ).catch(() => {});
-            return;
-        }
-        btns.push([{ text: "🗑️ REMOVE ALL", callback_data: "delall_everything" }]);
-        btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
-        bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_",
-            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }
+        bot.editMessageText("🗑️ **Select a range to remove:**\n_(Reloading...)_",
+            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_remove_number_menu" }]] }, parse_mode: "Markdown" }
         ).catch(() => {});
     }
 
@@ -1328,12 +1454,14 @@ bot.on("callback_query", async (query) => {
         const availPlatformDB = db.availableNumbers[platform] || {};
         const stexPlatformDB  = db.stexRanges[platform] || {};
         const mkPlatformDB    = db.mkRanges && db.mkRanges[platform] ? db.mkRanges[platform] : {};
+        const zenexPlatformDB = db.zenexRanges && db.zenexRanges[platform] ? db.zenexRanges[platform] : {}; // 🟢 ZENEX
 
-        const ranges       = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
+        const ranges         = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
         const stexRangesList = Object.keys(stexPlatformDB);
         const mkRangesList   = Object.keys(mkPlatformDB);
+        const zenexRangesList= Object.keys(zenexPlatformDB); // 🟢 ZENEX
 
-        if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0)
+        if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && zenexRangesList.length === 0)
             return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`,
                 { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }
             ).catch(() => {});
@@ -1342,6 +1470,7 @@ bot.on("callback_query", async (query) => {
         ranges.forEach(r       => combinedRanges.push({ type: "iva",  range: r, info: getCountryInfo(r) }));
         stexRangesList.forEach(r => combinedRanges.push({ type: "stex", range: r, info: getCountryInfo(typeof stexPlatformDB[r] === "object" ? stexPlatformDB[r].country : stexPlatformDB[r]) }));
         mkRangesList.forEach(r   => combinedRanges.push({ type: "mk",   range: r, info: getCountryInfo(typeof mkPlatformDB[r]   === "object" ? mkPlatformDB[r].country   : mkPlatformDB[r]) }));
+        zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof zenexPlatformDB[r]=== "object" ? zenexPlatformDB[r].country : zenexPlatformDB[r]) })); // 🟢 ZENEX
         combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
         let globalCountryCount = {};
@@ -1378,6 +1507,76 @@ bot.on("callback_query", async (query) => {
         const sel             = pureData.substring(firstUnderscore + 1);
 
         clearPendingForChat(chatId);
+        
+        // 🟢 ZENEX ASSIGNMENT
+        if (db.zenexRanges && db.zenexRanges[platform] && db.zenexRanges[platform][sel]) {
+            bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
+            const limit       = db.settings.maxNumbers || 4;
+            const zenexEntry  = db.zenexRanges[platform][sel];
+            const countryName = typeof zenexEntry === "object" ? zenexEntry.country : zenexEntry;
+            const methodName  = typeof zenexEntry === "object" ? zenexEntry.method  : "";
+            let fetchedNums   = [];
+
+            bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
+                { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
+            ).catch(() => {});
+            if (db.zenexCookies) zenex.setCookies(db.zenexCookies);
+
+            for (let i = 0; i < limit; i++) {
+                try {
+                    const numData = await zenex.getNumber(sel);
+                    const n = numData.number ? numData.number.replace("+", "") : "";
+                    if (n) {
+                        fetchedNums.push(n);
+                        inUseNumbers[n]    = true;
+                        pendingRequests[n] = { chatId, country: countryName, isZenex: true, platform };
+                    }
+                } catch (e) {
+                    if (i === 0 && db.zenexCreds?.email) {
+                        try {
+                            const newCookie = await zenex.login(db.zenexCreds.email, db.zenexCreds.password);
+                            db.zenexCookies = newCookie; zenex.setCookies(newCookie); saveDB();
+                            const retryData = await zenex.getNumber(sel);
+                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isZenex: true, platform }; continue; }
+                        } catch (err2) { break; }
+                    }
+                    break;
+                }
+            }
+
+            if (fetchedNums.length === 0)
+                return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
+                    { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
+                ).catch(() => {});
+
+            const info    = getCountryInfo(countryName);
+            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+            if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
+            replyText += `\n\n👇 _Click a number below to copy:_`;
+
+            let actionMenu = { inline_keyboard: [] };
+            fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
+            actionMenu.inline_keyboard.push(
+                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+            );
+
+            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+                activeNumberMessages[chatId] = messageId;
+                activeTimeouts[chatId] = setTimeout(() => {
+                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+                    if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
+                    expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                    fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    delete activeTimeouts[chatId];
+                }, 15 * 60 * 1000);
+            }).catch(() => {});
+            return;
+        }
 
         if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
@@ -1401,7 +1600,7 @@ bot.on("callback_query", async (query) => {
                         pendingRequests[n] = { chatId, country: countryName, isStex: true, platform };
                     }
                 } catch (e) {
-                    if (i === 0 && e.message.includes("SESSION_EXPIRED") && db.stexCreds?.email) {
+                    if (i === 0 && db.stexCreds?.email) {
                         try {
                             const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
                             db.stexToken = token; stex.setAuthToken(token); saveDB();
@@ -1434,7 +1633,6 @@ bot.on("callback_query", async (query) => {
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
-                // 🟢 FIX: Set activeTimeout for the current chat
                 activeTimeouts[chatId] = setTimeout(() => {
                     fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
@@ -1471,7 +1669,7 @@ bot.on("callback_query", async (query) => {
                         pendingRequests[n] = { chatId, country: countryName, isMk: true, platform };
                     }
                 } catch (e) {
-                    if (i === 0 && e.message === "SESSION_EXPIRED" && db.mkCreds?.email) {
+                    if (i === 0 && db.mkCreds?.email) {
                         try {
                             const newCookie = await mk.login(db.mkCreds.email, db.mkCreds.password);
                             db.mkCookies = newCookie; mk.setCookies(newCookie); saveDB();
@@ -1504,7 +1702,6 @@ bot.on("callback_query", async (query) => {
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
-                // 🟢 FIX: Set activeTimeout for the current chat
                 activeTimeouts[chatId] = setTimeout(() => {
                     fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
@@ -1542,7 +1739,6 @@ bot.on("callback_query", async (query) => {
 
         bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
             activeNumberMessages[chatId] = messageId;
-            // 🟢 FIX: Set activeTimeout for the current chat
             activeTimeouts[chatId] = setTimeout(() => {
                 assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
                 let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
@@ -1641,6 +1837,14 @@ async function autoLoginPanels() {
             if (cookieStr) { db.mkCookies = cookieStr; mk.setCookies(cookieStr); saveDB(); }
         } catch (e) {}
     }
+
+    // 🟢 ZENEX AutoLogin
+    if (db.zenexCreds && db.zenexCreds.email) {
+        try {
+            const cookieStr = await zenex.login(db.zenexCreds.email, db.zenexCreds.password);
+            if (cookieStr) { db.zenexCookies = cookieStr; zenex.setCookies(cookieStr); saveDB(); }
+        } catch (e) {}
+    }
 }
 
 // ============================================================
@@ -1662,11 +1866,14 @@ mongoose.connect(MONGODB_URI).then(async () => {
             db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
         }
         if (!db.mkRanges)            db.mkRanges           = { fb: {}, ig: {}, wa: {} };
+        if (!db.zenexRanges)         db.zenexRanges        = { fb: {}, ig: {}, wa: {} }; // 🟢 ZENEX
         if (!db.savedStexAccounts)   db.savedStexAccounts  = [];
         if (!db.savedMkAccounts)     db.savedMkAccounts    = [];
+        if (!db.savedZenexAccounts)  db.savedZenexAccounts = []; // 🟢 ZENEX
 
         if (db.stexCreds?.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
         if (db.mkCreds?.email   && db.savedMkAccounts.length   === 0) db.savedMkAccounts.push(db.mkCreds);
+        if (db.zenexCreds?.email&& db.savedZenexAccounts.length=== 0) db.savedZenexAccounts.push(db.zenexCreds); // 🟢 ZENEX
 
     } else {
         await BotDB.create(db);
@@ -1674,6 +1881,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
     if (db.stexToken)  stex.setAuthToken(db.stexToken);
     if (db.mkCookies)  mk.setCookies(db.mkCookies);
+    if (db.zenexCookies) zenex.setCookies(db.zenexCookies); // 🟢 ZENEX
 
     isDbLoaded = true;
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
@@ -1738,6 +1946,36 @@ setInterval(async () => {
                     );
                     if (pendingKey) {
                         let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
+                        if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                            processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                        }
+                    }
+                }
+            });
+        }
+    } catch (e) {}
+}, 2500);
+
+// 🟢 ZENEX OTP Polling 
+setInterval(async () => {
+    if (!db.zenexCookies) return;
+    const hasZenexPending = Object.values(pendingRequests).some(req => req.isZenex);
+    if (!hasZenexPending) return;
+
+    try {
+        if (db.zenexCookies) zenex.setCookies(db.zenexCookies);
+        const records = await zenex.checkInfo();
+
+        if (Array.isArray(records)) {
+            records.forEach(rec => {
+                let rawNum      = String(rec.number || "");
+                let cleanRecNum = rawNum.replace(/\D/g, "");
+                if (cleanRecNum) {
+                    let pendingKey = Object.keys(pendingRequests).find(
+                        k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex
+                    );
+                    if (pendingKey) {
+                        let msg = rec.sms;
                         if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                             processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
                         }
