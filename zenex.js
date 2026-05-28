@@ -9,10 +9,9 @@ function getCookies() {
     return currentCookies;
 }
 
-// 🟢 Login (CSRF Token Bypass)
+// 🟢 Login (CSRF Token Bypass Fix)
 async function login(emailOrPhone, password) {
     try {
-        // ১. প্রথমে সাইটে ভিজিট করে হিডেন টোকেন (CSRF Token) ও কুকি কালেক্ট করা
         const initRes = await fetch(`${BASE_URL}/login`, {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
@@ -24,34 +23,32 @@ async function login(emailOrPhone, password) {
 
         const html = await initRes.text();
         let csrfToken = "";
-        // HTML এর ভেতর থেকে টোকেনটি খুঁজে বের করা
         const tokenMatch = html.match(/<meta name="csrf-token" content="([^"]+)">/);
-        if (tokenMatch) {
-            csrfToken = tokenMatch[1];
-        }
+        if (tokenMatch) csrfToken = tokenMatch[1];
 
-        // ২. এবার টোকেনসহ ইমেইল ও পাসওয়ার্ড পাঠানো
-        const res = await fetch(`${BASE_URL}/login`, {
+        // 🟢 FIX: 405 Error - Checking correct login endpoint
+        const loginUrl = html.includes('action="') ? html.match(/action="([^"]+)"/)[1] : `${BASE_URL}/login`;
+
+        const res = await fetch(loginUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrfToken, // 🟢 টোকেন অ্যাড করা হলো
+                'X-CSRF-TOKEN': csrfToken,
                 'Cookie': cookieString,
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             },
             body: JSON.stringify({ emailOrPhone, password })
         });
 
-        // নতুন লগইন কুকি আপডেট করা
         if (res.headers.getSetCookie) {
             const newCookies = res.headers.getSetCookie().map(c => c.split(';')[0]);
             if (newCookies.length > 0) cookieString = newCookies.join('; ');
         }
 
         if (!res.ok) {
-            throw new Error(`Server rejected (${res.status}). Wrong password or site issue!`);
+            throw new Error(`Server rejected (${res.status}). Try manually checking URL.`);
         }
 
         currentCookies = cookieString;
@@ -61,10 +58,8 @@ async function login(emailOrPhone, password) {
     }
 }
 
-// 🟢 Get Number
 async function getNumber(range) {
     if (!currentCookies) throw new Error("SESSION_EXPIRED");
-
     try {
         const res = await fetch(`${BASE_URL}/getnum`, {
             method: 'POST',
@@ -79,12 +74,8 @@ async function getNumber(range) {
         });
 
         const data = await res.json();
-
-        if (data.success && data.data) {
-            return { number: data.data.full_number || data.data.number };
-        } else {
-            throw new Error("Out of stock or error");
-        }
+        if (data.success && data.data) return { number: data.data.full_number || data.data.number };
+        else throw new Error("Out of stock or error");
     } catch (error) {
         if (error.message.includes("Unexpected token") || error.message.includes("JSON") || error.message.includes("SESSION_EXPIRED")) {
             throw new Error("SESSION_EXPIRED");
@@ -93,7 +84,6 @@ async function getNumber(range) {
     }
 }
 
-// 🟢 Check OTPs
 async function checkInfo() {
     if (!currentCookies) return [];
     try {
@@ -109,12 +99,8 @@ async function checkInfo() {
         });
 
         const data = await res.json();
-        
         if (data.success && Array.isArray(data.otps)) {
-            return data.otps.map(item => ({
-                number: item.number,
-                sms: item.otp
-            }));
+            return data.otps.map(item => ({ number: item.number, sms: item.otp }));
         }
         return [];
     } catch (e) {
