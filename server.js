@@ -8,7 +8,7 @@ const mongoose       = require("mongoose");
 const { authenticator } = require("otplib");
 const stex           = require("./stex.js");
 const mk             = require("./mk.js");
-const zenex          = require("./zenex.js"); // 🟢 ZENEX Added
+const zenex          = require("./zenex.js"); 
 
 // ============================================================
 // #  CONFIGURATION
@@ -40,7 +40,7 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// #  TELEGRAM BOT SETUP ( Webhook Mode )
+// #  TELEGRAM BOT SETUP
 // ============================================================
 
 const bot = new TelegramBot(botToken, { webHook: true });
@@ -81,14 +81,14 @@ const dbSchema = new mongoose.Schema({
     stexToken:          String,
     mkRanges:           Object,
     mkCookies:          String,
-    zenexRanges:        Object, // 🟢 ZENEX
-    zenexCookies:       String, // 🟢 ZENEX
+    zenexRanges:        Object, 
+    zenexCookies:       String, 
     stexCreds:          Object,
     mkCreds:            Object,
-    zenexCreds:         Object, // 🟢 ZENEX
+    zenexCreds:         Object, 
     savedStexAccounts:  Array,
     savedMkAccounts:    Array,
-    savedZenexAccounts: Array   // 🟢 ZENEX
+    savedZenexAccounts: Array   
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
@@ -110,14 +110,14 @@ let db = {
     stexToken:         "",
     mkRanges:          { fb: {}, ig: {}, wa: {} },
     mkCookies:         "",
-    zenexRanges:       { fb: {}, ig: {}, wa: {} }, // 🟢 ZENEX
-    zenexCookies:      "", // 🟢 ZENEX
+    zenexRanges:       { fb: {}, ig: {}, wa: {} }, 
+    zenexCookies:      "", 
     stexCreds:         null,
     mkCreds:           null,
-    zenexCreds:        null, // 🟢 ZENEX
+    zenexCreds:        null, 
     savedStexAccounts: [],
     savedMkAccounts:   [],
-    savedZenexAccounts:[] // 🟢 ZENEX
+    savedZenexAccounts:[] 
 };
 
 let isDbLoaded             = false;
@@ -129,7 +129,7 @@ let userStates             = {};
 let tempAdminData          = {};
 let activeTempMails        = {};
 let activeNumberMessages   = {};
-let activeTimeouts         = {}; 
+let activeTimeouts         = {}; // 🟢 Fix Overlap Timeout
 
 // ============================================================
 // #  DATABASE HELPER FUNCTIONS
@@ -196,6 +196,7 @@ function sendJoinPrompt(chatId) {
 }
 
 function clearPendingForChat(chatId) {
+    // 🟢 FIX OVERLAPPING TIMEOUTS
     if (activeTimeouts[chatId]) {
         clearTimeout(activeTimeouts[chatId]);
         delete activeTimeouts[chatId];
@@ -248,7 +249,7 @@ const countryPrefixes = {
     "974": "QATAR", "975": "BHUTAN", "976": "MONGOLIA", "977": "NEPAL",
     "992": "TAJIKISTAN", "993": "TURKMENISTAN", "994": "AZERBAIJAN", "995": "GEORGIA",
     "996": "KYRGYZSTAN", "998": "UZBEKISTAN",
-    "228": "TOGO" // Explicitly added based on your screenshot
+    "228": "TOGO" 
 };
 
 const countryData = {
@@ -376,7 +377,7 @@ const manageNumberPanel = {
         [{ text: "IVA SMS 📨",    callback_data: "admin_manage_ranges" }],
         [{ text: "Stex SMS 📩",   callback_data: "placeholder_stex" }],
         [{ text: "MK SMS 💬",     callback_data: "placeholder_mk" }],
-        [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }], // 🟢 ZENEX added
+        [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }], // 🟢 ZENEX
         [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
         [{ text: "⬅️ Back",       callback_data: "admin_manage_numbers" }]
     ]
