@@ -11,7 +11,7 @@ function getCookies() {
     return COOKIES;
 }
 
-// 🟢 Custom Request Handler
+// 🟢 Custom Request Handler with strict Browser Headers
 function makeRequest(method, path, body, extraHeaders = {}, customCookies = null) {
     return new Promise((resolve, reject) => {
         const headers = {
@@ -20,6 +20,12 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
             "origin": BASE_URL,
             "referer": `${BASE_URL}/login`,
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+            "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
             "cookie": customCookies !== null ? customCookies : (COOKIES || ""),
             ...extraHeaders
         };
@@ -53,18 +59,12 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
 // 🟢 Login
 async function login(emailOrPhone, password) {
     let tempCookies = "";
-
     const body = JSON.stringify({ emailOrPhone, password });
 
     const postRes = await makeRequest("POST", "/api/login", body, {
-        "content-type": "application/json",
-        "accept": "*/*",
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "same-origin"
+        "content-type": "application/json"
     }, tempCookies);
 
-    // Update Cookies
     if (postRes.headers && postRes.headers["set-cookie"]) {
         let extractedCookies = [];
         postRes.headers["set-cookie"].forEach(c => {
@@ -73,26 +73,25 @@ async function login(emailOrPhone, password) {
         tempCookies = extractedCookies.join("; ");
     }
 
-    // Success Check (200 OK)
     if (postRes.status === 200 || postRes.status === 201) {
         COOKIES = tempCookies;
         return tempCookies;
     }
 
-    throw new Error(`Login failed! Server returned ${postRes.status}. Check email/password.`);
+    throw new Error(`Login failed! Server returned ${postRes.status}. Check credentials.`);
 }
 
-// 🟢 Get Number (cURL Based Fix)
+// 🟢 Get Number (Perfectly imitates clicking "Get Number" on the website)
 async function getNumber(range) {
     if (!COOKIES) throw new Error("SESSION_EXPIRED");
 
     const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
 
     try {
-        // 🟢 FIX: Endpoint updated to /api/getnum
         const res = await makeRequest("POST", "/api/getnum", body, {
             "content-type": "application/json",
-            "referer": `${BASE_URL}/get-number`
+            "referer": `${BASE_URL}/get-number`,
+            "priority": "u=1, i"
         });
 
         if (res.status === 401 || res.status === 403 || res.status === 302 || (typeof res.data === 'string' && res.data.includes('login'))) {
@@ -118,13 +117,12 @@ async function checkInfo() {
 
     try {
         const timestamp = Date.now();
-        // 🟢 FIX: Endpoint updated to /api/check-otp
         const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`, null, {
             "referer": `${BASE_URL}/get-number`
         });
 
         if (res.status === 401 || res.status === 403 || res.status === 302) {
-            return []; // Expired, let other functions handle it
+            return []; 
         }
 
         if (res.data && res.data.success && Array.isArray(res.data.otps)) {
