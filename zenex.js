@@ -11,21 +11,14 @@ function getCookies() {
     return COOKIES;
 }
 
-// 🟢 Custom Request Handler with strict Browser Headers
 function makeRequest(method, path, body, extraHeaders = {}, customCookies = null) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "*/*",
+            "accept": "application/json, text/plain, */*",
             "accept-language": "en-US,en;q=0.9",
             "origin": BASE_URL,
-            "referer": `${BASE_URL}/login`,
+            "referer": `${BASE_URL}/`,
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-            "sec-ch-ua": '"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "same-origin",
             "cookie": customCookies !== null ? customCookies : (COOKIES || ""),
             ...extraHeaders
         };
@@ -56,21 +49,33 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Login
+// 🟢 Login (JWT Token Fix)
 async function login(emailOrPhone, password) {
     let tempCookies = "";
     const body = JSON.stringify({ emailOrPhone, password });
 
     const postRes = await makeRequest("POST", "/api/login", body, {
         "content-type": "application/json"
-    }, tempCookies);
+    });
 
+    // ১. সাধারণ কুকি সেভ করা
     if (postRes.headers && postRes.headers["set-cookie"]) {
         let extractedCookies = [];
         postRes.headers["set-cookie"].forEach(c => {
             extractedCookies.push(c.split(";")[0]);
         });
         tempCookies = extractedCookies.join("; ");
+    }
+
+    // ২. 🟢 মূল ফিক্স: JSON রেসপন্স থেকে লুকানো zenex_token বের করে কুকিতে যুক্ত করা
+    if (postRes.data) {
+        let token = postRes.data.token || (postRes.data.data && postRes.data.data.token);
+        if (token) {
+            const tokenCookie = `zenex_token=${token}`;
+            if (!tempCookies.includes('zenex_token')) {
+                tempCookies = tempCookies ? `${tempCookies}; ${tokenCookie}` : tokenCookie;
+            }
+        }
     }
 
     if (postRes.status === 200 || postRes.status === 201) {
@@ -81,7 +86,7 @@ async function login(emailOrPhone, password) {
     throw new Error(`Login failed! Server returned ${postRes.status}. Check credentials.`);
 }
 
-// 🟢 Get Number (Perfectly imitates clicking "Get Number" on the website)
+// 🟢 Get Number
 async function getNumber(range) {
     if (!COOKIES) throw new Error("SESSION_EXPIRED");
 
@@ -89,12 +94,10 @@ async function getNumber(range) {
 
     try {
         const res = await makeRequest("POST", "/api/getnum", body, {
-            "content-type": "application/json",
-            "referer": `${BASE_URL}/get-number`,
-            "priority": "u=1, i"
+            "content-type": "application/json"
         });
 
-        if (res.status === 401 || res.status === 403 || res.status === 302 || (typeof res.data === 'string' && res.data.includes('login'))) {
+        if (res.status === 401 || res.status === 403 || res.status === 302) {
             throw new Error("SESSION_EXPIRED");
         }
 
@@ -111,22 +114,24 @@ async function getNumber(range) {
     }
 }
 
-// 🟢 Check Info (Polling OTPs)
+// 🟢 Check Info (Polling OTPs Fix)
 async function checkInfo() {
     if (!COOKIES) return [];
 
     try {
         const timestamp = Date.now();
-        const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`, null, {
-            "referer": `${BASE_URL}/get-number`
-        });
+        const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`);
 
-        if (res.status === 401 || res.status === 403 || res.status === 302) {
+        if (res.status === 401 || res.status === 403) {
             return []; 
         }
 
         if (res.data && res.data.success && Array.isArray(res.data.otps)) {
-            return res.data.otps;
+            // 🟢 মূল ফিক্স: server.js এর সাথে সিঙ্ক করার জন্য 'otp' কে 'sms' এ কনভার্ট করা হলো
+            return res.data.otps.map(item => ({
+                number: item.number,
+                sms: item.otp 
+            }));
         }
         return [];
     } catch (e) {
