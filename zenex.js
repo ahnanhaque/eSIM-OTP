@@ -50,13 +50,12 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Login (cURL Based Fix)
+// 🟢 Login
 async function login(emailOrPhone, password) {
     let tempCookies = "";
 
     const body = JSON.stringify({ emailOrPhone, password });
 
-    // cURL এর হুবহু Endpoint এবং Headers
     const postRes = await makeRequest("POST", "/api/login", body, {
         "content-type": "application/json",
         "accept": "*/*",
@@ -83,14 +82,15 @@ async function login(emailOrPhone, password) {
     throw new Error(`Login failed! Server returned ${postRes.status}. Check email/password.`);
 }
 
-// 🟢 Get Number
+// 🟢 Get Number (cURL Based Fix)
 async function getNumber(range) {
     if (!COOKIES) throw new Error("SESSION_EXPIRED");
 
     const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
 
     try {
-        const res = await makeRequest("POST", "/getnum", body, {
+        // 🟢 FIX: Endpoint updated to /api/getnum
+        const res = await makeRequest("POST", "/api/getnum", body, {
             "content-type": "application/json",
             "referer": `${BASE_URL}/get-number`
         });
@@ -103,9 +103,9 @@ async function getNumber(range) {
             return { number: res.data.data.full_number || res.data.data.number };
         }
         
-        throw new Error("Out of stock or error");
+        throw new Error((res.data && res.data.message) ? res.data.message : "Out of stock or error");
     } catch (err) {
-        if (err.message.includes("Unexpected token") || err.message.includes("JSON")) {
+        if (err.message.includes("Unexpected token") || err.message.includes("JSON") || err.message.includes("SESSION_EXPIRED")) {
             throw new Error("SESSION_EXPIRED");
         }
         throw err;
@@ -118,7 +118,8 @@ async function checkInfo() {
 
     try {
         const timestamp = Date.now();
-        const res = await makeRequest("GET", `/check-otp?t=${timestamp}`, null, {
+        // 🟢 FIX: Endpoint updated to /api/check-otp
+        const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`, null, {
             "referer": `${BASE_URL}/get-number`
         });
 
