@@ -11,11 +11,14 @@ function getCookies() {
     return COOKIES;
 }
 
-// 🟢 Custom Request Handler (Like MK.js)
+// 🟢 Custom Request Handler
 function makeRequest(method, path, body, extraHeaders = {}, customCookies = null) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "accept": "*/*",
+            "accept-language": "en-US,en;q=0.9",
+            "origin": BASE_URL,
+            "referer": `${BASE_URL}/login`,
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
             "cookie": customCookies !== null ? customCookies : (COOKIES || ""),
             ...extraHeaders
@@ -47,54 +50,37 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Login (Handling Cookies properly like mk.js)
+// 🟢 Login (cURL Based Fix)
 async function login(emailOrPhone, password) {
     let tempCookies = "";
 
-    // 1. Visit Login Page to get Initial Cookies
-    const getRes = await makeRequest("GET", "/login", null, {}, tempCookies);
-    if (getRes.headers && getRes.headers["set-cookie"]) {
-        let initialCookies = [];
-        getRes.headers["set-cookie"].forEach(c => initialCookies.push(c.split(";")[0]));
-        tempCookies = initialCookies.join("; ");
-    }
-
-    // Extract CSRF Token if present
-    let csrfToken = "";
-    if (typeof getRes.rawText === 'string') {
-        const tokenMatch = getRes.rawText.match(/<meta name="csrf-token" content="([^"]+)">/);
-        if (tokenMatch) csrfToken = tokenMatch[1];
-    }
-
-    // 2. Submit Login Request
     const body = JSON.stringify({ emailOrPhone, password });
-    const postRes = await makeRequest("POST", "/login", body, {
+
+    // cURL এর হুবহু Endpoint এবং Headers
+    const postRes = await makeRequest("POST", "/api/login", body, {
         "content-type": "application/json",
-        "accept": "application/json",
-        "x-requested-with": "XMLHttpRequest",
-        "x-csrf-token": csrfToken,
-        "referer": `${BASE_URL}/login`
+        "accept": "*/*",
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-origin"
     }, tempCookies);
 
     // Update Cookies
     if (postRes.headers && postRes.headers["set-cookie"]) {
-        let extractedCookies = tempCookies ? tempCookies.split("; ") : [];
+        let extractedCookies = [];
         postRes.headers["set-cookie"].forEach(c => {
-            let cookiePair = c.split(";")[0];
-            let cookieName = cookiePair.split("=")[0];
-            extractedCookies = extractedCookies.filter(existing => !existing.startsWith(cookieName + "="));
-            extractedCookies.push(cookiePair);
+            extractedCookies.push(c.split(";")[0]);
         });
         tempCookies = extractedCookies.join("; ");
     }
 
-    // Success Check
-    if (postRes.status === 200 || postRes.status === 302 || tempCookies.includes("zenex_session")) {
+    // Success Check (200 OK)
+    if (postRes.status === 200 || postRes.status === 201) {
         COOKIES = tempCookies;
         return tempCookies;
     }
 
-    throw new Error("Login failed. Check credentials or Zenex blocked the request.");
+    throw new Error(`Login failed! Server returned ${postRes.status}. Check email/password.`);
 }
 
 // 🟢 Get Number
@@ -106,8 +92,6 @@ async function getNumber(range) {
     try {
         const res = await makeRequest("POST", "/getnum", body, {
             "content-type": "application/json",
-            "accept": "application/json",
-            "x-requested-with": "XMLHttpRequest",
             "referer": `${BASE_URL}/get-number`
         });
 
@@ -135,8 +119,6 @@ async function checkInfo() {
     try {
         const timestamp = Date.now();
         const res = await makeRequest("GET", `/check-otp?t=${timestamp}`, null, {
-            "accept": "application/json",
-            "x-requested-with": "XMLHttpRequest",
             "referer": `${BASE_URL}/get-number`
         });
 
@@ -145,7 +127,7 @@ async function checkInfo() {
         }
 
         if (res.data && res.data.success && Array.isArray(res.data.otps)) {
-            return res.data.otps; // `otps` array direct pass korlam, server.js e eita process hobe
+            return res.data.otps;
         }
         return [];
     } catch (e) {
