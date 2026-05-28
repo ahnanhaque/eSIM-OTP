@@ -49,7 +49,7 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Login (JWT Token Fix)
+// 🟢 Login
 async function login(emailOrPhone, password) {
     let tempCookies = "";
     const body = JSON.stringify({ emailOrPhone, password });
@@ -58,7 +58,6 @@ async function login(emailOrPhone, password) {
         "content-type": "application/json"
     });
 
-    // ১. সাধারণ কুকি সেভ করা
     if (postRes.headers && postRes.headers["set-cookie"]) {
         let extractedCookies = [];
         postRes.headers["set-cookie"].forEach(c => {
@@ -67,7 +66,6 @@ async function login(emailOrPhone, password) {
         tempCookies = extractedCookies.join("; ");
     }
 
-    // ২. 🟢 মূল ফিক্স: JSON রেসপন্স থেকে লুকানো zenex_token বের করে কুকিতে যুক্ত করা
     if (postRes.data) {
         let token = postRes.data.token || (postRes.data.data && postRes.data.data.token);
         if (token) {
@@ -114,12 +112,17 @@ async function getNumber(range) {
     }
 }
 
-// 🟢 Check Info (Polling OTPs Fix)
+// 🟢 Check Info (Polling OTPs with Heartbeat)
 async function checkInfo() {
     if (!COOKIES) return [];
 
     try {
         const timestamp = Date.now();
+        
+        // 🟢 ফিক্স: সার্ভারকে অ্যাক্টিভ রাখার জন্য Sync Orders কল করা হলো (Heartbeat)
+        await makeRequest("GET", `/api/sync-orders?t=${timestamp}`);
+
+        // এবার OTP চেক করা
         const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`);
 
         if (res.status === 401 || res.status === 403) {
@@ -127,7 +130,6 @@ async function checkInfo() {
         }
 
         if (res.data && res.data.success && Array.isArray(res.data.otps)) {
-            // 🟢 মূল ফিক্স: server.js এর সাথে সিঙ্ক করার জন্য 'otp' কে 'sms' এ কনভার্ট করা হলো
             return res.data.otps.map(item => ({
                 number: item.number,
                 sms: item.otp 
