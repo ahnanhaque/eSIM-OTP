@@ -429,6 +429,62 @@ function renderManageRangesMenu(chatId, messageId) {
     ).catch(() => {});
 }
 
+// 🟢 NEW FUNCTION: Render updated remove menu for any deletions
+function renderRemoveMenu(chatId, messageId) {
+    let btns = [];
+    let allRanges = [];
+
+    ["fb", "ig", "wa"].forEach(plat => {
+        const stexList = db.stexRanges[plat] ? Object.keys(db.stexRanges[plat]) : [];
+        stexList.forEach(r => {
+            const cName = typeof db.stexRanges[plat][r] === "object" ? db.stexRanges[plat][r].country : db.stexRanges[plat][r];
+            allRanges.push({ plat, type: "stex", r, info: getCountryInfo(cName), prefix: "Stex" });
+        });
+        const mkList = db.mkRanges && db.mkRanges[plat] ? Object.keys(db.mkRanges[plat]) : [];
+        mkList.forEach(r => {
+            const cName = typeof db.mkRanges[plat][r] === "object" ? db.mkRanges[plat][r].country : db.mkRanges[plat][r];
+            allRanges.push({ plat, type: "mk", r, info: getCountryInfo(cName), prefix: "MK" });
+        });
+        const zenexList = db.zenexRanges && db.zenexRanges[plat] ? Object.keys(db.zenexRanges[plat]) : [];
+        zenexList.forEach(r => {
+            const cName = typeof db.zenexRanges[plat][r] === "object" ? db.zenexRanges[plat][r].country : db.zenexRanges[plat][r];
+            allRanges.push({ plat, type: "zenex", r, info: getCountryInfo(cName), prefix: "Zenex" });
+        });
+        const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
+        ivaList.forEach(r => {
+            allRanges.push({ plat, type: "num", r, info: getCountryInfo(r), prefix: "IVA" });
+        });
+    });
+
+    let globalCountryCount = {};
+    allRanges.forEach(item => {
+        globalCountryCount[item.info.cleanName] = (globalCountryCount[item.info.cleanName] || 0) + 1;
+    });
+
+    let currentV = {};
+    allRanges.forEach(item => {
+        let dName = `${item.info.flag} ${item.info.cleanName}`;
+        if (globalCountryCount[item.info.cleanName] > 1) {
+            currentV[item.info.cleanName] = (currentV[item.info.cleanName] || 0) + 1;
+            dName += ` V${currentV[item.info.cleanName]}`;
+        }
+        let cbData = `del${item.type}rng_${item.plat}_${item.r}`;
+        btns.push([{ text: `${item.prefix} : ${dName} (${item.r}) [${item.plat.toUpperCase()}]`, callback_data: cbData }]);
+    });
+
+    if (btns.length === 0) {
+        bot.editMessageText("📭 No active numbers/ranges to remove.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]] } }).catch(() => {});
+        return;
+    }
+
+    btns.push([{ text: "🗑️ REMOVE ALL", callback_data: "delall_everything" }]);
+    btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
+    
+    bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_",
+        { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }
+    ).catch(() => {});
+}
+
 // ============================================================
 // #  BOT COMMANDS  (/start  /admin)
 // ============================================================
@@ -877,7 +933,7 @@ bot.on("message", async (msg) => {
                 `✅ Successfully added MK Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`,
                 { parse_mode: "Markdown" }
             ).catch(() => {});
-        } else if (panel === "zenex") { // 🟢 ZENEX
+        } else if (panel === "zenex") { 
             if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} };
             if (!db.zenexRanges[platform]) db.zenexRanges[platform] = {};
             db.zenexRanges[platform][range] = { country, method };
@@ -923,7 +979,7 @@ bot.on("callback_query", async (query) => {
 
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
-                       "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", // 🟢 ZENEX
+                       "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
                        "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
         return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true });
@@ -976,7 +1032,7 @@ bot.on("callback_query", async (query) => {
                 [{ text: "IVA SMS 📩",  callback_data: "placeholder_iva" }],
                 [{ text: "Stex SMS 📨", callback_data: "stex_login" }],
                 [{ text: "MK SMS ✉️",  callback_data: "placeholder_mk_login" }],
-                [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], // 🟢 ZENEX
+                [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], 
                 [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
             ]}
         }).catch(() => {});
@@ -1252,47 +1308,16 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
     }
 
+    // 🟢 NEW: Updated Block for Range Deletion
     else if (data === "admin_remove_number_menu") {
-        let btns = [];
-        ["fb", "ig", "wa"].forEach(plat => {
-            const stexList = db.stexRanges[plat] ? Object.keys(db.stexRanges[plat]) : [];
-            stexList.forEach(r => {
-                const cName = typeof db.stexRanges[plat][r] === "object" ? db.stexRanges[plat][r].country : db.stexRanges[plat][r];
-                const info  = getCountryInfo(cName);
-                btns.push([{ text: `Stex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delstexrng_${plat}_${r}` }]);
-            });
-            const mkList = db.mkRanges && db.mkRanges[plat] ? Object.keys(db.mkRanges[plat]) : [];
-            mkList.forEach(r => {
-                const cName = typeof db.mkRanges[plat][r] === "object" ? db.mkRanges[plat][r].country : db.mkRanges[plat][r];
-                const info  = getCountryInfo(cName);
-                btns.push([{ text: `MK : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delmkrng_${plat}_${r}` }]);
-            });
-            // 🟢 ZENEX List
-            const zenexList = db.zenexRanges && db.zenexRanges[plat] ? Object.keys(db.zenexRanges[plat]) : [];
-            zenexList.forEach(r => {
-                const cName = typeof db.zenexRanges[plat][r] === "object" ? db.zenexRanges[plat][r].country : db.zenexRanges[plat][r];
-                const info  = getCountryInfo(cName);
-                btns.push([{ text: `Zenex : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delzenexrng_${plat}_${r}` }]);
-            });
-            const ivaList = db.availableNumbers[plat] ? Object.keys(db.availableNumbers[plat]).filter(k => db.availableNumbers[plat][k].length > 0) : [];
-            ivaList.forEach(r => {
-                const info = getCountryInfo(r);
-                btns.push([{ text: `IVA : ${info.flag} ${info.cleanName} (${r})`, callback_data: `delnumrng_${plat}_${r}` }]);
-            });
-        });
-        if (btns.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No active numbers/ranges to remove.", show_alert: true });
-        btns.push([{ text: "🗑️ REMOVE ALL", callback_data: "delall_everything" }]);
-        btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]);
-        bot.editMessageText("🗑️ **Select a range to remove:**\n_(This will delete the available numbers/ranges from the bot)_",
-            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }
-        ).catch(() => {});
+        renderRemoveMenu(chatId, messageId);
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data === "delall_everything") {
         db.stexRanges = { fb: {}, ig: {}, wa: {} };
         db.mkRanges   = { fb: {}, ig: {}, wa: {} };
-        db.zenexRanges = { fb: {}, ig: {}, wa: {} }; // 🟢 ZENEX
+        db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
         db.availableNumbers = { fb: {}, ig: {}, wa: {} };
         saveDB();
         bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
@@ -1304,7 +1329,7 @@ bot.on("callback_query", async (query) => {
     else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_") || data.startsWith("delzenexrng_")) {
         const isStex    = data.startsWith("delstexrng_");
         const isMk      = data.startsWith("delmkrng_");
-        const isZenex   = data.startsWith("delzenexrng_"); // 🟢 ZENEX
+        const isZenex   = data.startsWith("delzenexrng_"); 
         const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : (isZenex ? "delzenexrng_" : "delnumrng_"));
         const payload   = data.replace(prefixStr, "");
         const parts     = payload.split("_");
@@ -1313,22 +1338,21 @@ bot.on("callback_query", async (query) => {
 
         if (isStex) {
             if (db.stexRanges[plat] && db.stexRanges[plat][target]) { delete db.stexRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ Stex range ${target} removed from ${plat.toUpperCase()}!` });
+            bot.answerCallbackQuery(query.id, { text: `✅ Stex range ${target} removed!` });
         } else if (isMk) {
             if (db.mkRanges && db.mkRanges[plat] && db.mkRanges[plat][target]) { delete db.mkRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ MK range ${target} removed from ${plat.toUpperCase()}!` });
+            bot.answerCallbackQuery(query.id, { text: `✅ MK range ${target} removed!` });
         } else if (isZenex) {
             if (db.zenexRanges && db.zenexRanges[plat] && db.zenexRanges[plat][target]) { delete db.zenexRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ Zenex range ${target} removed from ${plat.toUpperCase()}!` });
+            bot.answerCallbackQuery(query.id, { text: `✅ Zenex range ${target} removed!` });
         } else {
             if (db.availableNumbers[plat] && db.availableNumbers[plat][target]) { delete db.availableNumbers[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed from ${plat.toUpperCase()}!` });
+            bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed!` });
         }
 
-        bot.editMessageText("🗑️ **Select a range to remove:**\n_(Reloading...)_",
-            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_remove_number_menu" }]] }, parse_mode: "Markdown" }
-        ).catch(() => {});
+        renderRemoveMenu(chatId, messageId);
     }
+    // 🟢 END BLOCK
 
     else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
         bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
