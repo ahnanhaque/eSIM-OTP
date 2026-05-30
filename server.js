@@ -1,87 +1,213 @@
 // ============================================================
 // #  DEPENDENCIES & IMPORTS
 // ============================================================
-const express        = require("express"); const TelegramBot    = require("node-telegram-bot-api"); const mongoose       = require("mongoose"); const { authenticator } = require("otplib"); const stex           = require("./stex.js"); const mk             = require("./mk.js"); const zenex          = require("./zenex.js");
 
-// ============================================================ // #  CONFIGURATION // ============================================================
+const express        = require("express");
+const TelegramBot    = require("node-telegram-bot-api");
+const mongoose       = require("mongoose");
+const { authenticator } = require("otplib");
+const stex           = require("./stex.js");
+const mk             = require("./mk.js");
+const zenex          = require("./zenex.js"); 
 
-const botToken        = process.env.BOT_TOKEN        || "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg"; const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952; const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469; const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1"; const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0"; const PORT            = process.env.PORT             || 3000; const RENDER_URL      = "https://esim-otp-btup.onrender.com";
+// ============================================================
+// #  CONFIGURATION
+// ============================================================
 
-const REQUIRED_CHANNELS = [ { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" }, { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" } ];
+const botToken        = process.env.BOT_TOKEN        || "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg";
+const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
+const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
+const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1";
+const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
+const PORT            = process.env.PORT             || 3000;
+const RENDER_URL      = "https://esim-otp-btup.onrender.com"; 
 
-// ============================================================ // #  EXPRESS APP SETUP // ============================================================
+const REQUIRED_CHANNELS = [
+    { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
+    { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
+];
 
-const app = express(); app.use(express.json()); app.use((req, res, next) => { res.header("Access-Control-Allow-Origin", "*"); res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept"); next(); });
+// ============================================================
+// #  EXPRESS APP SETUP
+// ============================================================
 
-// ============================================================ // #  TELEGRAM BOT SETUP // ============================================================
+const app = express();
+app.use(express.json());
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    next();
+});
 
-const bot = new TelegramBot(botToken, { webHook: true }); bot.setWebHook(${RENDER_URL}/bot${botToken});
+// ============================================================
+// #  TELEGRAM BOT SETUP
+// ============================================================
 
-app.post(/bot${botToken}, (req, res) => { bot.processUpdate(req.body); res.sendStatus(200); });
+const bot = new TelegramBot(botToken, { webHook: true });
+bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
 
-bot.on("error", (err) => { if (err && err.message && !err.message.includes("message is not modified")) console.log("\n[Telegram Bot Error]", err.message); });
+app.post(`/bot${botToken}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
 
-bot.setMyCommands([ { command: "start", description: "Restart the bot" }, { command: "admin", description: "Open admin panel" } ]);
+bot.on("error", (err) => {
+    if (err && err.message && !err.message.includes("message is not modified"))
+        console.log("\n[Telegram Bot Error]", err.message);
+});
 
-let botInfo = {}; bot.getMe().then(info => botInfo = info).catch(console.error);
+bot.setMyCommands([
+    { command: "start", description: "Restart the bot" },
+    { command: "admin", description: "Open admin panel" }
+]);
 
-// ============================================================ // #  DATABASE SCHEMA & MODEL // ============================================================
+let botInfo = {};
+bot.getMe().then(info => botInfo = info).catch(console.error);
 
-const userPanelSchema = new mongoose.Schema({ chatId: Number, panelData: { numbers: Array, otps: Array } }, { strict: false }); const UserPanelDB = mongoose.model("UserPanelData", userPanelSchema);
+// ============================================================
+// #  DATABASE SCHEMA & MODEL
+// ============================================================
 
-const dbSchema = new mongoose.Schema({ balances:           Object, lastAssigned:       Object, adminUsernames:     Array, users:              Array, referred:           Object, settings:           Object, availableNumbers:   Object, cookies:            Object, stexRanges:         Object, stexToken:          String, mkRanges:           Object, mkCookies:          String, zenexRanges:        Object, zenexCookies:       String, stexCreds:          Object, mkCreds:            Object, zenexCreds:         Object, savedStexAccounts:  Array, savedMkAccounts:    Array, savedZenexAccounts: Array
+const dbSchema = new mongoose.Schema({
+    balances:           Object,
+    lastAssigned:       Object,
+    adminUsernames:     Array,
+    users:              Array,
+    referred:           Object,
+    settings:           Object,
+    availableNumbers:   Object,
+    cookies:            Object,
+    stexRanges:         Object,
+    stexToken:          String,
+    mkRanges:           Object,
+    mkCookies:          String,
+    zenexRanges:        Object, 
+    zenexCookies:       String, 
+    stexCreds:          Object,
+    mkCreds:            Object,
+    zenexCreds:         Object, 
+    savedStexAccounts:  Array,
+    savedMkAccounts:    Array,
+    savedZenexAccounts: Array   
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
 
-// ============================================================ // #  IN-MEMORY STATE VARIABLES // ============================================================
+// ============================================================
+// #  IN-MEMORY STATE VARIABLES
+// ============================================================
 
-let db = { balances:          {}, lastAssigned:      {}, adminUsernames:    [], users:             [], referred:          {}, settings:          { maxNumbers: 4, panelAccess: false }, availableNumbers:  { fb: {}, ig: {}, wa: {} }, cookies:           {}, stexRanges:        { fb: {}, ig: {}, wa: {} }, stexToken:         "", mkRanges:          { fb: {}, ig: {}, wa: {} }, mkCookies:         "", zenexRanges:       { fb: {}, ig: {}, wa: {} }, zenexCookies:      "", stexCreds:         null, mkCreds:           null, zenexCreds:        null, savedStexAccounts: [], savedMkAccounts:   [], savedZenexAccounts:[] };
+let db = {
+    balances:          {},
+    lastAssigned:      {},
+    adminUsernames:    [],
+    users:             [],
+    referred:          {},
+    settings:          { maxNumbers: 4 },
+    availableNumbers:  { fb: {}, ig: {}, wa: {} },
+    cookies:           {},
+    stexRanges:        { fb: {}, ig: {}, wa: {} },
+    stexToken:         "",
+    mkRanges:          { fb: {}, ig: {}, wa: {} },
+    mkCookies:         "",
+    zenexRanges:       { fb: {}, ig: {}, wa: {} }, 
+    zenexCookies:      "", 
+    stexCreds:         null,
+    mkCreds:           null,
+    zenexCreds:        null, 
+    savedStexAccounts: [],
+    savedMkAccounts:   [],
+    savedZenexAccounts:[] 
+};
 
-let isDbLoaded             = false; let latestRangesFromExtension = {}; let pendingRequests        = {}; let lastProcessedOTPTime   = {}; let inUseNumbers           = {}; let userStates             = {}; let tempAdminData          = {}; let activeTempMails        = {}; let activeNumberMessages   = {}; let activeTimeouts         = {};
+let isDbLoaded             = false;
+let latestRangesFromExtension = {};
+let pendingRequests        = {};
+let lastProcessedOTPTime   = {};
+let inUseNumbers           = {};
+let userStates             = {};
+let tempAdminData          = {};
+let activeTempMails        = {};
+let activeNumberMessages   = {};
+let activeTimeouts         = {}; // 🟢 Fix Overlap Timeout
 
-// ============================================================ // #  DATABASE HELPER FUNCTIONS // ============================================================
+// ============================================================
+// #  DATABASE HELPER FUNCTIONS
+// ============================================================
 
-function saveDB() { if (!isDbLoaded) return; BotDB.updateOne({}, db, { upsert: true }).catch(() => {}); }
-
-async function getUserPanel(chatId) { let panel = await UserPanelDB.findOne({ chatId }); if (!panel) { panel = await UserPanelDB.create({ chatId, panelData: { numbers: [], otps: [] } }); } return panel; }
-
-function getBalance(chatId) { return db.balances[chatId] || 0; }
-
-function addBalance(chatId, amount) { if (!db.balances[chatId]) db.balances[chatId] = 0; db.balances[chatId] += amount; saveDB(); }
-
-// ============================================================ // #  PERMISSION & AUTH HELPER FUNCTIONS // ============================================================
-
-function isSuperAdmin(chatId) { return chatId === ADMIN_ID; }
-
-function isAdmin(chatId, username) { if (isSuperAdmin(chatId)) return true; let un = username ? "@" + username.replace("@", "").toLowerCase() : null; return un && db.adminUsernames.includes(un); }
-
-async function isUserMember(userId) { if (isSuperAdmin(userId)) return true; for (let channel of REQUIRED_CHANNELS) { try { const member = await bot.getChatMember(channel.id, userId); if (!["creator", "administrator", "member", "restricted"].includes(member.status)) { return false; } } catch (e) { return false; } } return true; }
-
-function sendJoinPrompt(chatId) { let inline_keyboard = []; REQUIRED_CHANNELS.forEach(ch => { inline_keyboard.push([{ text: ch.name, url: ch.link }]); }); inline_keyboard.push([{ text: "🔄 Check Again", callback_data: "check_join" }]);
-
-bot.sendMessage(chatId,
-    `⚠️ **Access Denied!**\n\nYou must join all our official groups and channels first to use this bot. Once joined, click the check button below.`,
-    {
-        reply_markup: { inline_keyboard: inline_keyboard },
-        parse_mode: "Markdown"
-    }
-).catch(() => {});
-
+function saveDB() {
+    if (!isDbLoaded) return;
+    BotDB.updateOne({}, db, { upsert: true }).catch(() => {});
 }
 
-function clearPendingForChat(chatId) { if (activeTimeouts[chatId]) { clearTimeout(activeTimeouts[chatId]); delete activeTimeouts[chatId]; } for (let num in pendingRequests) { if (pendingRequests[num].chatId === chatId) { delete inUseNumbers[num]; delete pendingRequests[num]; } } }
+function getBalance(chatId) {
+    return db.balances[chatId] || 0;
+}
 
-// ============================================================ // #  USER PANEL HANDLER FUNCTIONS (Numbers & OTPs) // ============================================================
+function addBalance(chatId, amount) {
+    if (!db.balances[chatId]) db.balances[chatId] = 0;
+    db.balances[chatId] += amount;
+    saveDB();
+}
 
-async function addNumberToUser(chatId, number) { const panel = await getUserPanel(chatId); panel.panelData.numbers.push(number); await panel.save(); }
+// ============================================================
+// #  PERMISSION & AUTH HELPER FUNCTIONS
+// ============================================================
 
-async function addOTPToUser(chatId, number, otp) { const panel = await getUserPanel(chatId); panel.panelData.otps.push({ number, otp, time: Date.now() }); await panel.save(); }
+function isSuperAdmin(chatId) {
+    return chatId === ADMIN_ID;
+}
 
-async function getUserNumbers(chatId) { const panel = await getUserPanel(chatId); return panel.panelData.numbers || []; }
+function isAdmin(chatId, username) {
+    if (isSuperAdmin(chatId)) return true;
+    let un = username ? "@" + username.replace("@", "").toLowerCase() : null;
+    return un && db.adminUsernames.includes(un);
+}
 
-async function getUserOTPs(chatId) { const panel = await getUserPanel(chatId); return panel.panelData.otps || []; }
+async function isUserMember(userId) {
+    if (isSuperAdmin(userId)) return true;
+    for (let channel of REQUIRED_CHANNELS) {
+        try {
+            const member = await bot.getChatMember(channel.id, userId);
+            if (!["creator", "administrator", "member", "restricted"].includes(member.status)) {
+                return false;
+            }
+        } catch (e) {
+            return false;
+        }
+    }
+    return true;
+}
 
+function sendJoinPrompt(chatId) {
+    let inline_keyboard = [];
+    REQUIRED_CHANNELS.forEach(ch => {
+        inline_keyboard.push([{ text: ch.name, url: ch.link }]);
+    });
+    inline_keyboard.push([{ text: "🔄 Check Again", callback_data: "check_join" }]);
+
+    bot.sendMessage(chatId,
+        `⚠️ **Access Denied!**\n\nYou must join all our official groups and channels first to use this bot. Once joined, click the check button below.`,
+        {
+            reply_markup: { inline_keyboard: inline_keyboard },
+            parse_mode: "Markdown"
+        }
+    ).catch(() => {});
+}
+
+function clearPendingForChat(chatId) {
+    // 🟢 FIX OVERLAPPING TIMEOUTS
+    if (activeTimeouts[chatId]) {
+        clearTimeout(activeTimeouts[chatId]);
+        delete activeTimeouts[chatId];
+    }
+    for (let num in pendingRequests) {
+        if (pendingRequests[num].chatId === chatId) {
+            delete inUseNumbers[num];
+            delete pendingRequests[num];
+        }
+    }
+}
 
 // ============================================================
 // #  COUNTRY & PLATFORM DETECTION UTILITIES
