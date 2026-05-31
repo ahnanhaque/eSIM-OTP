@@ -110,7 +110,7 @@ let db = {
     adminUsernames:    [],
     users:             [],
     referred:          {},
-    settings:          { maxNumbers: 4, userPanelAccess: false }, 
+    settings:          { maxNumbers: 4, userPanelAccess: false, lastBroadcast: [] }, 
     availableNumbers:  { fb: {}, ig: {}, wa: {} },
     cookies:           {},
     stexRanges:        { fb: {}, ig: {}, wa: {} },
@@ -599,13 +599,28 @@ bot.on("message", async (msg) => {
         }
         bot.sendMessage(chatId, `⏳ Broadcasting your message to all users. Please wait...`).catch(() => {});
         let successCount = 0;
+        
+        // 🟢 Broadcast history setup for deletion
+        if (!db.settings.lastBroadcast) db.settings.lastBroadcast = [];
+        db.settings.lastBroadcast = []; 
+
         for (let uId of db.users) {
             try {
-                await bot.copyMessage(uId, chatId, msg.message_id, { reply_markup: { remove_keyboard: true } });
+                let sentMsg = await bot.copyMessage(uId, chatId, msg.message_id, { reply_markup: { remove_keyboard: true } });
+                db.settings.lastBroadcast.push({ chatId: uId, messageId: sentMsg.message_id.message_id || sentMsg.message_id });
                 successCount++;
             } catch (e) {}
         }
-        bot.sendMessage(chatId, `✅ **Broadcast Complete!** Successfully sent to ${successCount} users.`).catch(() => {});
+        saveDB();
+
+        bot.sendMessage(chatId, `✅ **Broadcast Complete!** Successfully sent to ${successCount} users.`, {
+            parse_mode: "Markdown",
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "🗑️ Undo / Delete This Broadcast", callback_data: "admin_delete_broadcast" }]
+                ]
+            }
+        }).catch(() => {});
         delete userStates[chatId];
         return;
     }
@@ -1233,6 +1248,38 @@ bot.on("callback_query", async (query) => {
             "📢 **Please send the message you want to broadcast:**\n_(You can send Text, Photo, Video, Voice, or Document)_",
             { parse_mode: "Markdown" }
         ).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+
+    // 🟢 Broadcast Delete Handler
+    else if (data === "admin_delete_broadcast") {
+        if (!isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied!", show_alert: true });
+
+        const lastBroadcastData = db.settings.lastBroadcast || [];
+        if (lastBroadcastData.length === 0) {
+            return bot.answerCallbackQuery(query.id, { text: "⚠️ No recent broadcast found or it's already deleted.", show_alert: true });
+        }
+
+        bot.editMessageText("⏳ **Deleting broadcasted messages...** Please wait.", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(() => {});
+        
+        let deletedCount = 0;
+        for (let record of lastBroadcastData) {
+            try {
+                await bot.deleteMessage(record.chatId, record.messageId);
+                deletedCount++;
+            } catch (e) {}
+        }
+
+        db.settings.lastBroadcast = [];
+        saveDB();
+
+        bot.editMessageText(`✅ **Broadcast Deleted Successfully!**\nRemoved from ${deletedCount} users' chats.`, { 
+            chat_id: chatId, 
+            message_id: messageId, 
+            parse_mode: "Markdown",
+            reply_markup: { inline_keyboard: [[{ text: "⬅️ Back to Admin Panel", callback_data: "admin_panel" }]] }
+        }).catch(() => {});
+        
         bot.answerCallbackQuery(query.id);
     }
 
@@ -2228,6 +2275,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
         
         if (!db.userPanels)          db.userPanels         = {};
         if (db.settings.userPanelAccess === undefined) db.settings.userPanelAccess = false;
+        if (!db.settings.lastBroadcast) db.settings.lastBroadcast = []; // 🟢 Setup Broadcast Tracking Array
 
         if (db.stexCreds?.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
         if (db.mkCreds?.email   && db.savedMkAccounts.length   === 0) db.savedMkAccounts.push(db.mkCreds);
@@ -2347,7 +2395,7 @@ setInterval(async () => {
     }
 }, 2500);
 
-// 🟢 NXA Polling 
+// 🟢 NXA Polling (Updated with Date Adjustment and Internal ID Check)
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isNxa);
     if (reqs.length === 0) return;
@@ -2362,7 +2410,6 @@ setInterval(async () => {
     for (const authStr of authKeys) {
         const [token, cookie] = authStr.split("|");
         try {
-            // dateStr parameter ta pass kora hocche checkInfo te
             const response = await nxa.checkInfo(token, cookie, dateStr);
             
             const records = Array.isArray(response) ? response : (response?.data || []);
