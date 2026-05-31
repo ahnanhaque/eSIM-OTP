@@ -2352,19 +2352,27 @@ setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isNxa);
     if (reqs.length === 0) return;
 
+    // 🕒 Time Adjustment: BD Time theke 6 hours minus kora hocche (NXA UTC timezone e ache)
+    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+    d.setHours(d.getHours() - 6); 
+    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
     // We combine token and cookie uniquely 
     const authKeys = [...new Set(reqs.map(r => `${r.token}|${r.cookie}`))];
     for (const authStr of authKeys) {
         const [token, cookie] = authStr.split("|");
         try {
-            const response = await nxa.checkInfo(token, cookie);
+            // dateStr parameter ta pass kora hocche checkInfo te
+            const response = await nxa.checkInfo(token, cookie, dateStr);
             
-            // Response theke data array ta extract kora hocche
             const records = Array.isArray(response) ? response : (response?.data || []);
 
             if (Array.isArray(records)) {
                 records.forEach(rec => {
-                    // Priority 1: Match by internal_id (Most accurate)
+                    // ⚠️ Strict Date Check: Ajker date er baire onno din er history ignore korbe
+                    if (rec.allocated_at && !rec.allocated_at.startsWith(dateStr)) return;
+
+                    // Priority 1: Match by internal_id
                     let pendingKey = Object.keys(pendingRequests).find(k => 
                         pendingRequests[k].isNxa && 
                         pendingRequests[k].token === token &&
@@ -2386,9 +2394,8 @@ setInterval(async () => {
 
                     if (pendingKey) {
                         let status = String(rec.status || "").toLowerCase();
-                        let msg = rec.message || rec.otp; // JSON e direct message and otp field ase
+                        let msg = rec.message || rec.otp;
 
-                        // Status jodi success hoy ebong message thake
                         if (status === "success" && msg && typeof msg === "string") {
                             if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                                 processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
@@ -2397,8 +2404,6 @@ setInterval(async () => {
                     }
                 });
             }
-        } catch (e) {
-            // API down thakle jate bot crash na kore tai faka rakha holo
-        }
+        } catch (e) {}
     }
 }, 2500);
