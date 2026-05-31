@@ -1,0 +1,122 @@
+const http = require("http");
+
+const BASE_URL = "http://63.141.255.227";
+let SESSION_TOKEN = "";
+let COOKIES = "";
+
+function setAuthData(token, cookies) {
+    SESSION_TOKEN = token;
+    COOKIES = cookies;
+}
+
+function makeRequest(method, path, body, extraHeaders = {}, customToken = null, customCookies = null) {
+    return new Promise((resolve, reject) => {
+        const token = customToken !== null ? customToken : SESSION_TOKEN;
+        const cookie = customCookies !== null ? customCookies : COOKIES;
+
+        const headers = {
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+            "Origin": BASE_URL,
+            "Referer": `${BASE_URL}/app/login`,
+            ...extraHeaders
+        };
+
+        if (token) headers["X-Session-Token"] = token;
+        if (cookie) headers["Cookie"] = cookie;
+
+        if (body && method !== "GET") {
+            headers["Content-Length"] = Buffer.byteLength(body);
+        }
+
+        const req = http.request(BASE_URL + path, { method, headers }, res => {
+            let chunks = [];
+            res.on("data", d => chunks.push(d));
+            res.on("end", () => {
+                const text = Buffer.concat(chunks).toString("utf-8");
+                try {
+                    resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text), rawText: text });
+                } catch {
+                    resolve({ status: res.statusCode, headers: res.headers, data: text, rawText: text });
+                }
+            });
+        });
+
+        req.on("error", reject);
+        if (body && method !== "GET") req.write(body);
+        req.end();
+    });
+}
+
+// 🟢 Login System
+async function login(email, password) {
+    const body = JSON.stringify({ email, password });
+    const res = await makeRequest("POST", "/api/auth/login", body);
+
+    let newCookie = "";
+    if (res.headers && res.headers["set-cookie"]) {
+        newCookie = res.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
+    }
+
+    if (res.data) {
+        let token = res.data.session_token || res.data.token || (res.data.data && res.data.data.token);
+        if (token) {
+            SESSION_TOKEN = token;
+            if (newCookie) COOKIES = newCookie;
+            return { token: token, cookie: newCookie || COOKIES };
+        }
+    }
+    
+    throw new Error((res.data && res.data.message) ? res.data.message : "NXA Login Failed! Check credentials.");
+}
+
+// 🟢 Get Number
+async function getNumber(range, token, cookie) {
+    if (!token) throw new Error("SESSION_EXPIRED");
+
+    const body = JSON.stringify({ range: range, format: "normal" });
+
+    try {
+        const res = await makeRequest("POST", "/api/user/request-number", body, {}, token, cookie);
+
+        if (res.status === 401 || res.status === 403) throw new Error("SESSION_EXPIRED");
+
+        if (res.data && res.data.success && res.data.number_raw) {
+            return { 
+                number: res.data.number_raw.replace("+", ""),
+                internal_id: res.data.internal_id 
+            };
+        }
+        
+        throw new Error((res.data && res.data.message) ? res.data.message : "Out of stock or error in NXA");
+    } catch (err) {
+        if (err.message.includes("Unexpected token") || err.message.includes("SESSION_EXPIRED")) {
+            throw new Error("SESSION_EXPIRED");
+        }
+        throw err;
+    }
+}
+
+// 🟢 Check Info (Polling Notifications)
+async function checkInfo(token, cookie) {
+    if (!token) return [];
+
+    try {
+        const res = await makeRequest("GET", "/api/user/notifications?limit=20", null, {}, token, cookie);
+
+        if (res.status === 401 || res.status === 403) return [];
+
+        if (res.data) {
+            // Support multiple JSON structures depending on panel backend updates
+            if (Array.isArray(res.data)) return res.data;
+            if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
+            if (res.data.notifications && Array.isArray(res.data.notifications)) return res.data.notifications;
+        }
+        return [];
+    } catch (e) {
+        return [];
+    }
+}
+
+module.exports = { login, setAuthData, getNumber, checkInfo };
