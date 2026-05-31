@@ -42,9 +42,9 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Auto Login Function (Race Condition Fixed!)
+// 🟢 Auto Login Function
 async function login(email, password) {
-    let tempCookies = ""; // লোকাল ভেরিয়েবল ব্যবহার করা হয়েছে যেন ব্যাকগ্রাউন্ড প্রসেস ক্র্যাশ না করে
+    let tempCookies = ""; 
 
     const getRes = await makeRequest("GET", "/login.php", null, {}, tempCookies);
     if (getRes.headers && getRes.headers["set-cookie"]) {
@@ -75,7 +75,7 @@ async function login(email, password) {
     }
     
     if (res.status === 302 || tempCookies.includes("mk_remember") || (res.headers && res.headers.location)) {
-        return tempCookies; // শুধু সাকসেস হলেই কুকি রিটার্ন করবে
+        return tempCookies; 
     }
 
     throw new Error("Login failed. Please check your email and password.");
@@ -101,7 +101,7 @@ async function verifyCookies(cookieStr) {
     }
 }
 
-async function getNumber(range) {
+async function getNumber(range, customCookie = null) {
     const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
     const body = [
         `--${boundary}`,
@@ -121,9 +121,8 @@ async function getNumber(range) {
         "content-type": `multipart/form-data; boundary=${boundary}`,
         "referer": "https://mknetworkbd.com/getnum_test.php",
         "origin": "https://mknetworkbd.com"
-    });
+    }, customCookie);
     
-    // 🔴 নির্দিষ্ট এরর ডিটেকশন (যাতে শুধু এক্সপায়ার হলেই লগইন করে)
     if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
         throw new Error("SESSION_EXPIRED");
     }
@@ -133,11 +132,11 @@ async function getNumber(range) {
     throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
-async function checkInfo(date) {
+async function checkInfo(date, customCookie = null) {
     const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`, null, {
         "accept": "*/*",
         "referer": "https://mknetworkbd.com/getnum_test.php"
-    });
+    }, customCookie);
     
     if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
         throw new Error("SESSION_EXPIRED");
