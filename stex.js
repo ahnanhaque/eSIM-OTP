@@ -7,7 +7,7 @@ function setAuthToken(token) {
     AUTH_TOKEN = token; 
 }
 
-function makeRequest(method, path, body, extraHeaders = {}) {
+function makeRequest(method, path, body, extraHeaders = {}, customToken = null) {
     return new Promise((resolve, reject) => {
         const headers = {
             "accept": "application/json, text/plain, */*",
@@ -16,7 +16,9 @@ function makeRequest(method, path, body, extraHeaders = {}) {
             ...extraHeaders
         };
         
-        if (AUTH_TOKEN) {
+        if (customToken) {
+            headers["mauthtoken"] = customToken;
+        } else if (AUTH_TOKEN) {
             headers["mauthtoken"] = AUTH_TOKEN;
         }
 
@@ -47,15 +49,14 @@ function makeRequest(method, path, body, extraHeaders = {}) {
 async function login(email, password) {
     const res = await makeRequest("POST", "/mapi/v1/mauth/login", JSON.stringify({ email, password }));
     if (res.data && res.data.data && res.data.data.token) {
-        AUTH_TOKEN = res.data.data.token;
-        return AUTH_TOKEN;
+        return res.data.data.token;
     }
     throw new Error((res.data && res.data.message) ? res.data.message : "Login failed");
 }
 
 // Stex Get Number API
-async function getNumber(range) {
-    const res = await makeRequest("POST", "/mapi/v1/mdashboard/getnum/number", JSON.stringify({ range, is_national: false, remove_plus: false }));
+async function getNumber(range, customToken = null) {
+    const res = await makeRequest("POST", "/mapi/v1/mdashboard/getnum/number", JSON.stringify({ range, is_national: false, remove_plus: false }), {}, customToken);
     if (res.data && res.data.data && res.data.data.full_number) {
         return res.data.data;
     }
@@ -63,9 +64,8 @@ async function getNumber(range) {
 }
 
 // Stex Check OTP info API
-async function checkInfo(date) {
-    const res = await makeRequest("GET", `/mapi/v1/mdashboard/getnum/info?date=${date}&page=1&search=&status=`);
-    // JSON response অনুযায়ী ডাটা রিটার্ন
+async function checkInfo(date, customToken = null) {
+    const res = await makeRequest("GET", `/mapi/v1/mdashboard/getnum/info?date=${date}&page=1&search=&status=`, null, {}, customToken);
     if (res.data && res.data.data && res.data.data.numbers) {
         return res.data.data.numbers; 
     }
