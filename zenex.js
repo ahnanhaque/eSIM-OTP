@@ -77,7 +77,6 @@ async function login(emailOrPhone, password) {
     }
 
     if (postRes.status === 200 || postRes.status === 201) {
-        COOKIES = tempCookies;
         return tempCookies;
     }
 
@@ -85,15 +84,15 @@ async function login(emailOrPhone, password) {
 }
 
 // 🟢 Get Number
-async function getNumber(range) {
-    if (!COOKIES) throw new Error("SESSION_EXPIRED");
+async function getNumber(range, customCookie = null) {
+    if (!customCookie && !COOKIES) throw new Error("SESSION_EXPIRED");
 
     const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
 
     try {
         const res = await makeRequest("POST", "/api/getnum", body, {
             "content-type": "application/json"
-        });
+        }, customCookie);
 
         if (res.status === 401 || res.status === 403 || res.status === 302) {
             throw new Error("SESSION_EXPIRED");
@@ -113,17 +112,17 @@ async function getNumber(range) {
 }
 
 // 🟢 Check Info (Polling OTPs with Heartbeat)
-async function checkInfo() {
-    if (!COOKIES) return [];
+async function checkInfo(customCookie = null) {
+    if (!customCookie && !COOKIES) return [];
 
     try {
         const timestamp = Date.now();
         
-        // 🟢 ফিক্স: সার্ভারকে অ্যাক্টিভ রাখার জন্য Sync Orders কল করা হলো (Heartbeat)
-        await makeRequest("GET", `/api/sync-orders?t=${timestamp}`);
+        // 🟢 Heartbeat
+        await makeRequest("GET", `/api/sync-orders?t=${timestamp}`, null, {}, customCookie);
 
-        // এবার OTP চেক করা
-        const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`);
+        // OTP Check
+        const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`, null, {}, customCookie);
 
         if (res.status === 401 || res.status === 403) {
             return []; 
