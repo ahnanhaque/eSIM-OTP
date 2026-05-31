@@ -98,20 +98,30 @@ async function getNumber(range, token, cookie) {
     }
 }
 
-// 🟢 Check Info (Polling Notifications)
-async function checkInfo(token, cookie) {
+// 🟢 Check Info (Polling History Data)
+async function checkInfo(token, cookie, dateStr) {
     if (!token) return [];
 
+    let path = "/api/user/history?page=1&status=&limit=50";
+    if (dateStr) {
+        path += `&date=${dateStr}`;
+    }
+
     try {
-        const res = await makeRequest("GET", "/api/user/notifications?limit=20", null, {}, token, cookie);
+        // Extra headers set kora hocche jeno apnar deya curl er sathe perfectly match kore
+        const extraHeaders = {
+            "Accept-Language": "en-US,en;q=0.9,es-US;q=0.8,es;q=0.7",
+            "Referer": `${BASE_URL}/app/getnum`
+        };
+
+        const res = await makeRequest("GET", path, null, extraHeaders, token, cookie);
 
         if (res.status === 401 || res.status === 403) return [];
 
         if (res.data) {
-            // Support multiple JSON structures depending on panel backend updates
-            if (Array.isArray(res.data)) return res.data;
+            // Apnar JSON response onujayi `res.data.data` theke array return kora hobe
             if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
-            if (res.data.notifications && Array.isArray(res.data.notifications)) return res.data.notifications;
+            if (Array.isArray(res.data)) return res.data;
         }
         return [];
     } catch (e) {
