@@ -89,7 +89,7 @@ const dbSchema = new mongoose.Schema({
     savedStexAccounts:  Array,
     savedMkAccounts:    Array,
     savedZenexAccounts: Array,
-    userPanels:         Object // Multi-user panels data
+    userPanels:         Object // Multi-user panels data (Creds & Custom Ranges)
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
@@ -104,7 +104,7 @@ let db = {
     adminUsernames:    [],
     users:             [],
     referred:          {},
-    settings:          { maxNumbers: 4, userPanelAccess: false }, // userPanelAccess control
+    settings:          { maxNumbers: 4, userPanelAccess: false }, 
     availableNumbers:  { fb: {}, ig: {}, wa: {} },
     cookies:           {},
     stexRanges:        { fb: {}, ig: {}, wa: {} },
@@ -347,7 +347,6 @@ function getReplyMenu(chatId, username) {
         [{ text: "🔑 2FA" },        { text: "👤 Profile" }]
     ];
     
-    // Check if Panel Access is ON globally
     if (db.settings.userPanelAccess) {
         keyboard.push([{ text: "🔑 Login to Panel" }]);
     }
@@ -404,6 +403,38 @@ function getAdminMenu(chatId) {
         menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
     }
     return { inline_keyboard: menu };
+}
+
+// User Panel Sub-menu rendering
+function renderUserPanelMenu(chatId, messageId, panel) {
+    let btns = [];
+    let credKey = panel + 'Creds';
+    let pData = db.userPanels[chatId];
+
+    if (pData && pData[credKey]) {
+        btns.push([{ text: `✅ Account: ${pData[credKey].email}`, callback_data: "noop" }]);
+        let ranges = pData.ranges && pData.ranges[panel] ? pData.ranges[panel] : {};
+        ['fb', 'ig', 'wa'].forEach(plat => {
+            if (ranges[plat]) {
+                for (let r in ranges[plat]) {
+                    let info = ranges[plat][r];
+                    let cName = typeof info === 'object' ? info.country : info;
+                    btns.push([{ text: `❌ ${r} (${cName}) [${plat.toUpperCase()}]`, callback_data: `user_togglerng_${panel}_${plat}_${r}` }]);
+                }
+            }
+        });
+        btns.push([{ text: "➕ Add Range", callback_data: `user_add_range_${panel}` }]);
+        btns.push([{ text: "🗑️ Remove Account", callback_data: `user_${panel}_remove` }]);
+    } else {
+        btns.push([{ text: "➕ Add Account", callback_data: `user_${panel}_add` }]);
+    }
+    btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
+
+    let panelName = panel === "stex" ? "Stex SMS" : panel === "mk" ? "MK SMS" : "Zenex SMS";
+    bot.editMessageText(`🔑 **Your ${panelName} Account:**\n_(Click any active range to remove it)_`, {
+        chat_id: chatId, message_id: messageId,
+        reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown"
+    }).catch(() => {});
 }
 
 function renderManageRangesMenu(chatId, messageId) {
@@ -737,6 +768,50 @@ bot.on("message", async (msg) => {
         }
     }
 
+    // --- User Panels Add Range Logic ---
+    else if (userStates[chatId] === "WAITING_FOR_USER_RANGE") {
+        const range = text.trim();
+        if (range.length >= 5) {
+            const country = detectCountryFromRange(range);
+            tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country };
+            userStates[chatId] = "WAITING_FOR_USER_METHOD";
+            bot.sendMessage(chatId,
+                `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`,
+                { parse_mode: "Markdown" }
+            ).catch(() => {});
+        } else {
+            bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
+        }
+    }
+    else if (userStates[chatId] === "WAITING_FOR_USER_METHOD") {
+        const method  = text.trim();
+        const panel   = tempAdminData[chatId]?.pendingUserPanel;
+        const plat    = tempAdminData[chatId]?.pendingUserPlatform;
+        const range   = tempAdminData[chatId]?.pendingRange;
+        const country = tempAdminData[chatId]?.pendingCountry;
+
+        if (panel && plat && range && country) {
+            if (!db.userPanels[chatId].ranges) db.userPanels[chatId].ranges = { stex: {}, mk: {}, zenex: {} };
+            if (!db.userPanels[chatId].ranges[panel]) db.userPanels[chatId].ranges[panel] = {};
+            if (!db.userPanels[chatId].ranges[panel][plat]) db.userPanels[chatId].ranges[panel][plat] = {};
+            
+            db.userPanels[chatId].ranges[panel][plat][range] = { country, method };
+            saveDB();
+
+            bot.sendMessage(chatId,
+                `✅ Successfully added Range **${range}** for **${plat.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`,
+                { parse_mode: "Markdown" }
+            ).catch(() => {});
+
+            // Resend the user panel menu immediately to show the update
+            bot.sendMessage(chatId, "🔑 **Return to Panel:**", {
+                reply_markup: { inline_keyboard: [[{ text: `Open ${panel.toUpperCase()} Panel`, callback_data: `user_${panel}_login` }]] }
+            });
+        }
+        delete userStates[chatId];
+        delete tempAdminData[chatId];
+    }
+
     // --- User Panels login capture ---
     else if (userStates[chatId] === "WAITING_FOR_USER_STEX_CREDS") {
         const parts = text.split("|");
@@ -749,7 +824,9 @@ bot.on("message", async (msg) => {
                 db.userPanels[chatId].stexCreds = { email, password };
                 db.userPanels[chatId].stexToken = token;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your Stex Login Successful! Account saved.").catch(() => {});
+                bot.sendMessage(chatId, "✅ Your Stex Login Successful! Account saved.", {
+                    reply_markup: { inline_keyboard: [[{ text: "Open Stex Panel", callback_data: "user_stex_login" }]] }
+                }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
         } else {
             bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
@@ -767,7 +844,9 @@ bot.on("message", async (msg) => {
                 db.userPanels[chatId].mkCreds = { email, password };
                 db.userPanels[chatId].mkCookies = cookieStr;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your MK SMS Login Successful! Account saved.").catch(() => {});
+                bot.sendMessage(chatId, "✅ Your MK SMS Login Successful! Account saved.", {
+                    reply_markup: { inline_keyboard: [[{ text: "Open MK Panel", callback_data: "user_mk_login" }]] }
+                }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
         } else {
             bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
@@ -785,7 +864,9 @@ bot.on("message", async (msg) => {
                 db.userPanels[chatId].zenexCreds = { email, password };
                 db.userPanels[chatId].zenexCookies = cookieStr;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your Zenex SMS Login Successful! Account saved.").catch(() => {});
+                bot.sendMessage(chatId, "✅ Your Zenex SMS Login Successful! Account saved.", {
+                    reply_markup: { inline_keyboard: [[{ text: "Open Zenex Panel", callback_data: "user_zenex_login" }]] }
+                }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
         } else {
             bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
@@ -1061,8 +1142,21 @@ bot.on("callback_query", async (query) => {
         bot.deleteMessage(chatId, messageId).catch(() => {});
         return bot.answerCallbackQuery(query.id);
     }
+    
+    // Custom fix for user panel Back Button
     else if (data === "close_user_panel") {
-        bot.deleteMessage(chatId, messageId).catch(() => {});
+        bot.editMessageText("⚙️ **Login to your personal Panel:**\nSelect the panel you want to configure:", {
+            chat_id: chatId,
+            message_id: messageId,
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "Stex SMS 📨", callback_data: "user_stex_login" }],
+                    [{ text: "MK SMS ✉️",  callback_data: "user_mk_login" }],
+                    [{ text: "Zenex SMS ⚡", callback_data: "user_zenex_login" }],
+                    [{ text: "✖ Close Menu", callback_data: "close_menu" }]
+                ]
+            }, parse_mode: "Markdown"
+        }).catch(() => {});
         return bot.answerCallbackQuery(query.id);
     }
 
@@ -1097,7 +1191,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // 🟢 User Access Management inside Admin Panel
     else if (data === "admin_user_access") {
         let status = db.settings.userPanelAccess ? "🟢 ON" : "🔴 OFF";
         bot.editMessageText("👥 **User Access Management:**\nControl panel features and constraints for the users.", {
@@ -1137,15 +1230,7 @@ bot.on("callback_query", async (query) => {
 
     // 🟢 USER PANEL CALLBACKS (Stex)
     else if (data === "user_stex_login") {
-        let btns = [];
-        if (db.userPanels[chatId] && db.userPanels[chatId].stexCreds) {
-            btns.push([{ text: `✅ ${db.userPanels[chatId].stexCreds.email}`, callback_data: "noop" }]);
-            btns.push([{ text: "🗑️ Remove Account", callback_data: "user_stex_remove" }]);
-        } else {
-            btns.push([{ text: "➕ Add Account", callback_data: "user_stex_add" }]);
-        }
-        btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
-        bot.editMessageText("🔑 **Your Stex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {});
+        renderUserPanelMenu(chatId, messageId, "stex");
         bot.answerCallbackQuery(query.id);
     }
     else if (data === "user_stex_add") {
@@ -1160,20 +1245,12 @@ bot.on("callback_query", async (query) => {
             saveDB();
         }
         bot.answerCallbackQuery(query.id, { text: "✅ Stex Account removed!" });
-        bot.editMessageText("🔑 **Your Stex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Account", callback_data: "user_stex_add" }], [{ text: "⬅️ Back", callback_data: "close_user_panel" }]] }, parse_mode: "Markdown" }).catch(() => {});
+        renderUserPanelMenu(chatId, messageId, "stex");
     }
 
     // 🟢 USER PANEL CALLBACKS (MK)
     else if (data === "user_mk_login") {
-        let btns = [];
-        if (db.userPanels[chatId] && db.userPanels[chatId].mkCreds) {
-            btns.push([{ text: `✅ ${db.userPanels[chatId].mkCreds.email}`, callback_data: "noop" }]);
-            btns.push([{ text: "🗑️ Remove Account", callback_data: "user_mk_remove" }]);
-        } else {
-            btns.push([{ text: "➕ Add Account", callback_data: "user_mk_add" }]);
-        }
-        btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
-        bot.editMessageText("🔑 **Your MK SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {});
+        renderUserPanelMenu(chatId, messageId, "mk");
         bot.answerCallbackQuery(query.id);
     }
     else if (data === "user_mk_add") {
@@ -1188,20 +1265,12 @@ bot.on("callback_query", async (query) => {
             saveDB();
         }
         bot.answerCallbackQuery(query.id, { text: "✅ MK Account removed!" });
-        bot.editMessageText("🔑 **Your MK SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Account", callback_data: "user_mk_add" }], [{ text: "⬅️ Back", callback_data: "close_user_panel" }]] }, parse_mode: "Markdown" }).catch(() => {});
+        renderUserPanelMenu(chatId, messageId, "mk");
     }
 
     // 🟢 USER PANEL CALLBACKS (Zenex)
     else if (data === "user_zenex_login") {
-        let btns = [];
-        if (db.userPanels[chatId] && db.userPanels[chatId].zenexCreds) {
-            btns.push([{ text: `✅ ${db.userPanels[chatId].zenexCreds.email}`, callback_data: "noop" }]);
-            btns.push([{ text: "🗑️ Remove Account", callback_data: "user_zenex_remove" }]);
-        } else {
-            btns.push([{ text: "➕ Add Account", callback_data: "user_zenex_add" }]);
-        }
-        btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
-        bot.editMessageText("🔑 **Your Zenex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {});
+        renderUserPanelMenu(chatId, messageId, "zenex");
         bot.answerCallbackQuery(query.id);
     }
     else if (data === "user_zenex_add") {
@@ -1216,8 +1285,53 @@ bot.on("callback_query", async (query) => {
             saveDB();
         }
         bot.answerCallbackQuery(query.id, { text: "✅ Zenex Account removed!" });
-        bot.editMessageText("🔑 **Your Zenex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Account", callback_data: "user_zenex_add" }], [{ text: "⬅️ Back", callback_data: "close_user_panel" }]] }, parse_mode: "Markdown" }).catch(() => {});
+        renderUserPanelMenu(chatId, messageId, "zenex");
     }
+
+    // 🟢 USER RANGE MANAGEMENT CALLBACKS
+    else if (data.startsWith("user_add_range_")) {
+        let panel = data.replace("user_add_range_", "");
+        bot.editMessageText(`🛠 Please select the platform for the new range:`, {
+            chat_id: chatId, message_id: messageId,
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "ⓕ Facebook", callback_data: `user_sel_plat_${panel}_fb` }],
+                    [{ text: "ⓘ Instagram", callback_data: `user_sel_plat_${panel}_ig` }],
+                    [{ text: "✆ WhatsApp", callback_data: `user_sel_plat_${panel}_wa` }],
+                    [{ text: "⬅️ Back", callback_data: `user_${panel}_login` }]
+                ]
+            }
+        }).catch(()=>{});
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data.startsWith("user_sel_plat_")) {
+        let parts = data.split("_");
+        let panel = parts[3];
+        let plat = parts[4];
+
+        userStates[chatId] = "WAITING_FOR_USER_RANGE";
+        tempAdminData[chatId] = { pendingUserPanel: panel, pendingUserPlatform: plat };
+
+        bot.sendMessage(chatId, `🔢 **Enter ${panel.toUpperCase()} Range for ${plat.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``, { parse_mode: "Markdown" });
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data.startsWith("user_togglerng_")) {
+        // e.g. user_togglerng_stex_fb_232
+        let parts = data.split("_");
+        let panel = parts[2];
+        let plat = parts[3];
+        let range = parts.slice(4).join("_"); // Support ranges with underscores if any
+
+        if (db.userPanels[chatId] && db.userPanels[chatId].ranges && db.userPanels[chatId].ranges[panel] && db.userPanels[chatId].ranges[panel][plat]) {
+            delete db.userPanels[chatId].ranges[panel][plat][range];
+            saveDB();
+            bot.answerCallbackQuery(query.id, { text: "✅ Range removed!" });
+            renderUserPanelMenu(chatId, messageId, panel);
+        } else {
+            bot.answerCallbackQuery(query.id, { text: "❌ Failed to remove range." });
+        }
+    }
+
 
     else if (data === "admin_manage_panel") {
         bot.editMessageText("⚙️ **Login to panel :**", {
@@ -1666,14 +1780,27 @@ bot.on("callback_query", async (query) => {
         clearPendingForChat(chatId);
         const platform        = data.replace("menu_country_", "");
         const availPlatformDB = db.availableNumbers[platform] || {};
-        const stexPlatformDB  = db.stexRanges[platform] || {};
-        const mkPlatformDB    = db.mkRanges && db.mkRanges[platform] ? db.mkRanges[platform] : {};
-        const zenexPlatformDB = db.zenexRanges && db.zenexRanges[platform] ? db.zenexRanges[platform] : {}; 
+        
+        // Merge Admin DB Ranges and User DB Ranges (if user logged in & feature ON)
+        const getMergedRanges = (globalRanges, userRanges) => {
+            let combined = { ...globalRanges };
+            if (userRanges) {
+                for (let r in userRanges) combined[r] = userRanges[r];
+            }
+            return combined;
+        };
+
+        const hasPanel = db.settings.userPanelAccess;
+        const uPanels = db.userPanels[chatId];
+        
+        const finalStexDB = getMergedRanges(db.stexRanges[platform], hasPanel && uPanels?.stexToken ? uPanels.ranges?.stex?.[platform] : null);
+        const finalMkDB   = getMergedRanges(db.mkRanges?.[platform], hasPanel && uPanels?.mkCookies ? uPanels.ranges?.mk?.[platform] : null);
+        const finalZenexDB= getMergedRanges(db.zenexRanges?.[platform], hasPanel && uPanels?.zenexCookies ? uPanels.ranges?.zenex?.[platform] : null);
 
         const ranges         = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
-        const stexRangesList = Object.keys(stexPlatformDB);
-        const mkRangesList   = Object.keys(mkPlatformDB);
-        const zenexRangesList= Object.keys(zenexPlatformDB); 
+        const stexRangesList = Object.keys(finalStexDB);
+        const mkRangesList   = Object.keys(finalMkDB);
+        const zenexRangesList= Object.keys(finalZenexDB);
 
         if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && zenexRangesList.length === 0)
             return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`,
@@ -1682,9 +1809,9 @@ bot.on("callback_query", async (query) => {
 
         let combinedRanges = [];
         ranges.forEach(r       => combinedRanges.push({ type: "iva",  range: r, info: getCountryInfo(r) }));
-        stexRangesList.forEach(r => combinedRanges.push({ type: "stex", range: r, info: getCountryInfo(typeof stexPlatformDB[r] === "object" ? stexPlatformDB[r].country : stexPlatformDB[r]) }));
-        mkRangesList.forEach(r   => combinedRanges.push({ type: "mk",   range: r, info: getCountryInfo(typeof mkPlatformDB[r]   === "object" ? mkPlatformDB[r].country   : mkPlatformDB[r]) }));
-        zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof zenexPlatformDB[r]=== "object" ? zenexPlatformDB[r].country : zenexPlatformDB[r]) })); 
+        stexRangesList.forEach(r => combinedRanges.push({ type: "stex", range: r, info: getCountryInfo(typeof finalStexDB[r] === "object" ? finalStexDB[r].country : finalStexDB[r]) }));
+        mkRangesList.forEach(r   => combinedRanges.push({ type: "mk",   range: r, info: getCountryInfo(typeof finalMkDB[r]   === "object" ? finalMkDB[r].country   : finalMkDB[r]) }));
+        zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof finalZenexDB[r]=== "object" ? finalZenexDB[r].country : finalZenexDB[r]) })); 
         combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
         let globalCountryCount = {};
@@ -1722,11 +1849,19 @@ bot.on("callback_query", async (query) => {
 
         clearPendingForChat(chatId);
         
+        let userP = db.userPanels[chatId] || {};
+        let isUserZenex = db.settings.userPanelAccess && userP.zenexCookies;
+        let isUserStex = db.settings.userPanelAccess && userP.stexToken;
+        let isUserMk = db.settings.userPanelAccess && userP.mkCookies;
+
+        let zenexEntry = (isUserZenex && userP.ranges?.zenex?.[platform]?.[sel]) || db.zenexRanges?.[platform]?.[sel];
+        let stexEntry = (isUserStex && userP.ranges?.stex?.[platform]?.[sel]) || db.stexRanges?.[platform]?.[sel];
+        let mkEntry = (isUserMk && userP.ranges?.mk?.[platform]?.[sel]) || db.mkRanges?.[platform]?.[sel];
+
         // 🟢 ZENEX ASSIGNMENT
-        if (db.zenexRanges && db.zenexRanges[platform] && db.zenexRanges[platform][sel]) {
+        if (zenexEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
-            const zenexEntry  = db.zenexRanges[platform][sel];
             const countryName = typeof zenexEntry === "object" ? zenexEntry.country : zenexEntry;
             const methodName  = typeof zenexEntry === "object" ? zenexEntry.method  : "";
             let fetchedNums   = [];
@@ -1735,10 +1870,8 @@ bot.on("callback_query", async (query) => {
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
             
-            // USER PANEL LOGIC
-            const isUserPanel = db.settings.userPanelAccess && db.userPanels[chatId] && db.userPanels[chatId].zenexCookies;
-            const cookieToUse = isUserPanel ? db.userPanels[chatId].zenexCookies : db.zenexCookies;
-            const credsToUse  = isUserPanel ? db.userPanels[chatId].zenexCreds : db.zenexCreds;
+            const cookieToUse = isUserZenex ? db.userPanels[chatId].zenexCookies : db.zenexCookies;
+            const credsToUse  = isUserZenex ? db.userPanels[chatId].zenexCreds : db.zenexCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
@@ -1753,7 +1886,7 @@ bot.on("callback_query", async (query) => {
                     if (i === 0 && credsToUse?.email) {
                         try {
                             const newCookie = await zenex.login(credsToUse.email, credsToUse.password);
-                            if (isUserPanel) db.userPanels[chatId].zenexCookies = newCookie; else db.zenexCookies = newCookie;
+                            if (isUserZenex) db.userPanels[chatId].zenexCookies = newCookie; else db.zenexCookies = newCookie;
                             saveDB();
                             const retryData = await zenex.getNumber(sel, newCookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
@@ -1798,10 +1931,9 @@ bot.on("callback_query", async (query) => {
         }
 
         // 🟢 STEX ASSIGNMENT
-        if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
+        else if (stexEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
-            const stexEntry   = db.stexRanges[platform][sel];
             const countryName = typeof stexEntry === "object" ? stexEntry.country : stexEntry;
             const methodName  = typeof stexEntry === "object" ? stexEntry.method  : "";
             let fetchedNums   = [];
@@ -1810,9 +1942,8 @@ bot.on("callback_query", async (query) => {
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
 
-            const isUserPanel = db.settings.userPanelAccess && db.userPanels[chatId] && db.userPanels[chatId].stexToken;
-            const tokenToUse  = isUserPanel ? db.userPanels[chatId].stexToken : db.stexToken;
-            const credsToUse  = isUserPanel ? db.userPanels[chatId].stexCreds : db.stexCreds;
+            const tokenToUse  = isUserStex ? db.userPanels[chatId].stexToken : db.stexToken;
+            const credsToUse  = isUserStex ? db.userPanels[chatId].stexCreds : db.stexCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
@@ -1827,7 +1958,7 @@ bot.on("callback_query", async (query) => {
                     if (i === 0 && credsToUse?.email) {
                         try {
                             const newToken = await stex.login(credsToUse.email, credsToUse.password);
-                            if (isUserPanel) db.userPanels[chatId].stexToken = newToken; else db.stexToken = newToken;
+                            if (isUserStex) db.userPanels[chatId].stexToken = newToken; else db.stexToken = newToken;
                             saveDB();
                             const retryData = await stex.getNumber(sel, newToken);
                             const retryN    = retryData.full_number || retryData.number.replace("+", "");
@@ -1872,10 +2003,9 @@ bot.on("callback_query", async (query) => {
         }
 
         // 🟢 MK ASSIGNMENT
-        if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
+        else if (mkEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
-            const mkEntry     = db.mkRanges[platform][sel];
             const countryName = typeof mkEntry === "object" ? mkEntry.country : mkEntry;
             const methodName  = typeof mkEntry === "object" ? mkEntry.method  : "";
             let fetchedNums   = [];
@@ -1884,9 +2014,8 @@ bot.on("callback_query", async (query) => {
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
 
-            const isUserPanel = db.settings.userPanelAccess && db.userPanels[chatId] && db.userPanels[chatId].mkCookies;
-            const cookieToUse = isUserPanel ? db.userPanels[chatId].mkCookies : db.mkCookies;
-            const credsToUse  = isUserPanel ? db.userPanels[chatId].mkCreds : db.mkCreds;
+            const cookieToUse = isUserMk ? db.userPanels[chatId].mkCookies : db.mkCookies;
+            const credsToUse  = isUserMk ? db.userPanels[chatId].mkCreds : db.mkCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
@@ -1901,7 +2030,7 @@ bot.on("callback_query", async (query) => {
                     if (i === 0 && credsToUse?.email) {
                         try {
                             const newCookie = await mk.login(credsToUse.email, credsToUse.password);
-                            if (isUserPanel) db.userPanels[chatId].mkCookies = newCookie; else db.mkCookies = newCookie;
+                            if (isUserMk) db.userPanels[chatId].mkCookies = newCookie; else db.mkCookies = newCookie;
                             saveDB();
                             const retryData = await mk.getNumber(sel, newCookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
