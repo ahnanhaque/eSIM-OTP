@@ -2357,25 +2357,48 @@ setInterval(async () => {
     for (const authStr of authKeys) {
         const [token, cookie] = authStr.split("|");
         try {
-            const records = await nxa.checkInfo(token, cookie);
+            const response = await nxa.checkInfo(token, cookie);
+            
+            // Response theke data array ta extract kora hocche
+            const records = Array.isArray(response) ? response : (response?.data || []);
 
             if (Array.isArray(records)) {
                 records.forEach(rec => {
-                    let rawNum      = String(rec.number || rec.phone || rec.number_raw || "");
-                    let cleanRecNum = rawNum.replace(/\D/g, "");
-                    if (cleanRecNum) {
-                        let pendingKey = Object.keys(pendingRequests).find(
-                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isNxa && pendingRequests[k].token === token
-                        );
-                        if (pendingKey) {
-                            let msg = rec.message || rec.sms || rec.content || rec.otp || rec.text;
-                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                    // Priority 1: Match by internal_id (Most accurate)
+                    let pendingKey = Object.keys(pendingRequests).find(k => 
+                        pendingRequests[k].isNxa && 
+                        pendingRequests[k].token === token &&
+                        pendingRequests[k].internal_id === rec.internal_id
+                    );
+
+                    // Priority 2: Fallback to matching by number
+                    if (!pendingKey) {
+                        let rawNum = String(rec.number || "");
+                        let cleanRecNum = rawNum.replace(/\D/g, "");
+                        if (cleanRecNum) {
+                            pendingKey = Object.keys(pendingRequests).find(k => 
+                                k.replace(/\D/g, "") === cleanRecNum && 
+                                pendingRequests[k].isNxa && 
+                                pendingRequests[k].token === token
+                            );
+                        }
+                    }
+
+                    if (pendingKey) {
+                        let status = String(rec.status || "").toLowerCase();
+                        let msg = rec.message || rec.otp; // JSON e direct message and otp field ase
+
+                        // Status jodi success hoy ebong message thake
+                        if (status === "success" && msg && typeof msg === "string") {
+                            if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                                 processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
                             }
                         }
                     }
                 });
             }
-        } catch (e) {}
+        } catch (e) {
+            // API down thakle jate bot crash na kore tai faka rakha holo
+        }
     }
 }, 2500);
