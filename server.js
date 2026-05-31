@@ -88,7 +88,8 @@ const dbSchema = new mongoose.Schema({
     zenexCreds:         Object, 
     savedStexAccounts:  Array,
     savedMkAccounts:    Array,
-    savedZenexAccounts: Array   
+    savedZenexAccounts: Array,
+    userPanels:         Object // Multi-user panels data
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
@@ -103,7 +104,7 @@ let db = {
     adminUsernames:    [],
     users:             [],
     referred:          {},
-    settings:          { maxNumbers: 4 },
+    settings:          { maxNumbers: 4, userPanelAccess: false }, // userPanelAccess control
     availableNumbers:  { fb: {}, ig: {}, wa: {} },
     cookies:           {},
     stexRanges:        { fb: {}, ig: {}, wa: {} },
@@ -117,7 +118,8 @@ let db = {
     zenexCreds:        null, 
     savedStexAccounts: [],
     savedMkAccounts:   [],
-    savedZenexAccounts:[] 
+    savedZenexAccounts:[],
+    userPanels:        {}
 };
 
 let isDbLoaded             = false;
@@ -129,7 +131,7 @@ let userStates             = {};
 let tempAdminData          = {};
 let activeTempMails        = {};
 let activeNumberMessages   = {};
-let activeTimeouts         = {}; // 🟢 Fix Overlap Timeout
+let activeTimeouts         = {}; 
 
 // ============================================================
 // #  DATABASE HELPER FUNCTIONS
@@ -196,7 +198,6 @@ function sendJoinPrompt(chatId) {
 }
 
 function clearPendingForChat(chatId) {
-    // 🟢 FIX OVERLAPPING TIMEOUTS
     if (activeTimeouts[chatId]) {
         clearTimeout(activeTimeouts[chatId]);
         delete activeTimeouts[chatId];
@@ -345,6 +346,12 @@ function getReplyMenu(chatId, username) {
         [{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }],
         [{ text: "🔑 2FA" },        { text: "👤 Profile" }]
     ];
+    
+    // Check if Panel Access is ON globally
+    if (db.settings.userPanelAccess) {
+        keyboard.push([{ text: "🔑 Login to Panel" }]);
+    }
+    
     if (isAdmin(chatId, username)) {
         keyboard.push([{ text: "💬 Support" }, { text: "⚙️ Admin Panel" }]);
     } else {
@@ -377,7 +384,7 @@ const manageNumberPanel = {
         [{ text: "IVA SMS 📨",    callback_data: "admin_manage_ranges" }],
         [{ text: "Stex SMS 📩",   callback_data: "placeholder_stex" }],
         [{ text: "MK SMS 💬",     callback_data: "placeholder_mk" }],
-        [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }], // 🟢 ZENEX
+        [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }],
         [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
         [{ text: "⬅️ Back",       callback_data: "admin_manage_numbers" }]
     ]
@@ -386,7 +393,7 @@ const manageNumberPanel = {
 function getAdminMenu(chatId) {
     let menu = [
         [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" },
-         { text: "🔢 Set Number Limit",  callback_data: "admin_set_limit" }],
+         { text: "👥 User Access",       callback_data: "admin_user_access" }],
         [{ text: "⚙️ Manage Number",     callback_data: "admin_manage_numbers" },
          { text: "⚙️ Manage Panel",      callback_data: "admin_manage_panel" }]
     ];
@@ -429,7 +436,6 @@ function renderManageRangesMenu(chatId, messageId) {
     ).catch(() => {});
 }
 
-// 🟢 NEW FUNCTION: Render updated remove menu for any deletions
 function renderRemoveMenu(chatId, messageId) {
     let btns = [];
     let allRanges = [];
@@ -558,7 +564,7 @@ bot.on("message", async (msg) => {
 
     if (!text || text.startsWith("/")) return;
 
-    const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
+    const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "🔑 Login to Panel"];
     if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
         return sendJoinPrompt(chatId);
     }
@@ -571,6 +577,18 @@ bot.on("message", async (msg) => {
             `🛠 Please select the platform you want to receive an OTP for:`,
             { reply_markup: platformMenu }
         ).catch(() => {});
+    }
+
+    else if (text === "🔑 Login to Panel" && db.settings.userPanelAccess) {
+        bot.sendMessage(chatId, "⚙️ **Login to your personal Panel:**\nSelect the panel you want to configure:", {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "Stex SMS 📨", callback_data: "user_stex_login" }],
+                    [{ text: "MK SMS ✉️",  callback_data: "user_mk_login" }],
+                    [{ text: "Zenex SMS ⚡", callback_data: "user_zenex_login" }]
+                ]
+            }, parse_mode: "Markdown"
+        }).catch(() => {});
     }
 
     else if (text === "📧 Temp Mail") {
@@ -718,6 +736,63 @@ bot.on("message", async (msg) => {
             delete userStates[chatId];
         }
     }
+
+    // --- User Panels login capture ---
+    else if (userStates[chatId] === "WAITING_FOR_USER_STEX_CREDS") {
+        const parts = text.split("|");
+        if (parts.length === 2) {
+            let email    = parts[0].trim();
+            let password = parts[1].trim();
+            bot.sendMessage(chatId, "⏳ Logging into your StexSMS...").catch(() => {});
+            stex.login(email, password).then(token => {
+                if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
+                db.userPanels[chatId].stexCreds = { email, password };
+                db.userPanels[chatId].stexToken = token;
+                saveDB();
+                bot.sendMessage(chatId, "✅ Your Stex Login Successful! Account saved.").catch(() => {});
+            }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+        } else {
+            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
+        }
+        delete userStates[chatId];
+    }
+    else if (userStates[chatId] === "WAITING_FOR_USER_MK_CREDS") {
+        const parts = text.split("|");
+        if (parts.length === 2) {
+            let email    = parts[0].trim();
+            let password = parts[1].trim();
+            bot.sendMessage(chatId, "⏳ Logging into your MK SMS Server...").catch(() => {});
+            mk.login(email, password).then(cookieStr => {
+                if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
+                db.userPanels[chatId].mkCreds = { email, password };
+                db.userPanels[chatId].mkCookies = cookieStr;
+                saveDB();
+                bot.sendMessage(chatId, "✅ Your MK SMS Login Successful! Account saved.").catch(() => {});
+            }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+        } else {
+            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
+        }
+        delete userStates[chatId];
+    }
+    else if (userStates[chatId] === "WAITING_FOR_USER_ZENEX_CREDS") {
+        const parts = text.split("|");
+        if (parts.length === 2) {
+            let email    = parts[0].trim();
+            let password = parts[1].trim();
+            bot.sendMessage(chatId, "⏳ Logging into your Zenex SMS Server...").catch(() => {});
+            zenex.login(email, password).then(cookieStr => {
+                if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
+                db.userPanels[chatId].zenexCreds = { email, password };
+                db.userPanels[chatId].zenexCookies = cookieStr;
+                saveDB();
+                bot.sendMessage(chatId, "✅ Your Zenex SMS Login Successful! Account saved.").catch(() => {});
+            }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+        } else {
+            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
+        }
+        delete userStates[chatId];
+    }
+    // ---------------------------------
 
     else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
         const info = getCountryInfo(text.trim().toUpperCase());
@@ -868,7 +943,6 @@ bot.on("message", async (msg) => {
         }
     }
     
-    // 🟢 ZENEX LOGIN
     else if (userStates[chatId] === "WAITING_FOR_ZENEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
@@ -894,7 +968,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // 🟢 ZENEX RANGE
     else if (userStates[chatId] === "WAITING_FOR_ZENEX_RANGE" && isAdmin(chatId, username)) {
         const range = text.trim();
         if (range.length >= 5) {
@@ -980,11 +1053,15 @@ bot.on("callback_query", async (query) => {
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
                        "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
-                       "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
+                       "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_", "toggle_panel_access"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
         return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true });
 
     if (data === "close_menu") {
+        bot.deleteMessage(chatId, messageId).catch(() => {});
+        return bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "close_user_panel") {
         bot.deleteMessage(chatId, messageId).catch(() => {});
         return bot.answerCallbackQuery(query.id);
     }
@@ -1020,10 +1097,126 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
+    // 🟢 User Access Management inside Admin Panel
+    else if (data === "admin_user_access") {
+        let status = db.settings.userPanelAccess ? "🟢 ON" : "🔴 OFF";
+        bot.editMessageText("👥 **User Access Management:**\nControl panel features and constraints for the users.", {
+            chat_id: chatId, message_id: messageId,
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }],
+                    [{ text: `Panel Access: ${status}`, callback_data: "toggle_panel_access" }],
+                    [{ text: "⬅️ Back", callback_data: "admin_panel" }]
+                ]
+            }, parse_mode: "Markdown"
+        }).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+
+    else if (data === "toggle_panel_access") {
+        db.settings.userPanelAccess = !db.settings.userPanelAccess;
+        saveDB();
+        let status = db.settings.userPanelAccess ? "🟢 ON" : "🔴 OFF";
+        bot.editMessageReplyMarkup({
+            inline_keyboard: [
+                [{ text: "🔢 Set Number Limit", callback_data: "admin_set_limit" }],
+                [{ text: `Panel Access: ${status}`, callback_data: "toggle_panel_access" }],
+                [{ text: "⬅️ Back", callback_data: "admin_panel" }]
+            ]
+        }, { chat_id: chatId, message_id: messageId }).catch(() => {});
+        // Refresh the keyboard for the admin seamlessly
+        bot.sendMessage(chatId, `✅ System updated! Users will see changes upon next command.`, { reply_markup: getReplyMenu(chatId, username) }).then(m => setTimeout(() => bot.deleteMessage(chatId, m.message_id).catch(() => {}), 3000));
+        bot.answerCallbackQuery(query.id, { text: `Panel access is now ${status}` });
+    }
+
     else if (data === "admin_set_limit") {
         userStates[chatId] = "WAITING_FOR_LIMIT";
         bot.sendMessage(chatId, `🔢 **Please enter the new number limit:**`).catch(() => {});
         bot.answerCallbackQuery(query.id);
+    }
+
+    // 🟢 USER PANEL CALLBACKS (Stex)
+    else if (data === "user_stex_login") {
+        let btns = [];
+        if (db.userPanels[chatId] && db.userPanels[chatId].stexCreds) {
+            btns.push([{ text: `✅ ${db.userPanels[chatId].stexCreds.email}`, callback_data: "noop" }]);
+            btns.push([{ text: "🗑️ Remove Account", callback_data: "user_stex_remove" }]);
+        } else {
+            btns.push([{ text: "➕ Add Account", callback_data: "user_stex_add" }]);
+        }
+        btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
+        bot.editMessageText("🔑 **Your Stex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "user_stex_add") {
+        userStates[chatId] = "WAITING_FOR_USER_STEX_CREDS";
+        bot.sendMessage(chatId, "📧 **Send your Stex credentials format:**\n`email|password`", { parse_mode: "Markdown" });
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "user_stex_remove") {
+        if (db.userPanels[chatId]) {
+            delete db.userPanels[chatId].stexCreds;
+            delete db.userPanels[chatId].stexToken;
+            saveDB();
+        }
+        bot.answerCallbackQuery(query.id, { text: "✅ Stex Account removed!" });
+        bot.editMessageText("🔑 **Your Stex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Account", callback_data: "user_stex_add" }], [{ text: "⬅️ Back", callback_data: "close_user_panel" }]] }, parse_mode: "Markdown" }).catch(() => {});
+    }
+
+    // 🟢 USER PANEL CALLBACKS (MK)
+    else if (data === "user_mk_login") {
+        let btns = [];
+        if (db.userPanels[chatId] && db.userPanels[chatId].mkCreds) {
+            btns.push([{ text: `✅ ${db.userPanels[chatId].mkCreds.email}`, callback_data: "noop" }]);
+            btns.push([{ text: "🗑️ Remove Account", callback_data: "user_mk_remove" }]);
+        } else {
+            btns.push([{ text: "➕ Add Account", callback_data: "user_mk_add" }]);
+        }
+        btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
+        bot.editMessageText("🔑 **Your MK SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "user_mk_add") {
+        userStates[chatId] = "WAITING_FOR_USER_MK_CREDS";
+        bot.sendMessage(chatId, "📧 **Send your MK credentials format:**\n`email|password`", { parse_mode: "Markdown" });
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "user_mk_remove") {
+        if (db.userPanels[chatId]) {
+            delete db.userPanels[chatId].mkCreds;
+            delete db.userPanels[chatId].mkCookies;
+            saveDB();
+        }
+        bot.answerCallbackQuery(query.id, { text: "✅ MK Account removed!" });
+        bot.editMessageText("🔑 **Your MK SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Account", callback_data: "user_mk_add" }], [{ text: "⬅️ Back", callback_data: "close_user_panel" }]] }, parse_mode: "Markdown" }).catch(() => {});
+    }
+
+    // 🟢 USER PANEL CALLBACKS (Zenex)
+    else if (data === "user_zenex_login") {
+        let btns = [];
+        if (db.userPanels[chatId] && db.userPanels[chatId].zenexCreds) {
+            btns.push([{ text: `✅ ${db.userPanels[chatId].zenexCreds.email}`, callback_data: "noop" }]);
+            btns.push([{ text: "🗑️ Remove Account", callback_data: "user_zenex_remove" }]);
+        } else {
+            btns.push([{ text: "➕ Add Account", callback_data: "user_zenex_add" }]);
+        }
+        btns.push([{ text: "⬅️ Back", callback_data: "close_user_panel" }]);
+        bot.editMessageText("🔑 **Your Zenex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {});
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "user_zenex_add") {
+        userStates[chatId] = "WAITING_FOR_USER_ZENEX_CREDS";
+        bot.sendMessage(chatId, "📧 **Send your Zenex credentials format:**\n`email|password`", { parse_mode: "Markdown" });
+        bot.answerCallbackQuery(query.id);
+    }
+    else if (data === "user_zenex_remove") {
+        if (db.userPanels[chatId]) {
+            delete db.userPanels[chatId].zenexCreds;
+            delete db.userPanels[chatId].zenexCookies;
+            saveDB();
+        }
+        bot.answerCallbackQuery(query.id, { text: "✅ Zenex Account removed!" });
+        bot.editMessageText("🔑 **Your Zenex SMS Account:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "➕ Add Account", callback_data: "user_zenex_add" }], [{ text: "⬅️ Back", callback_data: "close_user_panel" }]] }, parse_mode: "Markdown" }).catch(() => {});
     }
 
     else if (data === "admin_manage_panel") {
@@ -1103,7 +1296,6 @@ bot.on("callback_query", async (query) => {
         }
         bot.answerCallbackQuery(query.id);
     }
-    // 🟢 ZENEX LOGIN END
 
     else if (data === "stex_login") {
         let btns = [];
@@ -1293,7 +1485,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // 🟢 ZENEX
     else if (data === "placeholder_zenex") {
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
         userStates[chatId] = "WAITING_FOR_ZENEX_RANGE";
@@ -1308,7 +1499,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
     }
 
-    // 🟢 NEW: Updated Block for Range Deletion
     else if (data === "admin_remove_number_menu") {
         renderRemoveMenu(chatId, messageId);
         bot.answerCallbackQuery(query.id);
@@ -1352,7 +1542,6 @@ bot.on("callback_query", async (query) => {
 
         renderRemoveMenu(chatId, messageId);
     }
-    // 🟢 END BLOCK
 
     else if (data === "admin_manage_ranges" || data === "refresh_manage_ranges") {
         bot.answerCallbackQuery(query.id, { text: "🔄 Loading data from extension..." });
@@ -1479,12 +1668,12 @@ bot.on("callback_query", async (query) => {
         const availPlatformDB = db.availableNumbers[platform] || {};
         const stexPlatformDB  = db.stexRanges[platform] || {};
         const mkPlatformDB    = db.mkRanges && db.mkRanges[platform] ? db.mkRanges[platform] : {};
-        const zenexPlatformDB = db.zenexRanges && db.zenexRanges[platform] ? db.zenexRanges[platform] : {}; // 🟢 ZENEX
+        const zenexPlatformDB = db.zenexRanges && db.zenexRanges[platform] ? db.zenexRanges[platform] : {}; 
 
         const ranges         = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
         const stexRangesList = Object.keys(stexPlatformDB);
         const mkRangesList   = Object.keys(mkPlatformDB);
-        const zenexRangesList= Object.keys(zenexPlatformDB); // 🟢 ZENEX
+        const zenexRangesList= Object.keys(zenexPlatformDB); 
 
         if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && zenexRangesList.length === 0)
             return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`,
@@ -1495,7 +1684,7 @@ bot.on("callback_query", async (query) => {
         ranges.forEach(r       => combinedRanges.push({ type: "iva",  range: r, info: getCountryInfo(r) }));
         stexRangesList.forEach(r => combinedRanges.push({ type: "stex", range: r, info: getCountryInfo(typeof stexPlatformDB[r] === "object" ? stexPlatformDB[r].country : stexPlatformDB[r]) }));
         mkRangesList.forEach(r   => combinedRanges.push({ type: "mk",   range: r, info: getCountryInfo(typeof mkPlatformDB[r]   === "object" ? mkPlatformDB[r].country   : mkPlatformDB[r]) }));
-        zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof zenexPlatformDB[r]=== "object" ? zenexPlatformDB[r].country : zenexPlatformDB[r]) })); // 🟢 ZENEX
+        zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof zenexPlatformDB[r]=== "object" ? zenexPlatformDB[r].country : zenexPlatformDB[r]) })); 
         combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
         let globalCountryCount = {};
@@ -1545,25 +1734,30 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
-            if (db.zenexCookies) zenex.setCookies(db.zenexCookies);
+            
+            // USER PANEL LOGIC
+            const isUserPanel = db.settings.userPanelAccess && db.userPanels[chatId] && db.userPanels[chatId].zenexCookies;
+            const cookieToUse = isUserPanel ? db.userPanels[chatId].zenexCookies : db.zenexCookies;
+            const credsToUse  = isUserPanel ? db.userPanels[chatId].zenexCreds : db.zenexCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
-                    const numData = await zenex.getNumber(sel);
+                    const numData = await zenex.getNumber(sel, cookieToUse);
                     const n = numData.number ? numData.number.replace("+", "") : "";
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isZenex: true, platform };
+                        pendingRequests[n] = { chatId, country: countryName, isZenex: true, platform, cookie: cookieToUse };
                     }
                 } catch (e) {
-                    if (i === 0 && db.zenexCreds?.email) {
+                    if (i === 0 && credsToUse?.email) {
                         try {
-                            const newCookie = await zenex.login(db.zenexCreds.email, db.zenexCreds.password);
-                            db.zenexCookies = newCookie; zenex.setCookies(newCookie); saveDB();
-                            const retryData = await zenex.getNumber(sel);
+                            const newCookie = await zenex.login(credsToUse.email, credsToUse.password);
+                            if (isUserPanel) db.userPanels[chatId].zenexCookies = newCookie; else db.zenexCookies = newCookie;
+                            saveDB();
+                            const retryData = await zenex.getNumber(sel, newCookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isZenex: true, platform }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isZenex: true, platform, cookie: newCookie }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
@@ -1603,6 +1797,7 @@ bot.on("callback_query", async (query) => {
             return;
         }
 
+        // 🟢 STEX ASSIGNMENT
         if (db.stexRanges[platform] && db.stexRanges[platform][sel]) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
@@ -1615,23 +1810,28 @@ bot.on("callback_query", async (query) => {
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
 
+            const isUserPanel = db.settings.userPanelAccess && db.userPanels[chatId] && db.userPanels[chatId].stexToken;
+            const tokenToUse  = isUserPanel ? db.userPanels[chatId].stexToken : db.stexToken;
+            const credsToUse  = isUserPanel ? db.userPanels[chatId].stexCreds : db.stexCreds;
+
             for (let i = 0; i < limit; i++) {
                 try {
-                    const numData = await stex.getNumber(sel);
+                    const numData = await stex.getNumber(sel, tokenToUse);
                     const n = numData.full_number || numData.number.replace("+", "");
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isStex: true, platform };
+                        pendingRequests[n] = { chatId, country: countryName, isStex: true, platform, token: tokenToUse };
                     }
                 } catch (e) {
-                    if (i === 0 && db.stexCreds?.email) {
+                    if (i === 0 && credsToUse?.email) {
                         try {
-                            const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
-                            db.stexToken = token; stex.setAuthToken(token); saveDB();
-                            const retryData = await stex.getNumber(sel);
+                            const newToken = await stex.login(credsToUse.email, credsToUse.password);
+                            if (isUserPanel) db.userPanels[chatId].stexToken = newToken; else db.stexToken = newToken;
+                            saveDB();
+                            const retryData = await stex.getNumber(sel, newToken);
                             const retryN    = retryData.full_number || retryData.number.replace("+", "");
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isStex: true, platform }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isStex: true, platform, token: newToken }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
@@ -1665,12 +1865,13 @@ bot.on("callback_query", async (query) => {
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                     bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                    delete activeTimeouts[chatId]; // Cleanup after execution
+                    delete activeTimeouts[chatId]; 
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
         }
 
+        // 🟢 MK ASSIGNMENT
         if (db.mkRanges && db.mkRanges[platform] && db.mkRanges[platform][sel]) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
@@ -1682,25 +1883,29 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
-            if (db.mkCookies) mk.setCookies(db.mkCookies);
+
+            const isUserPanel = db.settings.userPanelAccess && db.userPanels[chatId] && db.userPanels[chatId].mkCookies;
+            const cookieToUse = isUserPanel ? db.userPanels[chatId].mkCookies : db.mkCookies;
+            const credsToUse  = isUserPanel ? db.userPanels[chatId].mkCreds : db.mkCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
-                    const numData = await mk.getNumber(sel);
+                    const numData = await mk.getNumber(sel, cookieToUse);
                     const n = numData.number ? numData.number.replace("+", "") : "";
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isMk: true, platform };
+                        pendingRequests[n] = { chatId, country: countryName, isMk: true, platform, cookie: cookieToUse };
                     }
                 } catch (e) {
-                    if (i === 0 && db.mkCreds?.email) {
+                    if (i === 0 && credsToUse?.email) {
                         try {
-                            const newCookie = await mk.login(db.mkCreds.email, db.mkCreds.password);
-                            db.mkCookies = newCookie; mk.setCookies(newCookie); saveDB();
-                            const retryData = await mk.getNumber(sel);
+                            const newCookie = await mk.login(credsToUse.email, credsToUse.password);
+                            if (isUserPanel) db.userPanels[chatId].mkCookies = newCookie; else db.mkCookies = newCookie;
+                            saveDB();
+                            const retryData = await mk.getNumber(sel, newCookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform, cookie: newCookie }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
@@ -1734,7 +1939,7 @@ bot.on("callback_query", async (query) => {
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                     bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                    delete activeTimeouts[chatId]; // Cleanup
+                    delete activeTimeouts[chatId]; 
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
@@ -1769,7 +1974,7 @@ bot.on("callback_query", async (query) => {
                 let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                 assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                 bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                delete activeTimeouts[chatId]; // Cleanup
+                delete activeTimeouts[chatId]; 
             }, 15 * 60 * 1000);
         }).catch(() => {});
         bot.answerCallbackQuery(query.id);
@@ -1843,7 +2048,7 @@ app.get("/",     (req, res) => res.status(200).send("Bot is successfully running
 app.get("/ping", (req, res) => res.status(200).send("Pong! Bot is alive."));
 
 // ============================================================
-// #  AUTO-LOGIN FUNCTION  (Stex & MK)
+// #  AUTO-LOGIN FUNCTION  (Admin Panels only)
 // ============================================================
 
 async function autoLoginPanels() {
@@ -1852,22 +2057,21 @@ async function autoLoginPanels() {
     if (db.stexCreds && db.stexCreds.email) {
         try {
             const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
-            if (token) { db.stexToken = token; stex.setAuthToken(token); saveDB(); }
+            if (token) { db.stexToken = token; saveDB(); }
         } catch (e) {}
     }
 
     if (db.mkCreds && db.mkCreds.email) {
         try {
             const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password);
-            if (cookieStr) { db.mkCookies = cookieStr; mk.setCookies(cookieStr); saveDB(); }
+            if (cookieStr) { db.mkCookies = cookieStr; saveDB(); }
         } catch (e) {}
     }
 
-    // 🟢 ZENEX AutoLogin
     if (db.zenexCreds && db.zenexCreds.email) {
         try {
             const cookieStr = await zenex.login(db.zenexCreds.email, db.zenexCreds.password);
-            if (cookieStr) { db.zenexCookies = cookieStr; zenex.setCookies(cookieStr); saveDB(); }
+            if (cookieStr) { db.zenexCookies = cookieStr; saveDB(); }
         } catch (e) {}
     }
 }
@@ -1891,22 +2095,20 @@ mongoose.connect(MONGODB_URI).then(async () => {
             db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
         }
         if (!db.mkRanges)            db.mkRanges           = { fb: {}, ig: {}, wa: {} };
-        if (!db.zenexRanges)         db.zenexRanges        = { fb: {}, ig: {}, wa: {} }; // 🟢 ZENEX
+        if (!db.zenexRanges)         db.zenexRanges        = { fb: {}, ig: {}, wa: {} }; 
         if (!db.savedStexAccounts)   db.savedStexAccounts  = [];
         if (!db.savedMkAccounts)     db.savedMkAccounts    = [];
-        if (!db.savedZenexAccounts)  db.savedZenexAccounts = []; // 🟢 ZENEX
+        if (!db.savedZenexAccounts)  db.savedZenexAccounts = []; 
+        if (!db.userPanels)          db.userPanels         = {};
+        if (db.settings.userPanelAccess === undefined) db.settings.userPanelAccess = false;
 
         if (db.stexCreds?.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
         if (db.mkCreds?.email   && db.savedMkAccounts.length   === 0) db.savedMkAccounts.push(db.mkCreds);
-        if (db.zenexCreds?.email&& db.savedZenexAccounts.length=== 0) db.savedZenexAccounts.push(db.zenexCreds); // 🟢 ZENEX
+        if (db.zenexCreds?.email&& db.savedZenexAccounts.length=== 0) db.savedZenexAccounts.push(db.zenexCreds);
 
     } else {
         await BotDB.create(db);
     }
-
-    if (db.stexToken)  stex.setAuthToken(db.stexToken);
-    if (db.mkCookies)  mk.setCookies(db.mkCookies);
-    if (db.zenexCookies) zenex.setCookies(db.zenexCookies); // 🟢 ZENEX
 
     isDbLoaded = true;
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
@@ -1916,97 +2118,103 @@ mongoose.connect(MONGODB_URI).then(async () => {
 }).catch(err => console.log(err));
 
 // ============================================================
-// #  BACKGROUND POLLING INTERVALS
+// #  BACKGROUND POLLING INTERVALS (Grouped by User Tokens)
 // ============================================================
 
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
+// 🟢 Stex Polling
 setInterval(async () => {
-    if (!db.stexToken) return;
-    const hasStexPending = Object.values(pendingRequests).some(req => req.isStex);
-    if (!hasStexPending) return;
+    const reqs = Object.values(pendingRequests).filter(r => r.isStex);
+    if (reqs.length === 0) return;
 
-    try {
-        const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-        d.setHours(d.getHours() - 4);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const tokensToPoll = [...new Set(reqs.map(r => r.token).filter(Boolean))];
+    for (const token of tokensToPoll) {
+        try {
+            const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+            d.setHours(d.getHours() - 4);
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-        const records = await stex.checkInfo(dateStr);
-        if (Array.isArray(records)) {
-            records.forEach(rec => {
-                let num = rec.number ? String(rec.number).replace("+", "") : null;
-                if (num && pendingRequests[num]) {
-                    let status = String(rec.status || "").toLowerCase();
-                    let msg    = rec.sms || rec.message || rec.otp || rec.text;
-                    if ((status === "success" || status === "completed" || msg) && msg) {
-                        msg = String(msg);
-                        if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                            processFoundOTP(num, Date.now(), msg, pendingRequests[num].country);
+            const records = await stex.checkInfo(dateStr, token);
+            if (Array.isArray(records)) {
+                records.forEach(rec => {
+                    let num = rec.number ? String(rec.number).replace("+", "") : null;
+                    if (num && pendingRequests[num] && pendingRequests[num].token === token) {
+                        let status = String(rec.status || "").toLowerCase();
+                        let msg    = rec.sms || rec.message || rec.otp || rec.text;
+                        if ((status === "success" || status === "completed" || msg) && msg) {
+                            msg = String(msg);
+                            if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                processFoundOTP(num, Date.now(), msg, pendingRequests[num].country);
+                            }
                         }
                     }
-                }
-            });
-        }
-    } catch (e) {}
+                });
+            }
+        } catch (e) {}
+    }
 }, 2500);
 
+// 🟢 MK Polling
 setInterval(async () => {
-    if (!db.mkCookies) return;
-    const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
-    if (!hasMkPending) return;
+    const reqs = Object.values(pendingRequests).filter(r => r.isMk);
+    if (reqs.length === 0) return;
 
-    try {
-        if (db.mkCookies) mk.setCookies(db.mkCookies);
-        const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-        const records = await mk.checkInfo(dateStr);
+    const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+    for (const cookie of cookiesToPoll) {
+        try {
+            const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            const records = await mk.checkInfo(dateStr, cookie);
 
-        if (Array.isArray(records)) {
-            records.forEach(rec => {
-                let rawNum      = String(rec.phone_number || rec.number || "");
-                let cleanRecNum = rawNum.replace(/\D/g, "");
-                if (cleanRecNum) {
-                    let pendingKey = Object.keys(pendingRequests).find(
-                        k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk
-                    );
-                    if (pendingKey) {
-                        let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
-                        if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                            processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+            if (Array.isArray(records)) {
+                records.forEach(rec => {
+                    let rawNum      = String(rec.phone_number || rec.number || "");
+                    let cleanRecNum = rawNum.replace(/\D/g, "");
+                    if (cleanRecNum) {
+                        let pendingKey = Object.keys(pendingRequests).find(
+                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
+                        );
+                        if (pendingKey) {
+                            let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
+                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                            }
                         }
                     }
-                }
-            });
-        }
-    } catch (e) {}
+                });
+            }
+        } catch (e) {}
+    }
 }, 2500);
 
-// 🟢 ZENEX OTP Polling 
+// 🟢 Zenex Polling 
 setInterval(async () => {
-    if (!db.zenexCookies) return;
-    const hasZenexPending = Object.values(pendingRequests).some(req => req.isZenex);
-    if (!hasZenexPending) return;
+    const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
+    if (reqs.length === 0) return;
 
-    try {
-        if (db.zenexCookies) zenex.setCookies(db.zenexCookies);
-        const records = await zenex.checkInfo();
+    const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+    for (const cookie of cookiesToPoll) {
+        try {
+            const records = await zenex.checkInfo(cookie);
 
-        if (Array.isArray(records)) {
-            records.forEach(rec => {
-                let rawNum      = String(rec.number || "");
-                let cleanRecNum = rawNum.replace(/\D/g, "");
-                if (cleanRecNum) {
-                    let pendingKey = Object.keys(pendingRequests).find(
-                        k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex
-                    );
-                    if (pendingKey) {
-                        let msg = rec.sms;
-                        if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                            processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+            if (Array.isArray(records)) {
+                records.forEach(rec => {
+                    let rawNum      = String(rec.number || "");
+                    let cleanRecNum = rawNum.replace(/\D/g, "");
+                    if (cleanRecNum) {
+                        let pendingKey = Object.keys(pendingRequests).find(
+                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === cookie
+                        );
+                        if (pendingKey) {
+                            let msg = rec.sms;
+                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                            }
                         }
                     }
-                }
-            });
-        }
-    } catch (e) {}
+                });
+            }
+        } catch (e) {}
+    }
 }, 2500);
