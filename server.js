@@ -9,8 +9,8 @@ const { authenticator } = require("otplib");
 const stex           = require("./stex.js");
 const mk             = require("./mk.js");
 const zenex          = require("./zenex.js"); 
-const nxa            = require("./nxa.js"); // 🟢 NXA Add kora holo
-const { detectCountryFromRange, getCountryInfo } = require("./country.js"); // 🌍 Country Info Imported
+const nxa            = require("./nxa.js");
+const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 
 // ============================================================
 // #  CONFIGURATION
@@ -85,18 +85,18 @@ const dbSchema = new mongoose.Schema({
     mkCookies:          String,
     zenexRanges:        Object, 
     zenexCookies:       String, 
-    nxaRanges:          Object, // 🟢
-    nxaToken:           String, // 🟢
-    nxaCookies:         String, // 🟢
+    nxaRanges:          Object,
+    nxaToken:           String,
+    nxaCookies:         String,
     stexCreds:          Object,
     mkCreds:            Object,
     zenexCreds:         Object, 
-    nxaCreds:           Object, // 🟢
+    nxaCreds:           Object,
     savedStexAccounts:  Array,
     savedMkAccounts:    Array,
     savedZenexAccounts: Array,
-    savedNxaAccounts:   Array,  // 🟢
-    userPanels:         Object // Multi-user panels data (Creds & Custom Ranges)
+    savedNxaAccounts:   Array,
+    userPanels:         Object 
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
@@ -120,17 +120,17 @@ let db = {
     mkCookies:         "",
     zenexRanges:       { fb: {}, ig: {}, wa: {} }, 
     zenexCookies:      "", 
-    nxaRanges:         { fb: {}, ig: {}, wa: {} }, // 🟢
-    nxaToken:          "", // 🟢
-    nxaCookies:        "", // 🟢
+    nxaRanges:         { fb: {}, ig: {}, wa: {} },
+    nxaToken:          "",
+    nxaCookies:        "",
     stexCreds:         null,
     mkCreds:           null,
     zenexCreds:        null, 
-    nxaCreds:          null, // 🟢
+    nxaCreds:          null,
     savedStexAccounts: [],
     savedMkAccounts:   [],
     savedZenexAccounts:[],
-    savedNxaAccounts:  [], // 🟢
+    savedNxaAccounts:  [],
     userPanels:        {}
 };
 
@@ -202,10 +202,7 @@ function sendJoinPrompt(chatId) {
 
     bot.sendMessage(chatId,
         `⚠️ **Access Denied!**\n\nYou must join all our official groups and channels first to use this bot. Once joined, click the check button below.`,
-        {
-            reply_markup: { inline_keyboard: inline_keyboard },
-            parse_mode: "Markdown"
-        }
+        { reply_markup: { inline_keyboard: inline_keyboard }, parse_mode: "Markdown" }
     ).catch(() => {});
 }
 
@@ -221,10 +218,6 @@ function clearPendingForChat(chatId) {
         }
     }
 }
-
-// ============================================================
-// #  PLATFORM DETECTION UTILITIES
-// ============================================================
 
 function detectPlatform(from, subject, body) {
     let str = (from + " " + subject + " " + (body || "")).toLowerCase();
@@ -294,7 +287,7 @@ const manageNumberPanel = {
         [{ text: "Stex SMS 📩",   callback_data: "placeholder_stex" }],
         [{ text: "MK SMS 💬",     callback_data: "placeholder_mk" }],
         [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }],
-        [{ text: "NXA SMS 🟣",    callback_data: "placeholder_nxa" }], // 🟢 NXA Add
+        [{ text: "NXA SMS 🟣",    callback_data: "placeholder_nxa" }], 
         [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
         [{ text: "⬅️ Back",       callback_data: "admin_manage_numbers" }]
     ]
@@ -316,7 +309,6 @@ function getAdminMenu(chatId) {
     return { inline_keyboard: menu };
 }
 
-// User Panel Sub-menu rendering
 function renderUserPanelMenu(chatId, messageId, panel) {
     let btns = [];
     let credKey = panel + 'Creds';
@@ -398,7 +390,7 @@ function renderRemoveMenu(chatId, messageId) {
             const cName = typeof db.zenexRanges[plat][r] === "object" ? db.zenexRanges[plat][r].country : db.zenexRanges[plat][r];
             allRanges.push({ plat, type: "zenex", r, info: getCountryInfo(cName), prefix: "Zenex" });
         });
-        const nxaList = db.nxaRanges && db.nxaRanges[plat] ? Object.keys(db.nxaRanges[plat]) : []; // 🟢
+        const nxaList = db.nxaRanges && db.nxaRanges[plat] ? Object.keys(db.nxaRanges[plat]) : []; 
         nxaList.forEach(r => {
             const cName = typeof db.nxaRanges[plat][r] === "object" ? db.nxaRanges[plat][r].country : db.nxaRanges[plat][r];
             allRanges.push({ plat, type: "nxa", r, info: getCountryInfo(cName), prefix: "NXA" });
@@ -463,19 +455,14 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
         saveDB();
     }
 
-    bot.sendMessage(chatId,
-        `Welcome to the bot! 👋\n\nPlease select an option from the menu below to get started:`,
-        { reply_markup: getReplyMenu(chatId, username) }
-    ).catch(() => {});
+    bot.sendMessage(chatId, `Welcome to the bot! 👋\n\nPlease select an option from the menu below to get started:`, { reply_markup: getReplyMenu(chatId, username) }).catch(() => {});
 });
 
 bot.onText(/\/admin/, async (msg) => {
     if (msg.chat.type !== "private") return;
     if (!isAdmin(msg.chat.id, msg.from.username))
         return bot.sendMessage(msg.chat.id, "❌ Access Denied. You do not have the required admin rights.").catch(() => {});
-    bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**",
-        { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" }
-    ).catch(() => {});
+    bot.sendMessage(msg.chat.id, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" }).catch(() => {});
 });
 
 // ============================================================
@@ -499,7 +486,6 @@ bot.on("message", async (msg) => {
         bot.sendMessage(chatId, `⏳ Broadcasting your message to all users. Please wait...`).catch(() => {});
         let successCount = 0;
         
-        // 🟢 Broadcast history setup for deletion
         if (!db.settings.lastBroadcast) db.settings.lastBroadcast = [];
         db.settings.lastBroadcast = []; 
 
@@ -513,12 +499,7 @@ bot.on("message", async (msg) => {
         saveDB();
 
         bot.sendMessage(chatId, `✅ **Broadcast Complete!** Successfully sent to ${successCount} users.`, {
-            parse_mode: "Markdown",
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: "🗑️ Undo / Delete This Broadcast", callback_data: "admin_delete_broadcast" }]
-                ]
-            }
+            parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🗑️ Undo / Delete This Broadcast", callback_data: "admin_delete_broadcast" }]] }
         }).catch(() => {});
         delete userStates[chatId];
         return;
@@ -535,10 +516,7 @@ bot.on("message", async (msg) => {
 
     if (text === "☎️ Get Number") {
         clearPendingForChat(chatId);
-        bot.sendMessage(chatId,
-            `🛠 Please select the platform you want to receive an OTP for:`,
-            { reply_markup: platformMenu }
-        ).catch(() => {});
+        bot.sendMessage(chatId, `🛠 Please select the platform you want to receive an OTP for:`, { reply_markup: platformMenu }).catch(() => {});
     }
 
     else if (text === "🔑 Login to Panel" && db.settings.userPanelAccess) {
@@ -633,10 +611,7 @@ bot.on("message", async (msg) => {
             }, 15 * 60 * 1000);
 
         } catch (e) {
-            bot.sendMessage(chatId,
-                `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`,
-                { parse_mode: "Markdown" }
-            ).catch(() => {});
+            bot.sendMessage(chatId, `❌ **Temp mail generation failed.**\n_Reason: ${e.message}_`, { parse_mode: "Markdown" }).catch(() => {});
         }
     }
 
@@ -649,10 +624,7 @@ bot.on("message", async (msg) => {
 
     else if (text === "🔑 2FA") {
         userStates[chatId] = "WAITING_FOR_2FA_KEY";
-        bot.sendMessage(chatId,
-            "🔐 **Send your secret key:**\n(For example: `RTOX IVWV MK7A 5R7C...`)",
-            { parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, "🔐 **Send your secret key:**\n(For example: `RTOX IVWV MK7A 5R7C...`)", { parse_mode: "Markdown" }).catch(() => {});
     }
     else if (userStates[chatId] === "WAITING_FOR_2FA_KEY") {
         try {
@@ -664,25 +636,17 @@ bot.on("message", async (msg) => {
                 { parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "🔄 Refresh Code", callback_data: "refresh_2fa" }]] } }
             ).catch(() => {});
         } catch (err) {
-            bot.sendMessage(chatId,
-                "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid format.",
-                { parse_mode: "Markdown" }
-            ).catch(() => {});
+            bot.sendMessage(chatId, "❌ **Invalid Secret Key!**\nPlease make sure you provided a valid format.", { parse_mode: "Markdown" }).catch(() => {});
         }
         delete userStates[chatId];
     }
 
     else if (text === "💬 Support") {
-        bot.sendMessage(chatId,
-            "💬 <b>Support:</b>\nPlease contact our admin @ahnan_haque_mahi for any assistance.",
-            { parse_mode: "HTML" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, "💬 <b>Support:</b>\nPlease contact our admin @ahnan_haque_mahi for any assistance.", { parse_mode: "HTML" }).catch(() => {});
     }
 
     else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) {
-        bot.sendMessage(chatId, "⚙️ **Admin Panel:**",
-            { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, "⚙️ **Admin Panel:**", { reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(() => {});
     }
 
     else if (userStates[chatId] === "WAITING_FOR_LIMIT" && isAdmin(chatId, username)) {
@@ -705,10 +669,7 @@ bot.on("message", async (msg) => {
             const country = detectCountryFromRange(range);
             tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country };
             userStates[chatId] = "WAITING_FOR_USER_METHOD";
-            bot.sendMessage(chatId,
-                `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`,
-                { parse_mode: "Markdown" }
-            ).catch(() => {});
+            bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**\n(Example: Server 1, Fast API, etc.)`, { parse_mode: "Markdown" }).catch(() => {});
         } else {
             bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
         }
@@ -728,14 +689,8 @@ bot.on("message", async (msg) => {
             db.userPanels[chatId].ranges[panel][plat][range] = { country, method };
             saveDB();
 
-            bot.sendMessage(chatId,
-                `✅ Successfully added Range **${range}** for **${plat.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`,
-                { parse_mode: "Markdown" }
-            ).catch(() => {});
-
-            bot.sendMessage(chatId, "🔑 **Return to Panel:**", {
-                reply_markup: { inline_keyboard: [[{ text: `Open ${panel.toUpperCase()} Panel`, callback_data: `user_${panel}_login` }]] }
-            });
+            bot.sendMessage(chatId, `✅ Successfully added Range **${range}** for **${plat.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`, { parse_mode: "Markdown" }).catch(() => {});
+            bot.sendMessage(chatId, "🔑 **Return to Panel:**", { reply_markup: { inline_keyboard: [[{ text: `Open ${panel.toUpperCase()} Panel`, callback_data: `user_${panel}_login` }]] } });
         }
         delete userStates[chatId];
         delete tempAdminData[chatId];
@@ -745,94 +700,67 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_USER_STEX_CREDS") {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into your StexSMS...").catch(() => {});
-            stex.login(email, password).then(token => {
+            stex.login(parts[0].trim(), parts[1].trim()).then(token => {
                 if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
-                db.userPanels[chatId].stexCreds = { email, password };
+                db.userPanels[chatId].stexCreds = { email: parts[0].trim(), password: parts[1].trim() };
                 db.userPanels[chatId].stexToken = token;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your Stex Login Successful! Account saved.", {
-                    reply_markup: { inline_keyboard: [[{ text: "Open Stex Panel", callback_data: "user_stex_login" }]] }
-                }).catch(() => {});
+                bot.sendMessage(chatId, "✅ Your Stex Login Successful! Account saved.", { reply_markup: { inline_keyboard: [[{ text: "Open Stex Panel", callback_data: "user_stex_login" }]] } }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {}); }
         delete userStates[chatId];
     }
     else if (userStates[chatId] === "WAITING_FOR_USER_MK_CREDS") {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into your MK SMS Server...").catch(() => {});
-            mk.login(email, password).then(cookieStr => {
+            mk.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
                 if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
-                db.userPanels[chatId].mkCreds = { email, password };
+                db.userPanels[chatId].mkCreds = { email: parts[0].trim(), password: parts[1].trim() };
                 db.userPanels[chatId].mkCookies = cookieStr;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your MK SMS Login Successful! Account saved.", {
-                    reply_markup: { inline_keyboard: [[{ text: "Open MK Panel", callback_data: "user_mk_login" }]] }
-                }).catch(() => {});
+                bot.sendMessage(chatId, "✅ Your MK SMS Login Successful! Account saved.", { reply_markup: { inline_keyboard: [[{ text: "Open MK Panel", callback_data: "user_mk_login" }]] } }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {}); }
         delete userStates[chatId];
     }
     else if (userStates[chatId] === "WAITING_FOR_USER_ZENEX_CREDS") {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into your Zenex SMS Server...").catch(() => {});
-            zenex.login(email, password).then(cookieStr => {
+            zenex.login(parts[0].trim(), parts[1].trim()).then(cookieStr => {
                 if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
-                db.userPanels[chatId].zenexCreds = { email, password };
+                db.userPanels[chatId].zenexCreds = { email: parts[0].trim(), password: parts[1].trim() };
                 db.userPanels[chatId].zenexCookies = cookieStr;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your Zenex SMS Login Successful! Account saved.", {
-                    reply_markup: { inline_keyboard: [[{ text: "Open Zenex Panel", callback_data: "user_zenex_login" }]] }
-                }).catch(() => {});
+                bot.sendMessage(chatId, "✅ Your Zenex SMS Login Successful! Account saved.", { reply_markup: { inline_keyboard: [[{ text: "Open Zenex Panel", callback_data: "user_zenex_login" }]] } }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {}); }
         delete userStates[chatId];
     }
     else if (userStates[chatId] === "WAITING_FOR_USER_NXA_CREDS") {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into your NXA SMS Server...").catch(() => {});
-            nxa.login(email, password).then(authData => {
+            nxa.login(parts[0].trim(), parts[1].trim()).then(authData => {
                 if (!db.userPanels[chatId]) db.userPanels[chatId] = {};
-                db.userPanels[chatId].nxaCreds = { email, password };
+                db.userPanels[chatId].nxaCreds = { email: parts[0].trim(), password: parts[1].trim() };
                 db.userPanels[chatId].nxaToken = authData.token;
                 db.userPanels[chatId].nxaCookies = authData.cookie;
                 saveDB();
-                bot.sendMessage(chatId, "✅ Your NXA SMS Login Successful! Account saved.", {
-                    reply_markup: { inline_keyboard: [[{ text: "Open NXA Panel", callback_data: "user_nxa_login" }]] }
-                }).catch(() => {});
+                bot.sendMessage(chatId, "✅ Your NXA SMS Login Successful! Account saved.", { reply_markup: { inline_keyboard: [[{ text: "Open NXA Panel", callback_data: "user_nxa_login" }]] } }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else { bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {}); }
         delete userStates[chatId];
     }
-    // ---------------------------------
 
+    // --- Admin panel limits and manual adds ---
     else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
         const info = getCountryInfo(text.trim().toUpperCase());
         tempAdminData[chatId] = { ...tempAdminData[chatId], addNumberCountry: text.trim().toUpperCase() };
         userStates[chatId]    = "WAITING_FOR_ADD_NUMBERS";
-        bot.sendMessage(chatId,
-            `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the numbers below (each on a new line):`,
-            { parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the numbers below (each on a new line):`, { parse_mode: "Markdown" }).catch(() => {});
     }
 
     else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
@@ -852,10 +780,7 @@ bot.on("message", async (msg) => {
             }
         });
         saveDB();
-        bot.sendMessage(chatId,
-            `✅ Success! **${added}** numbers have been successfully added to ${country} for **${platform.toUpperCase()}**.`,
-            { parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, `✅ Success! **${added}** numbers have been successfully added to ${country} for **${platform.toUpperCase()}**.`, { parse_mode: "Markdown" }).catch(() => {});
         bot.sendMessage(chatId, "⚙️ **Manage Panel:**", { reply_markup: manageNumberPanel }).catch(() => {});
         delete userStates[chatId];
         delete tempAdminData[chatId];
@@ -869,17 +794,12 @@ bot.on("message", async (msg) => {
                 delete userStates[chatId];
                 return;
             }
-            bot.sendMessage(ADMIN_ID,
-                `💸 **New Withdraw Request!**\n\n👤 **User ID:** \`${chatId}\`\n📞 **Account:** \`${text}\`\n💰 **Amount:** ${currentBalance.toFixed(2)} BDT`,
-                { parse_mode: "Markdown" }
-            ).catch(() => {});
+            bot.sendMessage(ADMIN_ID, `💸 **New Withdraw Request!**\n\n👤 **User ID:** \`${chatId}\`\n📞 **Account:** \`${text}\`\n💰 **Amount:** ${currentBalance.toFixed(2)} BDT`, { parse_mode: "Markdown" }).catch(() => {});
             bot.sendMessage(chatId, `✅ Your withdrawal request has been submitted successfully and is pending review.`).catch(() => {});
             db.balances[chatId] = 0;
             saveDB();
             delete userStates[chatId];
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Please enter a valid 11-digit account number.").catch(() => {});
-        }
+        } else { bot.sendMessage(chatId, "❌ Invalid format. Please enter a valid 11-digit account number.").catch(() => {}); }
     }
 
     else if (userStates[chatId] === "WAITING_FOR_ADMIN_USERNAME" && isSuperAdmin(chatId)) {
@@ -898,98 +818,61 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
+            let email = parts[0].trim(), password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(() => {});
             stex.login(email, password).then(token => {
-                db.stexToken = token;
-                db.stexCreds = { email, password };
+                db.stexToken = token; db.stexCreds = { email, password };
                 if (!db.savedStexAccounts) db.savedStexAccounts = [];
                 let existing = db.savedStexAccounts.find(a => a.email === email);
-                if (existing) existing.password = password;
-                else {
-                    db.savedStexAccounts.push({ email, password });
-                    if (db.savedStexAccounts.length > 5) db.savedStexAccounts.shift();
-                }
-                saveDB();
-                bot.sendMessage(chatId, "✅ Stex Login Successful! Account saved.").catch(() => {});
+                if (existing) existing.password = password; else { db.savedStexAccounts.push({ email, password }); if (db.savedStexAccounts.length > 5) db.savedStexAccounts.shift(); }
+                saveDB(); bot.sendMessage(chatId, "✅ Stex Login Successful! Account saved.").catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
         delete userStates[chatId];
     }
     else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
+            let email = parts[0].trim(), password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(() => {});
             mk.login(email, password).then(cookieStr => {
-                db.mkCookies = cookieStr;
-                db.mkCreds   = { email, password };
+                db.mkCookies = cookieStr; db.mkCreds = { email, password };
                 if (!db.savedMkAccounts) db.savedMkAccounts = [];
                 let existing = db.savedMkAccounts.find(a => a.email === email);
-                if (existing) existing.password = password;
-                else {
-                    db.savedMkAccounts.push({ email, password });
-                    if (db.savedMkAccounts.length > 5) db.savedMkAccounts.shift();
-                }
-                saveDB();
-                bot.sendMessage(chatId, "✅ MK SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
+                if (existing) existing.password = password; else { db.savedMkAccounts.push({ email, password }); if (db.savedMkAccounts.length > 5) db.savedMkAccounts.shift(); }
+                saveDB(); bot.sendMessage(chatId, "✅ MK SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, { parse_mode: "Markdown" }).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
         delete userStates[chatId];
     }
     else if (userStates[chatId] === "WAITING_FOR_ZENEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
+            let email = parts[0].trim(), password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into Zenex SMS Server...").catch(() => {});
             zenex.login(email, password).then(cookieStr => {
-                db.zenexCookies = cookieStr;
-                db.zenexCreds   = { email, password };
+                db.zenexCookies = cookieStr; db.zenexCreds = { email, password };
                 if (!db.savedZenexAccounts) db.savedZenexAccounts = [];
                 let existing = db.savedZenexAccounts.find(a => a.email === email);
-                if (existing) existing.password = password;
-                else {
-                    db.savedZenexAccounts.push({ email, password });
-                    if (db.savedZenexAccounts.length > 5) db.savedZenexAccounts.shift();
-                }
-                saveDB();
-                bot.sendMessage(chatId, "✅ Zenex SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
+                if (existing) existing.password = password; else { db.savedZenexAccounts.push({ email, password }); if (db.savedZenexAccounts.length > 5) db.savedZenexAccounts.shift(); }
+                saveDB(); bot.sendMessage(chatId, "✅ Zenex SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, { parse_mode: "Markdown" }).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
         delete userStates[chatId];
     }
     else if (userStates[chatId] === "WAITING_FOR_NXA_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
-            let password = parts[1].trim();
+            let email = parts[0].trim(), password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into NXA SMS Server...").catch(() => {});
             nxa.login(email, password).then(authData => {
-                db.nxaToken   = authData.token;
-                db.nxaCookies = authData.cookie;
-                db.nxaCreds   = { email, password };
+                db.nxaToken = authData.token; db.nxaCookies = authData.cookie; db.nxaCreds = { email, password };
                 if (!db.savedNxaAccounts) db.savedNxaAccounts = [];
                 let existing = db.savedNxaAccounts.find(a => a.email === email);
-                if (existing) existing.password = password;
-                else {
-                    db.savedNxaAccounts.push({ email, password });
-                    if (db.savedNxaAccounts.length > 5) db.savedNxaAccounts.shift();
-                }
-                saveDB();
-                bot.sendMessage(chatId, "✅ NXA SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
+                if (existing) existing.password = password; else { db.savedNxaAccounts.push({ email, password }); if (db.savedNxaAccounts.length > 5) db.savedNxaAccounts.shift(); }
+                saveDB(); bot.sendMessage(chatId, "✅ NXA SMS Login Successful! Account saved.", { parse_mode: "Markdown" }).catch(() => {});
             }).catch(e => bot.sendMessage(chatId, "❌ **Failed:** " + e.message, { parse_mode: "Markdown" }).catch(() => {}));
-        } else {
-            bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
-        }
+        } else bot.sendMessage(chatId, "❌ Invalid format. Use `email|password`").catch(() => {});
         delete userStates[chatId];
     }
 
@@ -1103,11 +986,9 @@ bot.on("callback_query", async (query) => {
         return bot.answerCallbackQuery(query.id);
     }
     
-    // Custom fix for user panel Back Button
     else if (data === "close_user_panel") {
         bot.editMessageText("⚙️ **Login to your personal Panel:**\nSelect the panel you want to configure:", {
-            chat_id: chatId,
-            message_id: messageId,
+            chat_id: chatId, message_id: messageId,
             reply_markup: {
                 inline_keyboard: [
                     [{ text: "Stex SMS 📨", callback_data: "user_stex_login" }, { text: "MK SMS ✉️",  callback_data: "user_mk_login" }],
@@ -1135,50 +1016,33 @@ bot.on("callback_query", async (query) => {
     }
 
     else if (data === "admin_panel") {
-        bot.editMessageText("⚙️ **Admin Panel:**",
-            { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.editMessageText("⚙️ **Admin Panel:**", { chat_id: chatId, message_id: messageId, reply_markup: getAdminMenu(chatId), parse_mode: "Markdown" }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data === "admin_broadcast") {
         userStates[chatId] = "WAITING_FOR_BROADCAST";
-        bot.sendMessage(chatId,
-            "📢 **Please send the message you want to broadcast:**\n_(You can send Text, Photo, Video, Voice, or Document)_",
-            { parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, "📢 **Please send the message you want to broadcast:**\n_(You can send Text, Photo, Video, Voice, or Document)_", { parse_mode: "Markdown" }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
-    // 🟢 Broadcast Delete Handler
     else if (data === "admin_delete_broadcast") {
         if (!isAdmin(chatId, username)) return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied!", show_alert: true });
 
         const lastBroadcastData = db.settings.lastBroadcast || [];
-        if (lastBroadcastData.length === 0) {
-            return bot.answerCallbackQuery(query.id, { text: "⚠️ No recent broadcast found or it's already deleted.", show_alert: true });
-        }
+        if (lastBroadcastData.length === 0) return bot.answerCallbackQuery(query.id, { text: "⚠️ No recent broadcast found or it's already deleted.", show_alert: true });
 
         bot.editMessageText("⏳ **Deleting broadcasted messages...** Please wait.", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(() => {});
         
         let deletedCount = 0;
         for (let record of lastBroadcastData) {
-            try {
-                await bot.deleteMessage(record.chatId, record.messageId);
-                deletedCount++;
-            } catch (e) {}
+            try { await bot.deleteMessage(record.chatId, record.messageId); deletedCount++; } catch (e) {}
         }
-
-        db.settings.lastBroadcast = [];
-        saveDB();
-
+        db.settings.lastBroadcast = []; saveDB();
         bot.editMessageText(`✅ **Broadcast Deleted Successfully!**\nRemoved from ${deletedCount} users' chats.`, { 
-            chat_id: chatId, 
-            message_id: messageId, 
-            parse_mode: "Markdown",
+            chat_id: chatId, message_id: messageId, parse_mode: "Markdown",
             reply_markup: { inline_keyboard: [[{ text: "⬅️ Back to Admin Panel", callback_data: "admin_panel" }]] }
         }).catch(() => {});
-        
         bot.answerCallbackQuery(query.id);
     }
 
@@ -1198,8 +1062,7 @@ bot.on("callback_query", async (query) => {
     }
 
     else if (data === "toggle_panel_access") {
-        db.settings.userPanelAccess = !db.settings.userPanelAccess;
-        saveDB();
+        db.settings.userPanelAccess = !db.settings.userPanelAccess; saveDB();
         let status = db.settings.userPanelAccess ? "🟢 ON" : "🔴 OFF";
         bot.editMessageReplyMarkup({
             inline_keyboard: [
@@ -1208,7 +1071,6 @@ bot.on("callback_query", async (query) => {
                 [{ text: "⬅️ Back", callback_data: "admin_panel" }]
             ]
         }, { chat_id: chatId, message_id: messageId }).catch(() => {});
-        // Refresh the keyboard for the admin seamlessly
         bot.sendMessage(chatId, `✅ System updated! Users will see changes upon next command.`, { reply_markup: getReplyMenu(chatId, username) }).then(m => setTimeout(() => bot.deleteMessage(chatId, m.message_id).catch(() => {}), 3000));
         bot.answerCallbackQuery(query.id, { text: `Panel access is now ${status}` });
     }
@@ -1220,64 +1082,29 @@ bot.on("callback_query", async (query) => {
     }
 
     // 🟢 USER PANEL CALLBACKS
-    else if (data === "user_stex_login") {
-        renderUserPanelMenu(chatId, messageId, "stex");
+    else if (["user_stex_login", "user_mk_login", "user_zenex_login", "user_nxa_login"].includes(data)) {
+        let panel = data.replace("user_", "").replace("_login", "");
+        renderUserPanelMenu(chatId, messageId, panel);
         bot.answerCallbackQuery(query.id);
     }
-    else if (data === "user_mk_login") {
-        renderUserPanelMenu(chatId, messageId, "mk");
+    else if (["user_stex_add", "user_mk_add", "user_zenex_add", "user_nxa_add"].includes(data)) {
+        let panel = data.replace("user_", "").replace("_add", "");
+        userStates[chatId] = `WAITING_FOR_USER_${panel.toUpperCase()}_CREDS`;
+        bot.sendMessage(chatId, `📧 **Send your ${panel.toUpperCase()} credentials format:**\n\`email|password\``, { parse_mode: "Markdown" });
         bot.answerCallbackQuery(query.id);
     }
-    else if (data === "user_zenex_login") {
-        renderUserPanelMenu(chatId, messageId, "zenex");
-        bot.answerCallbackQuery(query.id);
-    }
-    else if (data === "user_nxa_login") {
-        renderUserPanelMenu(chatId, messageId, "nxa");
-        bot.answerCallbackQuery(query.id);
-    }
-    else if (data === "user_stex_add") {
-        userStates[chatId] = "WAITING_FOR_USER_STEX_CREDS";
-        bot.sendMessage(chatId, "📧 **Send your Stex credentials format:**\n`email|password`", { parse_mode: "Markdown" });
-        bot.answerCallbackQuery(query.id);
-    }
-    else if (data === "user_mk_add") {
-        userStates[chatId] = "WAITING_FOR_USER_MK_CREDS";
-        bot.sendMessage(chatId, "📧 **Send your MK credentials format:**\n`email|password`", { parse_mode: "Markdown" });
-        bot.answerCallbackQuery(query.id);
-    }
-    else if (data === "user_zenex_add") {
-        userStates[chatId] = "WAITING_FOR_USER_ZENEX_CREDS";
-        bot.sendMessage(chatId, "📧 **Send your Zenex credentials format:**\n`email|password`", { parse_mode: "Markdown" });
-        bot.answerCallbackQuery(query.id);
-    }
-    else if (data === "user_nxa_add") {
-        userStates[chatId] = "WAITING_FOR_USER_NXA_CREDS";
-        bot.sendMessage(chatId, "📧 **Send your NXA credentials format:**\n`email|password`", { parse_mode: "Markdown" });
-        bot.answerCallbackQuery(query.id);
-    }
-    else if (data === "user_stex_remove") {
-        if (db.userPanels[chatId]) { delete db.userPanels[chatId].stexCreds; delete db.userPanels[chatId].stexToken; saveDB(); }
-        bot.answerCallbackQuery(query.id, { text: "✅ Stex Account removed!" });
-        renderUserPanelMenu(chatId, messageId, "stex");
-    }
-    else if (data === "user_mk_remove") {
-        if (db.userPanels[chatId]) { delete db.userPanels[chatId].mkCreds; delete db.userPanels[chatId].mkCookies; saveDB(); }
-        bot.answerCallbackQuery(query.id, { text: "✅ MK Account removed!" });
-        renderUserPanelMenu(chatId, messageId, "mk");
-    }
-    else if (data === "user_zenex_remove") {
-        if (db.userPanels[chatId]) { delete db.userPanels[chatId].zenexCreds; delete db.userPanels[chatId].zenexCookies; saveDB(); }
-        bot.answerCallbackQuery(query.id, { text: "✅ Zenex Account removed!" });
-        renderUserPanelMenu(chatId, messageId, "zenex");
-    }
-    else if (data === "user_nxa_remove") {
-        if (db.userPanels[chatId]) { delete db.userPanels[chatId].nxaCreds; delete db.userPanels[chatId].nxaToken; delete db.userPanels[chatId].nxaCookies; saveDB(); }
-        bot.answerCallbackQuery(query.id, { text: "✅ NXA Account removed!" });
-        renderUserPanelMenu(chatId, messageId, "nxa");
+    else if (["user_stex_remove", "user_mk_remove", "user_zenex_remove", "user_nxa_remove"].includes(data)) {
+        let panel = data.replace("user_", "").replace("_remove", "");
+        if (db.userPanels[chatId]) { 
+            delete db.userPanels[chatId][`${panel}Creds`]; 
+            delete db.userPanels[chatId][`${panel}Token`]; 
+            delete db.userPanels[chatId][`${panel}Cookies`]; 
+            saveDB(); 
+        }
+        bot.answerCallbackQuery(query.id, { text: `✅ ${panel.toUpperCase()} Account removed!` });
+        renderUserPanelMenu(chatId, messageId, panel);
     }
 
-    // 🟢 USER RANGE MANAGEMENT CALLBACKS
     else if (data.startsWith("user_add_range_")) {
         let panel = data.replace("user_add_range_", "");
         bot.editMessageText(`🛠 Please select the platform for the new range:`, {
@@ -1294,32 +1121,20 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
     else if (data.startsWith("user_sel_plat_")) {
-        let parts = data.split("_");
-        let panel = parts[3];
-        let plat = parts[4];
-
+        let parts = data.split("_"); let panel = parts[3]; let plat = parts[4];
         userStates[chatId] = "WAITING_FOR_USER_RANGE";
         tempAdminData[chatId] = { pendingUserPanel: panel, pendingUserPlatform: plat };
-
         bot.sendMessage(chatId, `🔢 **Enter ${panel.toUpperCase()} Range for ${plat.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``, { parse_mode: "Markdown" });
         bot.answerCallbackQuery(query.id);
     }
     else if (data.startsWith("user_togglerng_")) {
-        let parts = data.split("_");
-        let panel = parts[2];
-        let plat = parts[3];
-        let range = parts.slice(4).join("_"); 
-
-        if (db.userPanels[chatId] && db.userPanels[chatId].ranges && db.userPanels[chatId].ranges[panel] && db.userPanels[chatId].ranges[panel][plat]) {
+        let parts = data.split("_"); let panel = parts[2]; let plat = parts[3]; let range = parts.slice(4).join("_"); 
+        if (db.userPanels[chatId]?.ranges?.[panel]?.[plat]) {
             delete db.userPanels[chatId].ranges[panel][plat][range];
-            saveDB();
-            bot.answerCallbackQuery(query.id, { text: "✅ Range removed!" });
+            saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ Range removed!" });
             renderUserPanelMenu(chatId, messageId, panel);
-        } else {
-            bot.answerCallbackQuery(query.id, { text: "❌ Failed to remove range." });
-        }
+        } else bot.answerCallbackQuery(query.id, { text: "❌ Failed to remove range." });
     }
-
 
     else if (data === "admin_manage_panel") {
         bot.editMessageText("⚙️ **Login to panel :**", {
@@ -1328,7 +1143,7 @@ bot.on("callback_query", async (query) => {
                 [{ text: "Stex SMS 📨", callback_data: "stex_login" }],
                 [{ text: "MK SMS ✉️",  callback_data: "placeholder_mk_login" }],
                 [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], 
-                [{ text: "NXA SMS 🟣", callback_data: "nxa_login" }], // 🟢 NXA Add
+                [{ text: "NXA SMS 🟣", callback_data: "nxa_login" }], 
                 [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
             ]}
         }).catch(() => {});
@@ -1362,23 +1177,17 @@ bot.on("callback_query", async (query) => {
         let panel = data.replace("_remove_menu", "");
         let savedAccounts = db[`saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`] || [];
         let btns = [];
-        savedAccounts.forEach((acc, idx) => {
-            btns.push([{ text: `❌ ${acc.email}`, callback_data: `${panel}_delacc_${idx}` }]);
-        });
+        savedAccounts.forEach((acc, idx) => { btns.push([{ text: `❌ ${acc.email}`, callback_data: `${panel}_delacc_${idx}` }]); });
         let backData = panel === "mk" ? "placeholder_mk_login" : `${panel}_login`;
         btns.push([{ text: "⬅️ Back", callback_data: backData }]);
         
-        bot.editMessageText("🗑️ **Select an account to remove:**",
-            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns } }
-        ).catch(() => {});
+        bot.editMessageText("🗑️ **Select an account to remove:**", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: btns } }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data.includes("_delacc_")) {
-        let [panel, , idxStr] = data.split("_");
-        let idx = parseInt(idxStr);
-        let savedKey = `saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`;
-        let acc = db[savedKey][idx];
+        let [panel, , idxStr] = data.split("_"); let idx = parseInt(idxStr);
+        let savedKey = `saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`; let acc = db[savedKey][idx];
         
         if (acc) {
             if (db[`${panel}Creds`] && db[`${panel}Creds`].email === acc.email) {
@@ -1386,16 +1195,11 @@ bot.on("callback_query", async (query) => {
                 if(panel === "stex" || panel === "nxa") db[`${panel}Token`] = "";
                 if(panel === "mk" || panel === "zenex" || panel === "nxa") db[`${panel}Cookies`] = "";
             }
-            db[savedKey].splice(idx, 1);
-            saveDB();
-            bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
-        } else {
-            bot.answerCallbackQuery(query.id);
-        }
+            db[savedKey].splice(idx, 1); saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ Account removed successfully!" });
+        } else bot.answerCallbackQuery(query.id);
+        
         let backData = panel === "mk" ? "placeholder_mk_login" : `${panel}_login`;
-        bot.editMessageText(`🔑 **${panel.toUpperCase()} SMS Login:**`, 
-            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: backData }]] } }
-        ).catch(() => {});
+        bot.editMessageText(`🔑 **${panel.toUpperCase()} SMS Login:**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: backData }]] } }).catch(() => {});
     }
 
     else if (data.endsWith("_manual_login")) {
@@ -1406,112 +1210,63 @@ bot.on("callback_query", async (query) => {
     }
 
     else if (data.includes("_qlogin_")) {
-        let [panel, , idxStr] = data.split("_");
-        let idx = parseInt(idxStr);
-        let savedKey = `saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`;
-        const acc = db[savedKey][idx];
+        let [panel, , idxStr] = data.split("_"); let idx = parseInt(idxStr);
+        let savedKey = `saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`; const acc = db[savedKey][idx];
         
         if (acc) {
             bot.sendMessage(chatId, `⏳ Logging into ${panel.toUpperCase()} SMS...`).catch(() => {});
-            
-            if (panel === "stex") {
-                stex.login(acc.email, acc.password).then(token => { db.stexToken = token; db.stexCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ Stex Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-            } else if (panel === "mk") {
-                mk.login(acc.email, acc.password).then(c => { db.mkCookies = c; db.mkCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ MK Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-            } else if (panel === "zenex") {
-                zenex.login(acc.email, acc.password).then(c => { db.zenexCookies = c; db.zenexCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ Zenex Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-            } else if (panel === "nxa") {
-                nxa.login(acc.email, acc.password).then(auth => { db.nxaToken = auth.token; db.nxaCookies = auth.cookie; db.nxaCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ NXA Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
-            }
+            if (panel === "stex") stex.login(acc.email, acc.password).then(token => { db.stexToken = token; db.stexCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ Stex Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+            else if (panel === "mk") mk.login(acc.email, acc.password).then(c => { db.mkCookies = c; db.mkCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ MK Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+            else if (panel === "zenex") zenex.login(acc.email, acc.password).then(c => { db.zenexCookies = c; db.zenexCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ Zenex Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
+            else if (panel === "nxa") nxa.login(acc.email, acc.password).then(auth => { db.nxaToken = auth.token; db.nxaCookies = auth.cookie; db.nxaCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ NXA Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
         }
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data === "admin_manage_numbers") {
-        bot.editMessageText("🛠 **Please select the platform for managing numbers:**",
-            { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }
-        ).catch(() => {});
+        bot.editMessageText("🛠 **Please select the platform for managing numbers:**", { chat_id: chatId, message_id: messageId, reply_markup: adminPlatformMenu }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data.startsWith("admin_sel_plat_")) {
         tempAdminData[chatId] = { ...tempAdminData[chatId], selectedPlatform: data.split("_")[3] };
-        bot.editMessageText(`🛠 Manage ${data.split("_")[3].toUpperCase()} Panel:`,
-            { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }
-        ).catch(() => {});
+        bot.editMessageText(`🛠 Manage ${data.split("_")[3].toUpperCase()} Panel:`, { chat_id: chatId, message_id: messageId, reply_markup: manageNumberPanel }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data === "admin_add_number_manual") {
         userStates[chatId] = "WAITING_FOR_MANUAL_COUNTRY";
-        bot.sendMessage(chatId,
-            "🌍 **Enter the country name:**\n(For example: PAKISTAN, USA, BANGLADESH)",
-            { parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, "🌍 **Enter the country name:**\n(For example: PAKISTAN, USA, BANGLADESH)", { parse_mode: "Markdown" }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data.startsWith("placeholder_")) {
         let panel = data.replace("placeholder_", "");
-        if (panel === "iva") {
-            return bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
-        }
+        if (panel === "iva") return bot.answerCallbackQuery(query.id, { text: "🛠 This service/logic is not integrated yet.", show_alert: true });
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
         userStates[chatId] = `WAITING_FOR_${panel.toUpperCase()}_RANGE`;
-        bot.sendMessage(chatId,
-            `🔢 **Enter ${panel.toUpperCase()} Range for ${platform.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``,
-            { parse_mode: "Markdown" }
-        ).catch(() => {});
+        bot.sendMessage(chatId, `🔢 **Enter ${panel.toUpperCase()} Range for ${platform.toUpperCase()}:**\nJust type the range, the bot will automatically detect the country.\nExample: \`23276XXX\``, { parse_mode: "Markdown" }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
-    else if (data === "admin_remove_number_menu") {
-        renderRemoveMenu(chatId, messageId);
-        bot.answerCallbackQuery(query.id);
-    }
+    else if (data === "admin_remove_number_menu") { renderRemoveMenu(chatId, messageId); bot.answerCallbackQuery(query.id); }
 
     else if (data === "delall_everything") {
-        db.stexRanges = { fb: {}, ig: {}, wa: {} };
-        db.mkRanges   = { fb: {}, ig: {}, wa: {} };
-        db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
-        db.nxaRanges   = { fb: {}, ig: {}, wa: {} }; 
-        db.availableNumbers = { fb: {}, ig: {}, wa: {} };
-        saveDB();
-        bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
-        bot.editMessageText("🗑️ **All numbers/ranges have been removed.**",
-            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]] }, parse_mode: "Markdown" }
-        ).catch(() => {});
+        db.stexRanges = { fb: {}, ig: {}, wa: {} }; db.mkRanges = { fb: {}, ig: {}, wa: {} }; db.zenexRanges = { fb: {}, ig: {}, wa: {} }; db.nxaRanges = { fb: {}, ig: {}, wa: {} }; db.availableNumbers = { fb: {}, ig: {}, wa: {} };
+        saveDB(); bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
+        bot.editMessageText("🗑️ **All numbers/ranges have been removed.**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]] }, parse_mode: "Markdown" }).catch(() => {});
     }
 
     else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_") || data.startsWith("delzenexrng_") || data.startsWith("delnxarng_")) {
-        const isStex    = data.startsWith("delstexrng_");
-        const isMk      = data.startsWith("delmkrng_");
-        const isZenex   = data.startsWith("delzenexrng_"); 
-        const isNxa     = data.startsWith("delnxarng_");
-        
+        const isStex = data.startsWith("delstexrng_"), isMk = data.startsWith("delmkrng_"), isZenex = data.startsWith("delzenexrng_"), isNxa = data.startsWith("delnxarng_");
         const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : (isZenex ? "delzenexrng_" : (isNxa ? "delnxarng_" : "delnumrng_")));
-        const payload   = data.replace(prefixStr, "");
-        const parts     = payload.split("_");
-        const plat      = parts[0];
-        const target    = parts.slice(1).join("_");
+        const payload = data.replace(prefixStr, ""), parts = payload.split("_"), plat = parts[0], target = parts.slice(1).join("_");
 
-        if (isStex) {
-            if (db.stexRanges[plat] && db.stexRanges[plat][target]) { delete db.stexRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ Stex range ${target} removed!` });
-        } else if (isMk) {
-            if (db.mkRanges && db.mkRanges[plat] && db.mkRanges[plat][target]) { delete db.mkRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ MK range ${target} removed!` });
-        } else if (isZenex) {
-            if (db.zenexRanges && db.zenexRanges[plat] && db.zenexRanges[plat][target]) { delete db.zenexRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ Zenex range ${target} removed!` });
-        } else if (isNxa) {
-            if (db.nxaRanges && db.nxaRanges[plat] && db.nxaRanges[plat][target]) { delete db.nxaRanges[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ NXA range ${target} removed!` });
-        } else {
-            if (db.availableNumbers[plat] && db.availableNumbers[plat][target]) { delete db.availableNumbers[plat][target]; saveDB(); }
-            bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed!` });
-        }
-
+        if (isStex) { if (db.stexRanges[plat]?.[target]) { delete db.stexRanges[plat][target]; saveDB(); } bot.answerCallbackQuery(query.id, { text: `✅ Stex range ${target} removed!` }); }
+        else if (isMk) { if (db.mkRanges?.[plat]?.[target]) { delete db.mkRanges[plat][target]; saveDB(); } bot.answerCallbackQuery(query.id, { text: `✅ MK range ${target} removed!` }); }
+        else if (isZenex) { if (db.zenexRanges?.[plat]?.[target]) { delete db.zenexRanges[plat][target]; saveDB(); } bot.answerCallbackQuery(query.id, { text: `✅ Zenex range ${target} removed!` }); }
+        else if (isNxa) { if (db.nxaRanges?.[plat]?.[target]) { delete db.nxaRanges[plat][target]; saveDB(); } bot.answerCallbackQuery(query.id, { text: `✅ NXA range ${target} removed!` }); }
+        else { if (db.availableNumbers[plat]?.[target]) { delete db.availableNumbers[plat][target]; saveDB(); } bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed!` }); }
         renderRemoveMenu(chatId, messageId);
     }
 
@@ -1520,55 +1275,33 @@ bot.on("callback_query", async (query) => {
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
         if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
         let grouped = { ...latestRangesFromExtension };
-        for (const r in db.availableNumbers[platform]) {
-            if (!grouped[r]) grouped[r] = db.availableNumbers[platform][r];
-        }
+        for (const r in db.availableNumbers[platform]) { if (!grouped[r]) grouped[r] = db.availableNumbers[platform][r]; }
         tempAdminData[chatId] = { ...tempAdminData[chatId], ranges: Object.keys(grouped).map(r => ({ name: r, nums: grouped[r] })) };
-        if (tempAdminData[chatId].ranges.length === 0)
-            return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.",
-                { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }
-            ).catch(() => {});
+        if (tempAdminData[chatId].ranges.length === 0) return bot.editMessageText("📭 **No data found!** Please ensure your browser extension is active.", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }]] }, parse_mode: "Markdown" }).catch(() => {});
         renderManageRangesMenu(chatId, messageId);
     }
 
     else if (data.startsWith("togglerng_")) {
-        const action   = data.replace("togglerng_", "");
-        const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
+        const action = data.replace("togglerng_", ""); const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
         if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
-        if (!tempAdminData[chatId]?.ranges)
-            return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Please fetch ranges again.", show_alert: true });
+        if (!tempAdminData[chatId]?.ranges) return bot.answerCallbackQuery(query.id, { text: "⚠️ Session expired! Please fetch ranges again.", show_alert: true });
 
         if (action === "addall") {
             let t = 0;
             tempAdminData[chatId].ranges.forEach(r => {
                 if (!db.availableNumbers[platform][r.name]) db.availableNumbers[platform][r.name] = [];
-                r.nums.forEach(num => {
-                    if (!db.availableNumbers[platform][r.name].includes(num) && !inUseNumbers[num]) {
-                        db.availableNumbers[platform][r.name].push(num); t++;
-                    }
-                });
+                r.nums.forEach(num => { if (!db.availableNumbers[platform][r.name].includes(num) && !inUseNumbers[num]) { db.availableNumbers[platform][r.name].push(num); t++; } });
             });
-            saveDB();
-            bot.answerCallbackQuery(query.id, { text: `✅ Successfully added all ${t} available numbers.` });
+            saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Successfully added all ${t} available numbers.` });
         } else if (action === "delall") {
-            tempAdminData[chatId].ranges.forEach(r => { delete db.availableNumbers[platform][r.name]; });
-            saveDB();
-            bot.answerCallbackQuery(query.id, { text: `🗑️ Successfully removed all numbers from the active list.` });
+            tempAdminData[chatId].ranges.forEach(r => { delete db.availableNumbers[platform][r.name]; }); saveDB(); bot.answerCallbackQuery(query.id, { text: `🗑️ Successfully removed all numbers from the active list.` });
         } else {
-            const idx = parseInt(action);
-            const sel = tempAdminData[chatId].ranges[idx];
+            const idx = parseInt(action); const sel = tempAdminData[chatId].ranges[idx];
             if (db.availableNumbers[platform][sel.name]) {
-                delete db.availableNumbers[platform][sel.name];
-                saveDB();
-                bot.answerCallbackQuery(query.id, { text: `❌ Removed range from active list.` });
+                delete db.availableNumbers[platform][sel.name]; saveDB(); bot.answerCallbackQuery(query.id, { text: `❌ Removed range from active list.` });
             } else {
-                db.availableNumbers[platform][sel.name] = [];
-                let a = 0;
-                sel.nums.forEach(num => {
-                    if (!inUseNumbers[num]) { db.availableNumbers[platform][sel.name].push(num); a++; }
-                });
-                saveDB();
-                bot.answerCallbackQuery(query.id, { text: `✅ Added range successfully (${a} numbers).` });
+                db.availableNumbers[platform][sel.name] = []; let a = 0;
+                sel.nums.forEach(num => { if (!inUseNumbers[num]) { db.availableNumbers[platform][sel.name].push(num); a++; } }); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Added range successfully (${a} numbers).` });
             }
         }
         renderManageRangesMenu(chatId, messageId);
@@ -1576,137 +1309,78 @@ bot.on("callback_query", async (query) => {
 
     else if (data === "admin_manage_admins") {
         if (!isSuperAdmin(chatId)) return;
-        bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.",
-            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [
-                [{ text: "➕ Add Admin", callback_data: "admin_add_admin" },
-                 { text: "➖ Remove",    callback_data: "admin_remove_admin" }],
-                [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
-            ]}}
-        ).catch(() => {});
+        bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] } }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
     else if (data === "admin_add_admin") {
         if (!isSuperAdmin(chatId)) return;
-        userStates[chatId] = "WAITING_FOR_ADMIN_USERNAME";
-        bot.sendMessage(chatId, "👤 **Please enter the Telegram Username you wish to make an admin:**").catch(() => {});
-        bot.answerCallbackQuery(query.id);
+        userStates[chatId] = "WAITING_FOR_ADMIN_USERNAME"; bot.sendMessage(chatId, "👤 **Please enter the Telegram Username you wish to make an admin:**").catch(() => {}); bot.answerCallbackQuery(query.id);
     }
 
     else if (data === "admin_remove_admin") {
         if (!isSuperAdmin(chatId)) return;
-        if (db.adminUsernames.length === 0)
-            return bot.answerCallbackQuery(query.id, { text: "📭 No admins found in the system.", show_alert: true });
-        let btns = db.adminUsernames.map(un => [{ text: `❌ Remove ${un}`, callback_data: `deladmin_${un}` }]);
-        btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_admins" }]);
-        bot.editMessageText("🗑️ **Select an administrator to remove:**",
-            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }
-        ).catch(() => {});
-        bot.answerCallbackQuery(query.id);
+        if (db.adminUsernames.length === 0) return bot.answerCallbackQuery(query.id, { text: "📭 No admins found in the system.", show_alert: true });
+        let btns = db.adminUsernames.map(un => [{ text: `❌ Remove ${un}`, callback_data: `deladmin_${un}` }]); btns.push([{ text: "⬅️ Back", callback_data: "admin_manage_admins" }]);
+        bot.editMessageText("🗑️ **Select an administrator to remove:**", { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: btns }, parse_mode: "Markdown" }).catch(() => {}); bot.answerCallbackQuery(query.id);
     }
 
     else if (data.startsWith("deladmin_")) {
         if (!isSuperAdmin(chatId)) return;
-        let unToRemove = data.replace("deladmin_", "");
-        db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove);
-        saveDB();
-        bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true });
-        bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.",
-            { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [
-                [{ text: "➕ Add Admin", callback_data: "admin_add_admin" },
-                 { text: "➖ Remove",    callback_data: "admin_remove_admin" }],
-                [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
-            ]}}
-        ).catch(() => {});
+        let unToRemove = data.replace("deladmin_", ""); db.adminUsernames = db.adminUsernames.filter(u => u !== unToRemove); saveDB(); bot.answerCallbackQuery(query.id, { text: `✅ Admin successfully removed!`, show_alert: true });
+        bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.", { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [[{ text: "➕ Add Admin", callback_data: "admin_add_admin" }, { text: "➖ Remove", callback_data: "admin_remove_admin" }], [{ text: "⬅️ Back", callback_data: "admin_panel" }]] } }).catch(() => {});
     }
 
-    else if (data === "withdraw_funds") {
-        userStates[chatId] = "WAITING_FOR_BKASH";
-        bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(() => {});
-        bot.answerCallbackQuery(query.id);
-    }
+    else if (data === "withdraw_funds") { userStates[chatId] = "WAITING_FOR_BKASH"; bot.sendMessage(chatId, "💸 **Please enter your 11-digit bKash or Nagad number:**").catch(() => {}); bot.answerCallbackQuery(query.id); }
 
-    else if (data === "menu_platform") {
-        clearPendingForChat(chatId);
-        bot.editMessageText(`Please select the platform:`,
-            { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }
-        ).catch(() => {});
-        bot.answerCallbackQuery(query.id);
-    }
+    else if (data === "menu_platform") { clearPendingForChat(chatId); bot.editMessageText(`Please select the platform:`, { chat_id: chatId, message_id: messageId, reply_markup: platformMenu }).catch(() => {}); bot.answerCallbackQuery(query.id); }
 
     else if (data.startsWith("menu_country_")) {
         clearPendingForChat(chatId);
-        const platform        = data.replace("menu_country_", "");
-        const availPlatformDB = db.availableNumbers[platform] || {};
-        
-        const getMergedRanges = (globalRanges, userRanges) => {
-            let combined = { ...globalRanges };
-            if (userRanges) {
-                for (let r in userRanges) combined[r] = userRanges[r];
-            }
-            return combined;
-        };
-
-        const hasPanel = db.settings.userPanelAccess;
-        const uPanels = db.userPanels[chatId];
+        const platform = data.replace("menu_country_", ""); const availPlatformDB = db.availableNumbers[platform] || {};
+        const getMergedRanges = (globalRanges, userRanges) => { let combined = { ...globalRanges }; if (userRanges) { for (let r in userRanges) combined[r] = userRanges[r]; } return combined; };
+        const hasPanel = db.settings.userPanelAccess; const uPanels = db.userPanels[chatId];
         
         const finalStexDB = getMergedRanges(db.stexRanges[platform], hasPanel && uPanels?.stexToken ? uPanels.ranges?.stex?.[platform] : null);
         const finalMkDB   = getMergedRanges(db.mkRanges?.[platform], hasPanel && uPanels?.mkCookies ? uPanels.ranges?.mk?.[platform] : null);
         const finalZenexDB= getMergedRanges(db.zenexRanges?.[platform], hasPanel && uPanels?.zenexCookies ? uPanels.ranges?.zenex?.[platform] : null);
         const finalNxaDB  = getMergedRanges(db.nxaRanges?.[platform], hasPanel && uPanels?.nxaToken ? uPanels.ranges?.nxa?.[platform] : null);
 
-        const ranges         = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
-        const stexRangesList = Object.keys(finalStexDB);
-        const mkRangesList   = Object.keys(finalMkDB);
-        const zenexRangesList= Object.keys(finalZenexDB);
-        const nxaRangesList  = Object.keys(finalNxaDB);
+        const ranges = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
+        const stexRangesList = Object.keys(finalStexDB); const mkRangesList = Object.keys(finalMkDB); const zenexRangesList= Object.keys(finalZenexDB); const nxaRangesList = Object.keys(finalNxaDB);
 
-        if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && zenexRangesList.length === 0 && nxaRangesList.length === 0)
-            return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`,
-                { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }
-            ).catch(() => {});
+        if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && zenexRangesList.length === 0 && nxaRangesList.length === 0) return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "⬅️ Back", callback_data: "menu_platform" }]] } }).catch(() => {});
 
         let combinedRanges = [];
-        ranges.forEach(r       => combinedRanges.push({ type: "iva",  range: r, info: getCountryInfo(r) }));
+        ranges.forEach(r => combinedRanges.push({ type: "iva", range: r, info: getCountryInfo(r) }));
         stexRangesList.forEach(r => combinedRanges.push({ type: "stex", range: r, info: getCountryInfo(typeof finalStexDB[r] === "object" ? finalStexDB[r].country : finalStexDB[r]) }));
-        mkRangesList.forEach(r   => combinedRanges.push({ type: "mk",   range: r, info: getCountryInfo(typeof finalMkDB[r]   === "object" ? finalMkDB[r].country   : finalMkDB[r]) }));
+        mkRangesList.forEach(r => combinedRanges.push({ type: "mk", range: r, info: getCountryInfo(typeof finalMkDB[r] === "object" ? finalMkDB[r].country : finalMkDB[r]) }));
         zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof finalZenexDB[r]=== "object" ? finalZenexDB[r].country : finalZenexDB[r]) })); 
-        nxaRangesList.forEach(r  => combinedRanges.push({ type: "nxa",  range: r, info: getCountryInfo(typeof finalNxaDB[r]  === "object" ? finalNxaDB[r].country : finalNxaDB[r]) })); 
+        nxaRangesList.forEach(r => combinedRanges.push({ type: "nxa", range: r, info: getCountryInfo(typeof finalNxaDB[r] === "object" ? finalNxaDB[r].country : finalNxaDB[r]) })); 
         
         combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
-
-        let globalCountryCount = {};
-        combinedRanges.forEach(item => {
-            globalCountryCount[item.info.cleanName] = (globalCountryCount[item.info.cleanName] || 0) + 1;
-        });
-
+        let globalCountryCount = {}; combinedRanges.forEach(item => { globalCountryCount[item.info.cleanName] = (globalCountryCount[item.info.cleanName] || 0) + 1; });
         let currentV = {}, countryButtons = [];
         combinedRanges.forEach(item => {
-            let info  = item.info;
-            let dName = `${info.flag} ${info.cleanName}`;
-            if (globalCountryCount[info.cleanName] > 1) {
-                currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1;
-                dName += ` V${currentV[info.cleanName]}`;
-            }
+            let info = item.info; let dName = `${info.flag} ${info.cleanName}`;
+            if (globalCountryCount[info.cleanName] > 1) { currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1; dName += ` V${currentV[info.cleanName]}`; }
             let stock = item.type === "iva" ? availPlatformDB[item.range].length : "∞";
             countryButtons.push([{ text: `${dName} | 📦: ${stock}`, callback_data: `assign_${platform}_${item.range}` }]);
         });
         countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
-        bot.editMessageText(`🌍 Select a country from the available options:`,
-            { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }
-        ).catch(() => {});
+        bot.editMessageText(`🌍 Select a country from the available options:`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: countryButtons } }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
+    // 🟢 MODULAR ASSIGNMENT BLOCK
     else if (data.startsWith("assign_")) {
-        if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId)
-            bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(() => {});
+        if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId) bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(() => {});
         delete activeNumberMessages[chatId];
 
-        const pureData       = data.replace("assign_next_", "").replace("assign_", "");
+        const pureData = data.replace("assign_next_", "").replace("assign_", "");
         const firstUnderscore = pureData.indexOf("_");
-        const platform        = pureData.substring(0, firstUnderscore);
-        const sel             = pureData.substring(firstUnderscore + 1);
+        const platform = pureData.substring(0, firstUnderscore);
+        const sel = pureData.substring(firstUnderscore + 1);
 
         clearPendingForChat(chatId);
         
@@ -1721,305 +1395,40 @@ bot.on("callback_query", async (query) => {
         let mkEntry = (isUserMk && userP.ranges?.mk?.[platform]?.[sel]) || db.mkRanges?.[platform]?.[sel];
         let nxaEntry = (isUserNxa && userP.ranges?.nxa?.[platform]?.[sel]) || db.nxaRanges?.[platform]?.[sel];
 
-        // 🟢 NXA ASSIGNMENT
+        const ctx = {
+            chatId, messageId, queryId: query.id, sel, platform,
+            bot, botInfo, db, saveDB, getCountryInfo, GROUP_INVITE_LINK,
+            pendingRequests, inUseNumbers, activeNumberMessages, activeTimeouts
+        };
+
         if (nxaEntry) {
-            bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
-            const countryName = typeof nxaEntry === "object" ? nxaEntry.country : nxaEntry;
-            const methodName  = typeof nxaEntry === "object" ? nxaEntry.method  : "";
-            let fetchedNums   = [];
-
-            bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(() => {});
-            
-            const tokenToUse = isUserNxa ? db.userPanels[chatId].nxaToken : db.nxaToken;
-            const cookieToUse = isUserNxa ? db.userPanels[chatId].nxaCookies : db.nxaCookies;
-            const credsToUse = isUserNxa ? db.userPanels[chatId].nxaCreds : db.nxaCreds;
-
-            for (let i = 0; i < limit; i++) {
-                try {
-                    const numData = await nxa.getNumber(sel, tokenToUse, cookieToUse);
-                    const n = numData.number ? numData.number.replace("+", "") : "";
-                    if (n) {
-                        fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isNxa: true, platform, token: tokenToUse, cookie: cookieToUse, internal_id: numData.internal_id };
-                    }
-                } catch (e) {
-                    if (i === 0 && credsToUse?.email) {
-                        try {
-                            const authData = await nxa.login(credsToUse.email, credsToUse.password);
-                            if (isUserNxa) { db.userPanels[chatId].nxaToken = authData.token; db.userPanels[chatId].nxaCookies = authData.cookie; } 
-                            else { db.nxaToken = authData.token; db.nxaCookies = authData.cookie; }
-                            saveDB();
-                            const retryData = await nxa.getNumber(sel, authData.token, authData.cookie);
-                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isNxa: true, platform, token: authData.token, cookie: authData.cookie, internal_id: retryData.internal_id }; continue; }
-                        } catch (err2) { break; }
-                    }
-                    break;
-                }
-            }
-
-            if (fetchedNums.length === 0)
-                return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(() => {});
-
-            const info    = getCountryInfo(countryName);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
-            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-            if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-            replyText += `\n\n👇 _Click a number below to copy:_`;
-
-            let actionMenu = { inline_keyboard: [] };
-            fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
-            actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
-            );
-
-            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
-                activeNumberMessages[chatId] = messageId;
-                activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                    if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                    expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-                    fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                    delete activeTimeouts[chatId];
-                }, 15 * 60 * 1000);
-            }).catch(() => {});
-            return;
+            ctx.panelEntry = nxaEntry;
+            return nxa.assignNumber(ctx);
         }
-
-        // 🟢 ZENEX ASSIGNMENT
         if (zenexEntry) {
-            bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
-            const countryName = typeof zenexEntry === "object" ? zenexEntry.country : zenexEntry;
-            const methodName  = typeof zenexEntry === "object" ? zenexEntry.method  : "";
-            let fetchedNums   = [];
-
-            bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
-                { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
-            ).catch(() => {});
-            
-            const cookieToUse = isUserZenex ? db.userPanels[chatId].zenexCookies : db.zenexCookies;
-            const credsToUse  = isUserZenex ? db.userPanels[chatId].zenexCreds : db.zenexCreds;
-
-            for (let i = 0; i < limit; i++) {
-                try {
-                    const numData = await zenex.getNumber(sel, cookieToUse);
-                    const n = numData.number ? numData.number.replace("+", "") : "";
-                    if (n) {
-                        fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isZenex: true, platform, cookie: cookieToUse };
-                    }
-                } catch (e) {
-                    if (i === 0 && credsToUse?.email) {
-                        try {
-                            const newCookie = await zenex.login(credsToUse.email, credsToUse.password);
-                            if (isUserZenex) db.userPanels[chatId].zenexCookies = newCookie; else db.zenexCookies = newCookie;
-                            saveDB();
-                            const retryData = await zenex.getNumber(sel, newCookie);
-                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isZenex: true, platform, cookie: newCookie }; continue; }
-                        } catch (err2) { break; }
-                    }
-                    break;
-                }
-            }
-
-            if (fetchedNums.length === 0)
-                return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
-                    { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
-                ).catch(() => {});
-
-            const info    = getCountryInfo(countryName);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
-            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-            if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-            replyText += `\n\n👇 _Click a number below to copy:_`;
-
-            let actionMenu = { inline_keyboard: [] };
-            fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
-            actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
-            );
-
-            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
-                activeNumberMessages[chatId] = messageId;
-                activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                    if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                    expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-                    fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                    delete activeTimeouts[chatId];
-                }, 15 * 60 * 1000);
-            }).catch(() => {});
-            return;
+            ctx.panelEntry = zenexEntry;
+            return zenex.assignNumber(ctx);
+        }
+        if (stexEntry) {
+            ctx.panelEntry = stexEntry;
+            return stex.assignNumber(ctx);
+        }
+        if (mkEntry) {
+            ctx.panelEntry = mkEntry;
+            return mk.assignNumber(ctx);
         }
 
-        // 🟢 STEX ASSIGNMENT
-        else if (stexEntry) {
-            bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
-            const countryName = typeof stexEntry === "object" ? stexEntry.country : stexEntry;
-            const methodName  = typeof stexEntry === "object" ? stexEntry.method  : "";
-            let fetchedNums   = [];
-
-            bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
-                { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
-            ).catch(() => {});
-
-            const tokenToUse  = isUserStex ? db.userPanels[chatId].stexToken : db.stexToken;
-            const credsToUse  = isUserStex ? db.userPanels[chatId].stexCreds : db.stexCreds;
-
-            for (let i = 0; i < limit; i++) {
-                try {
-                    const numData = await stex.getNumber(sel, tokenToUse);
-                    const n = numData.full_number || numData.number.replace("+", "");
-                    if (n) {
-                        fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isStex: true, platform, token: tokenToUse };
-                    }
-                } catch (e) {
-                    if (i === 0 && credsToUse?.email) {
-                        try {
-                            const newToken = await stex.login(credsToUse.email, credsToUse.password);
-                            if (isUserStex) db.userPanels[chatId].stexToken = newToken; else db.stexToken = newToken;
-                            saveDB();
-                            const retryData = await stex.getNumber(sel, newToken);
-                            const retryN    = retryData.full_number || retryData.number.replace("+", "");
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isStex: true, platform, token: newToken }; continue; }
-                        } catch (err2) { break; }
-                    }
-                    break;
-                }
-            }
-
-            if (fetchedNums.length === 0)
-                return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
-                    { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
-                ).catch(() => {});
-
-            const info     = getCountryInfo(countryName);
-            let platName   = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
-            let replyText  = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-            if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-            replyText += `\n\n👇 _Click a number below to copy:_`;
-
-            let actionMenu = { inline_keyboard: [] };
-            fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
-            actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
-            );
-
-            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
-                activeNumberMessages[chatId] = messageId;
-                activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                    if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                    expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-                    fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                    delete activeTimeouts[chatId]; 
-                }, 15 * 60 * 1000);
-            }).catch(() => {});
-            return;
-        }
-
-        // 🟢 MK ASSIGNMENT
-        else if (mkEntry) {
-            bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
-            const countryName = typeof mkEntry === "object" ? mkEntry.country : mkEntry;
-            const methodName  = typeof mkEntry === "object" ? mkEntry.method  : "";
-            let fetchedNums   = [];
-
-            bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
-                { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
-            ).catch(() => {});
-
-            const cookieToUse = isUserMk ? db.userPanels[chatId].mkCookies : db.mkCookies;
-            const credsToUse  = isUserMk ? db.userPanels[chatId].mkCreds : db.mkCreds;
-
-            for (let i = 0; i < limit; i++) {
-                try {
-                    const numData = await mk.getNumber(sel, cookieToUse);
-                    const n = numData.number ? numData.number.replace("+", "") : "";
-                    if (n) {
-                        fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isMk: true, platform, cookie: cookieToUse };
-                    }
-                } catch (e) {
-                    if (i === 0 && credsToUse?.email) {
-                        try {
-                            const newCookie = await mk.login(credsToUse.email, credsToUse.password);
-                            if (isUserMk) db.userPanels[chatId].mkCookies = newCookie; else db.mkCookies = newCookie;
-                            saveDB();
-                            const retryData = await mk.getNumber(sel, newCookie);
-                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform, cookie: newCookie }; continue; }
-                        } catch (err2) { break; }
-                    }
-                    break;
-                }
-            }
-
-            if (fetchedNums.length === 0)
-                return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
-                    { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
-                ).catch(() => {});
-
-            const info    = getCountryInfo(countryName);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
-            let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-            if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
-            replyText += `\n\n👇 _Click a number below to copy:_`;
-
-            let actionMenu = { inline_keyboard: [] };
-            fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
-            actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
-            );
-
-            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
-                activeNumberMessages[chatId] = messageId;
-                activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
-                    if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
-                    expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-                    fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                    delete activeTimeouts[chatId]; 
-                }, 15 * 60 * 1000);
-            }).catch(() => {});
-            return;
-        }
-
+        // 🟢 Default IVA Logic
         const nums = db.availableNumbers[platform][sel] || [];
-        if (nums.length === 0)
-            return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
+        if (nums.length === 0) return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
 
-        const limit       = db.settings.maxNumbers || 4;
+        const limit = db.settings.maxNumbers || 4;
         const assignedNums = nums.splice(0, limit);
-        db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] };
-        saveDB();
-
+        db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] }; saveDB();
         assignedNums.forEach(n => { inUseNumbers[n] = true; pendingRequests[n] = { chatId, country: sel, platform }; });
 
-        const info    = getCountryInfo(sel);
-        let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+        const info = getCountryInfo(sel);
+        let platName = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
         let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n👇 _Click a number below to copy:_`;
 
         let actionMenu = { inline_keyboard: [] };
@@ -2070,18 +1479,14 @@ function processFoundOTP(number, time, message, range) {
     if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
     if (otpCode)           groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: otpCode } });
     if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
-    bot.sendMessage(GROUP_CHAT_ID, groupReplyText,
-        { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }
-    ).catch(() => {});
+    bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(() => {});
 
     if (reqData) {
         const reqInfo    = getCountryInfo(cName);
         let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
         let userMarkup   = { inline_keyboard: [] };
         if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-        bot.sendMessage(reqData.chatId, userReplyText,
-            { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }
-        ).catch(() => {});
+        bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(() => {});
         addBalance(reqData.chatId, 0.50);
         delete pendingRequests[number];
         delete inUseNumbers[number];
@@ -2094,13 +1499,9 @@ function processFoundOTP(number, time, message, range) {
 
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
-    if (type === "RANGES") {
-        latestRangesFromExtension = payload;
-        return res.status(200).json({ success: true });
-    }
+    if (type === "RANGES") { latestRangesFromExtension = payload; return res.status(200).json({ success: true }); }
     if (type === "SMS_LOG") {
-        if (Array.isArray(payload))
-            payload.forEach(sms => processFoundOTP(sms.number, sms.time, sms.message, sms.range));
+        if (Array.isArray(payload)) payload.forEach(sms => processFoundOTP(sms.number, sms.time, sms.message, sms.range));
         return res.status(200).json({ success: true });
     }
     res.status(400).json({ success: false });
@@ -2115,34 +1516,10 @@ app.get("/ping", (req, res) => res.status(200).send("Pong! Bot is alive."));
 
 async function autoLoginPanels() {
     if (!isDbLoaded) return;
-
-    if (db.stexCreds && db.stexCreds.email) {
-        try {
-            const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
-            if (token) { db.stexToken = token; saveDB(); }
-        } catch (e) {}
-    }
-
-    if (db.mkCreds && db.mkCreds.email) {
-        try {
-            const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password);
-            if (cookieStr) { db.mkCookies = cookieStr; saveDB(); }
-        } catch (e) {}
-    }
-
-    if (db.zenexCreds && db.zenexCreds.email) {
-        try {
-            const cookieStr = await zenex.login(db.zenexCreds.email, db.zenexCreds.password);
-            if (cookieStr) { db.zenexCookies = cookieStr; saveDB(); }
-        } catch (e) {}
-    }
-    
-    if (db.nxaCreds && db.nxaCreds.email) {
-        try {
-            const authData = await nxa.login(db.nxaCreds.email, db.nxaCreds.password);
-            if (authData && authData.token) { db.nxaToken = authData.token; db.nxaCookies = authData.cookie; saveDB(); }
-        } catch (e) {}
-    }
+    if (db.stexCreds?.email) { try { const token = await stex.login(db.stexCreds.email, db.stexCreds.password); if (token) { db.stexToken = token; saveDB(); } } catch (e) {} }
+    if (db.mkCreds?.email) { try { const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password); if (cookieStr) { db.mkCookies = cookieStr; saveDB(); } } catch (e) {} }
+    if (db.zenexCreds?.email) { try { const cookieStr = await zenex.login(db.zenexCreds.email, db.zenexCreds.password); if (cookieStr) { db.zenexCookies = cookieStr; saveDB(); } } catch (e) {} }
+    if (db.nxaCreds?.email) { try { const authData = await nxa.login(db.nxaCreds.email, db.nxaCreds.password); if (authData?.token) { db.nxaToken = authData.token; db.nxaCookies = authData.cookie; saveDB(); } } catch (e) {} }
 }
 
 // ============================================================
@@ -2153,204 +1530,31 @@ mongoose.connect(MONGODB_URI).then(async () => {
     const data = await BotDB.findOne();
     if (data) {
         db = { ...db, ...data.toObject() };
-
-        if (!db.availableNumbers.fb && !db.availableNumbers.ig && !db.availableNumbers.wa) {
-            const oldData = { ...db.availableNumbers };
-            db.availableNumbers = { fb: oldData, ig: {}, wa: {} };
-        }
-        if (!db.stexRanges) db.stexRanges = { fb: {}, ig: {}, wa: {} };
-        if (!db.stexRanges.fb && !db.stexRanges.ig && !db.stexRanges.wa) {
-            const oldStex = { ...db.stexRanges };
-            db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
-        }
-        if (!db.mkRanges)            db.mkRanges           = { fb: {}, ig: {}, wa: {} };
-        if (!db.zenexRanges)         db.zenexRanges        = { fb: {}, ig: {}, wa: {} }; 
-        if (!db.nxaRanges)           db.nxaRanges          = { fb: {}, ig: {}, wa: {} }; // 🟢
-        
-        if (!db.savedStexAccounts)   db.savedStexAccounts  = [];
-        if (!db.savedMkAccounts)     db.savedMkAccounts    = [];
-        if (!db.savedZenexAccounts)  db.savedZenexAccounts = []; 
-        if (!db.savedNxaAccounts)    db.savedNxaAccounts   = []; // 🟢
-        
-        if (!db.userPanels)          db.userPanels         = {};
-        if (db.settings.userPanelAccess === undefined) db.settings.userPanelAccess = false;
-        if (!db.settings.lastBroadcast) db.settings.lastBroadcast = []; // 🟢 Setup Broadcast Tracking Array
-
+        if (!db.availableNumbers.fb && !db.availableNumbers.ig && !db.availableNumbers.wa) db.availableNumbers = { fb: { ...db.availableNumbers }, ig: {}, wa: {} };
+        if (!db.stexRanges) db.stexRanges = { fb: {}, ig: {}, wa: {} }; if (!db.stexRanges.fb && !db.stexRanges.ig && !db.stexRanges.wa) db.stexRanges = { fb: { ...db.stexRanges }, ig: {}, wa: {} };
+        if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} }; if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} }; if (!db.nxaRanges) db.nxaRanges = { fb: {}, ig: {}, wa: {} };
+        if (!db.savedStexAccounts) db.savedStexAccounts = []; if (!db.savedMkAccounts) db.savedMkAccounts = []; if (!db.savedZenexAccounts) db.savedZenexAccounts = []; if (!db.savedNxaAccounts) db.savedNxaAccounts = [];
+        if (!db.userPanels) db.userPanels = {}; if (db.settings.userPanelAccess === undefined) db.settings.userPanelAccess = false; if (!db.settings.lastBroadcast) db.settings.lastBroadcast = [];
         if (db.stexCreds?.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
-        if (db.mkCreds?.email   && db.savedMkAccounts.length   === 0) db.savedMkAccounts.push(db.mkCreds);
-        if (db.zenexCreds?.email&& db.savedZenexAccounts.length=== 0) db.savedZenexAccounts.push(db.zenexCreds);
-        if (db.nxaCreds?.email  && db.savedNxaAccounts.length  === 0) db.savedNxaAccounts.push(db.nxaCreds);
-
-    } else {
-        await BotDB.create(db);
-    }
+        if (db.mkCreds?.email && db.savedMkAccounts.length === 0) db.savedMkAccounts.push(db.mkCreds);
+        if (db.zenexCreds?.email && db.savedZenexAccounts.length === 0) db.savedZenexAccounts.push(db.zenexCreds);
+        if (db.nxaCreds?.email && db.savedNxaAccounts.length === 0) db.savedNxaAccounts.push(db.nxaCreds);
+    } else await BotDB.create(db);
 
     isDbLoaded = true;
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
-
     setTimeout(autoLoginPanels, 10000);
-
 }).catch(err => console.log(err));
 
 // ============================================================
-// #  BACKGROUND POLLING INTERVALS (Grouped by User Tokens)
+// #  MODULAR POLLING INITIALIZATION
 // ============================================================
 
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
-// 🟢 Stex Polling
-setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isStex);
-    if (reqs.length === 0) return;
-
-    const tokensToPoll = [...new Set(reqs.map(r => r.token).filter(Boolean))];
-    for (const token of tokensToPoll) {
-        try {
-            const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-            d.setHours(d.getHours() - 4);
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-            const records = await stex.checkInfo(dateStr, token);
-            if (Array.isArray(records)) {
-                records.forEach(rec => {
-                    let num = rec.number ? String(rec.number).replace("+", "") : null;
-                    if (num && pendingRequests[num] && pendingRequests[num].token === token) {
-                        let status = String(rec.status || "").toLowerCase();
-                        let msg    = rec.sms || rec.message || rec.otp || rec.text;
-                        if ((status === "success" || status === "completed" || msg) && msg) {
-                            msg = String(msg);
-                            if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                processFoundOTP(num, Date.now(), msg, pendingRequests[num].country);
-                            }
-                        }
-                    }
-                });
-            }
-        } catch (e) {}
-    }
-}, 2500);
-
-// 🟢 MK Polling
-setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isMk);
-    if (reqs.length === 0) return;
-
-    const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
-    for (const cookie of cookiesToPoll) {
-        try {
-            const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            const records = await mk.checkInfo(dateStr, cookie);
-
-            if (Array.isArray(records)) {
-                records.forEach(rec => {
-                    let rawNum      = String(rec.phone_number || rec.number || "");
-                    let cleanRecNum = rawNum.replace(/\D/g, "");
-                    if (cleanRecNum) {
-                        let pendingKey = Object.keys(pendingRequests).find(
-                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
-                        );
-                        if (pendingKey) {
-                            let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
-                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
-                            }
-                        }
-                    }
-                });
-            }
-        } catch (e) {}
-    }
-}, 2500);
-
-// 🟢 Zenex Polling 
-setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
-    if (reqs.length === 0) return;
-
-    const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
-    for (const cookie of cookiesToPoll) {
-        try {
-            const records = await zenex.checkInfo(cookie);
-
-            if (Array.isArray(records)) {
-                records.forEach(rec => {
-                    let rawNum      = String(rec.number || "");
-                    let cleanRecNum = rawNum.replace(/\D/g, "");
-                    if (cleanRecNum) {
-                        let pendingKey = Object.keys(pendingRequests).find(
-                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === cookie
-                        );
-                        if (pendingKey) {
-                            let msg = rec.sms;
-                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
-                            }
-                        }
-                    }
-                });
-            }
-        } catch (e) {}
-    }
-}, 2500);
-
-// 🟢 NXA Polling (Updated with Date Adjustment and Internal ID Check)
-setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isNxa);
-    if (reqs.length === 0) return;
-
-    // 🕒 Time Adjustment: BD Time theke 6 hours minus kora hocche (NXA UTC timezone e ache)
-    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-    d.setHours(d.getHours() - 6); 
-    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-    // We combine token and cookie uniquely 
-    const authKeys = [...new Set(reqs.map(r => `${r.token}|${r.cookie}`))];
-    for (const authStr of authKeys) {
-        const [token, cookie] = authStr.split("|");
-        try {
-            const response = await nxa.checkInfo(token, cookie, dateStr);
-            
-            const records = Array.isArray(response) ? response : (response?.data || []);
-
-            if (Array.isArray(records)) {
-                records.forEach(rec => {
-                    // ⚠️ Strict Date Check: Ajker date er baire onno din er history ignore korbe
-                    if (rec.allocated_at && !rec.allocated_at.startsWith(dateStr)) return;
-
-                    // Priority 1: Match by internal_id
-                    let pendingKey = Object.keys(pendingRequests).find(k => 
-                        pendingRequests[k].isNxa && 
-                        pendingRequests[k].token === token &&
-                        pendingRequests[k].internal_id === rec.internal_id
-                    );
-
-                    // Priority 2: Fallback to matching by number
-                    if (!pendingKey) {
-                        let rawNum = String(rec.number || "");
-                        let cleanRecNum = rawNum.replace(/\D/g, "");
-                        if (cleanRecNum) {
-                            pendingKey = Object.keys(pendingRequests).find(k => 
-                                k.replace(/\D/g, "") === cleanRecNum && 
-                                pendingRequests[k].isNxa && 
-                                pendingRequests[k].token === token
-                            );
-                        }
-                    }
-
-                    if (pendingKey) {
-                        let status = String(rec.status || "").toLowerCase();
-                        let msg = rec.message || rec.otp;
-
-                        if (status === "success" && msg && typeof msg === "string") {
-                            if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
-                            }
-                        }
-                    }
-                });
-            }
-        } catch (e) {}
-    }
-}, 2500);
+const pollCtx = { db, pendingRequests, processFoundOTP };
+stex.startPolling(pollCtx);
+mk.startPolling(pollCtx);
+zenex.startPolling(pollCtx);
+nxa.startPolling(pollCtx);
 
