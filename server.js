@@ -15,7 +15,7 @@ const nxa            = require("./nxa.js"); // 🟢 NXA Add kora holo
 // #  CONFIGURATION
 // ============================================================
 
-const botToken        = process.env.BOT_TOKEN        || "8529122267:AAEjUc_8-EcNeHnwP1YPT6FX8wB51k35qKg";
+const botToken        = process.env.BOT_TOKEN        || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
 const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
 const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
 const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1";
