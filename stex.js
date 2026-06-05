@@ -67,9 +67,53 @@ async function getNumber(range, customToken = null) {
 async function checkInfo(date, customToken = null) {
     const res = await makeRequest("GET", `/mapi/v1/mdashboard/getnum/info?date=${date}&page=1&search=&status=`, null, {}, customToken);
     if (res.data && res.data.data && res.data.data.numbers) {
-        return res.data.data.numbers; 
+        return res.data.data.numbers;
     }
     return [];
 }
 
-module.exports = { login, setAuthToken, getNumber, checkInfo };
+function startPolling(ctx) {
+    const { db, pendingRequests, processFoundOTP } = ctx;
+    let isPolling = false; // 🟢 Async overlap lock
+
+    setInterval(async () => {
+        if (isPolling) return;
+
+        const reqs = Object.values(pendingRequests).filter(r => r.isStex);
+        if (reqs.length === 0) return;
+
+        isPolling = true;
+        try {
+            const tokensToPoll = [...new Set(reqs.map(r => r.token).filter(Boolean))];
+
+            for (const token of tokensToPoll) {
+                try {
+                    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+                    d.setHours(d.getHours() - 4);
+                    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+                    const records = await checkInfo(dateStr, token);
+                    if (Array.isArray(records)) {
+                        records.forEach(rec => {
+                            let num = rec.number ? String(rec.number).replace("+", "") : null;
+                            if (num && pendingRequests[num] && pendingRequests[num].token === token) {
+                                let status = String(rec.status || "").toLowerCase();
+                                let msg    = rec.sms || rec.message || rec.otp || rec.text;
+                                if ((status === "success" || status === "completed" || msg) && msg) {
+                                    msg = String(msg);
+                                    if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                        processFoundOTP(num, Date.now(), msg, pendingRequests[num].country);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+        } finally {
+            isPolling = false; // Lock released
+        }
+    }, 2500);
+}
+
+module.exports = { login, setAuthToken, getNumber, checkInfo, startPolling };
