@@ -40,28 +40,20 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
         if (body && method === "POST") req.write(body);
         req.end();
     });
-}
-
-// MK SMS Login
+}// MK SMS Login
 async function login(email, password) {
-    const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
-    const body = [
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="email"`,
-        ``,
-        `${email}`,
-        `--${boundary}`,
-        `Content-Disposition: form-data; name="password"`,
-        ``,
-        `${password}`,
-        `--${boundary}--`,
-        ``
-    ].join("\r\n");
+    // নতুন প্যারামিটার অনুযায়ী URL-encoded ডেটা তৈরি
+    const body = new URLSearchParams({
+        login_id: email,
+        password: password
+    }).toString();
 
-    const res = await makeRequest("POST", "/API/login_action.php", body, {
-        "content-type": `multipart/form-data; boundary=${boundary}`,
+    // নতুন এন্ডপয়েন্ট /login.php এ রিকোয়েস্ট পাঠানো
+    const res = await makeRequest("POST", "/login.php", body, {
+        "content-type": "application/x-www-form-urlencoded",
         "referer": "https://mknetworkbd.com/login.php",
-        "origin": "https://mknetworkbd.com"
+        "origin": "https://mknetworkbd.com",
+        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
     });
 
     let newCookie = "";
@@ -70,11 +62,25 @@ async function login(email, password) {
         COOKIES = newCookie;
     }
 
-    if (res.data && res.data.status === "success") {
+    // যেহেতু এটি সরাসরি login.php তে ফর্ম সাবমিট, তাই সফল হলে সাধারণত 302 রিডাইরেক্ট হয় বা নতুন কুকি সেট হয়।
+    if (res.status === 302 || (newCookie && newCookie.includes("PHPSESSID"))) {
         return newCookie;
     }
-    throw new Error((res.data && res.data.message) ? res.data.message : "MK Login failed");
+
+    // HTML রেসপন্সে কোনো এরর মেসেজ থাকলে সেটি বের করার চেষ্টা
+    let errorMsg = "MK Login failed. Credentials incorrect or server issue.";
+    if (res.data && typeof res.data === 'string' && res.data.includes("alert-danger")) {
+        const match = res.data.match(/<div[^>]*class="[^"]*alert-danger[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+        if (match) {
+            errorMsg = match[1].replace(/<[^>]+>/g, "").trim();
+        }
+    }
+
+    throw new Error(errorMsg);
 }
+
+
+
 
 // MK Get Number API
 async function getNumber(range, customCookie = null) {
