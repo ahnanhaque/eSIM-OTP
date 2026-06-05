@@ -1905,22 +1905,27 @@ setInterval(async () => {
     const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
     for (const cookie of cookiesToPoll) {
         try {
-            const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            const records = await mk.checkInfo(dateStr, cookie);
+            
+            const records = await mk.checkInfo(cookie);
 
             if (Array.isArray(records)) {
                 records.forEach(rec => {
                     let rawNum      = String(rec.phone_number || rec.number || "");
                     let cleanRecNum = rawNum.replace(/\D/g, "");
+                    
                     if (cleanRecNum) {
                         let pendingKey = Object.keys(pendingRequests).find(
                             k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
                         );
+                        
                         if (pendingKey) {
-                            let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
-                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                            let status = String(rec.status || "").toLowerCase();
+                            let msg = rec.otps || rec.full_sms_list || rec.sms || rec.otp || rec.message || rec.text;
+                            
+                            if (status === "success" && msg) {
+                                if (typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                    processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                                }
                             }
                         }
                     }
@@ -1929,6 +1934,8 @@ setInterval(async () => {
         } catch (e) {}
     }
 }, 2500);
+
+
 
 // Zenex Polling 
 setInterval(async () => {
