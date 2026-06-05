@@ -36,9 +36,9 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
             res.on("end", () => {
                 const text = Buffer.concat(chunks).toString("utf-8");
                 try { 
-                    resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text), rawText: text }); 
+                    resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text) }); 
                 } catch { 
-                    resolve({ status: res.statusCode, headers: res.headers, data: text, rawText: text }); 
+                    resolve({ status: res.statusCode, headers: res.headers, data: text }); 
                 }
             });
         });
@@ -49,51 +49,28 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Login
-async function login(emailOrPhone, password) {
-    let tempCookies = "";
-    const body = JSON.stringify({ emailOrPhone, password });
-
-    const postRes = await makeRequest("POST", "/api/login", body, {
-        "content-type": "application/json"
-    });
-
-    if (postRes.headers && postRes.headers["set-cookie"]) {
-        let extractedCookies = [];
-        postRes.headers["set-cookie"].forEach(c => {
-            extractedCookies.push(c.split(";")[0]);
-        });
-        tempCookies = extractedCookies.join("; ");
+// 🟢 Login to Zenex SMS
+async function login(email, password) {
+    const res = await makeRequest("POST", "/api/login", JSON.stringify({ email, password }));
+    
+    let newCookie = "";
+    if (res.headers && res.headers["set-cookie"]) {
+        newCookie = res.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
+        COOKIES = newCookie;
     }
 
-    if (postRes.data) {
-        let token = postRes.data.token || (postRes.data.data && postRes.data.data.token);
-        if (token) {
-            const tokenCookie = `zenex_token=${token}`;
-            if (!tempCookies.includes('zenex_token')) {
-                tempCookies = tempCookies ? `${tempCookies}; ${tokenCookie}` : tokenCookie;
-            }
-        }
+    if (res.data && res.data.success) {
+        return newCookie;
     }
-
-    if (postRes.status === 200 || postRes.status === 201) {
-        return tempCookies;
-    }
-
-    throw new Error(`Login failed! Server returned ${postRes.status}. Check credentials.`);
+    throw new Error((res.data && res.data.message) ? res.data.message : "Zenex Login failed");
 }
 
-// 🟢 Get Number
+// 🟢 Get Number API
 async function getNumber(range, customCookie = null) {
-    if (!customCookie && !COOKIES) throw new Error("SESSION_EXPIRED");
-
-    const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
-
+    const body = JSON.stringify({ range_id: range, is_national: false, remove_plus: false });
     try {
-        const res = await makeRequest("POST", "/api/getnum", body, {
-            "content-type": "application/json"
-        }, customCookie);
-
+        const res = await makeRequest("POST", "/api/get-number", body, {}, customCookie);
+        
         if (res.status === 401 || res.status === 403 || res.status === 302) {
             throw new Error("SESSION_EXPIRED");
         }
@@ -131,7 +108,7 @@ async function checkInfo(customCookie = null) {
         if (res.data && res.data.success && Array.isArray(res.data.otps)) {
             return res.data.otps.map(item => ({
                 number: item.number,
-                sms: item.otp 
+                sms: item.otp || item.message || item.text
             }));
         }
         return [];
@@ -140,4 +117,46 @@ async function checkInfo(customCookie = null) {
     }
 }
 
-module.exports = { login, setCookies, getCookies, getNumber, checkInfo };
+function startPolling(ctx) {
+    const { db, pendingRequests, processFoundOTP } = ctx;
+    let isPolling = false; // 🟢 Async overlap lock
+
+    setInterval(async () => {
+        if (isPolling) return;
+
+        const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
+        if (reqs.length === 0) return;
+
+        isPolling = true;
+        try {
+            const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+            for (const cookie of cookiesToPoll) {
+                try {
+                    const records = await checkInfo(cookie);
+
+                    if (Array.isArray(records)) {
+                        records.forEach(rec => {
+                            let rawNum      = String(rec.number || "");
+                            let cleanRecNum = rawNum.replace(/\D/g, "");
+                            if (cleanRecNum) {
+                                let pendingKey = Object.keys(pendingRequests).find(
+                                    k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === cookie
+                                );
+                                if (pendingKey) {
+                                    let msg = rec.sms;
+                                    if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                        processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+        } finally {
+            isPolling = false; // Lock released
+        }
+    }, 2500);
+}
+
+module.exports = { login, setCookies, getCookies, getNumber, checkInfo, startPolling };
