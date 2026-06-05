@@ -94,6 +94,7 @@ async function getNumber(range, customCookie = null) {
     ].join("\r\n");
 
     const res = await makeRequest("POST", "/API/api_handler_test.php", body, {
+        "accept": "*/*",
         "content-type": `multipart/form-data; boundary=${boundary}`,
         "referer": "https://mknetworkbd.com/getnum_test.php",
         "origin": "https://mknetworkbd.com"
@@ -108,18 +109,25 @@ async function getNumber(range, customCookie = null) {
     throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
-// 🟢 MK Check OTP info API (Reverted to get_history with correct BD Date)
-async function checkInfo(dateStr, customCookie = null) {
-    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${dateStr}`, null, {
+// 🟢 MK Check OTP info API (Corrected array targeting based on JSON)
+async function checkInfo(customCookie = null) {
+    // Shudhu LIVE OTP check korchi (action=check_otp)
+    const res = await makeRequest("GET", `/API/api_handler_test.php?action=check_otp`, null, {
+        "accept": "application/json, text/javascript, */*; q=0.01",
         "referer": "https://mknetworkbd.com/getnum_test.php"
     }, customCookie);
     
     if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
         return [];
     }
-    if (res.data && res.data.status === "success" && res.data.history) {
-        return res.data.history;
+
+    // 🔥 Exact JSON Key fix: 'data' use korchi, 'history' noi
+    if (res.data && res.data.status === "success") {
+        if (res.data.data && Array.isArray(res.data.data)) {
+            return res.data.data;
+        }
     }
+    
     return [];
 }
 
@@ -204,7 +212,7 @@ async function assignNumber(ctx) {
 }
 
 function startPolling(ctx) {
-    const { db, pendingRequests, processFoundOTP } = ctx;
+    const { pendingRequests, processFoundOTP } = ctx;
     setInterval(async () => {
         const reqs = Object.values(pendingRequests).filter(r => r.isMk);
         if (reqs.length === 0) return;
@@ -212,27 +220,26 @@ function startPolling(ctx) {
         const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
         for (const cookie of cookiesToPoll) {
             try {
-                // Direct BD Time without offset
-                const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                
-                const records = await checkInfo(dateStr, cookie);
+                // Konodhoroner Date parameter pass korchina
+                const records = await checkInfo(cookie);
 
                 if (Array.isArray(records)) {
                     records.forEach(rec => {
                         let rawNum      = String(rec.phone_number || rec.number || "");
                         let cleanRecNum = rawNum.replace(/\D/g, "");
+                        
                         if (cleanRecNum) {
                             let pendingKey = Object.keys(pendingRequests).find(
                                 k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
                             );
+                            
                             if (pendingKey) {
-                                // Important: Added rec.otp and rec.status checks
                                 let status = String(rec.status || "").toLowerCase();
-                                let msg = rec.otp || rec.sms || rec.full_sms_list || rec.otps || rec.message || rec.text;
+                                // JSON er 'otps' ba 'full_sms_list' dhore SMS extract korchi
+                                let msg = rec.otps || rec.full_sms_list || rec.sms || rec.otp || rec.message || rec.text;
                                 
-                                if (status === "success" || msg) {
-                                    if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                if (status === "success" && msg) {
+                                    if (typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                                         processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
                                     }
                                 }
