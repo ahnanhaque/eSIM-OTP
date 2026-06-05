@@ -1895,46 +1895,56 @@ setInterval(async () => {
             }
         } catch (e) {}
     }
-}, 2500);
+}, 1500);
 
-// MK Polling
+// MK Polling (FIXED Logic)
 setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isMk);
-    if (reqs.length === 0) return;
+    if (!db.mkCookies) return;
+    const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
+    if (!hasMkPending) return;
 
-    const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
-    for (const cookie of cookiesToPoll) {
-        try {
-            
-            const records = await mk.checkInfo(cookie);
-
-            if (Array.isArray(records)) {
-                records.forEach(rec => {
-                    let rawNum      = String(rec.phone_number || rec.number || "");
-                    let cleanRecNum = rawNum.replace(/\D/g, "");
+    try {
+        if (db.mkCookies) mk.setCookies(db.mkCookies); 
+        
+        // Bangladesh time fix
+        const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+        
+     
+        const records = await mk.checkInfo(dateStr); 
+        
+        if (Array.isArray(records)) {
+            records.forEach(rec => {
+                ছে
+                let rawNum = String(rec.phone_number || rec.number || "");
+                let cleanRecNum = rawNum.replace(/\D/g, '');
+                
+                if (cleanRecNum) {
                     
-                    if (cleanRecNum) {
-                        let pendingKey = Object.keys(pendingRequests).find(
-                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
-                        );
+                    let pendingKey = Object.keys(pendingRequests).find(k => 
+                        k.replace(/\D/g, '') === cleanRecNum && 
+                        pendingRequests[k].isMk
+                    );
+                    
+                    if (pendingKey) {
+                        // JSON এ যে key গুলো পেয়েছিলে (otps, full_sms_list) সেগুলো যোগ করা হলো
+                        let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
                         
-                        if (pendingKey) {
-                            let status = String(rec.status || "").toLowerCase();
-                            let msg = rec.otps || rec.full_sms_list || rec.sms || rec.otp || rec.message || rec.text;
+                        if (msg && typeof msg === 'string' && 
+                            !msg.toLowerCase().includes("waiting") && 
+                            !msg.toLowerCase().includes("pending")) {
                             
-                            if (status === "success" && msg) {
-                                if (typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                    processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
-                                }
-                            }
+                            let reqData = pendingRequests[pendingKey];
+                            processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
                         }
                     }
-                });
-            }
-        } catch (e) {}
+                }
+            });
+        }
+    } catch (e) {
+        console.log("[MK Polling Error]:", e.message);
     }
-}, 2500);
-
+}, 1500) 
 
 
 // Zenex Polling 
@@ -1966,7 +1976,7 @@ setInterval(async () => {
             }
         } catch (e) {}
     }
-}, 2500);
+}, 1500);
 
 // NXA Polling 
 setInterval(async () => {
@@ -2021,4 +2031,4 @@ setInterval(async () => {
             }
         } catch (e) {}
     }
-}, 2500);
+}, 1500);
