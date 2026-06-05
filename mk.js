@@ -42,67 +42,43 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Auto Login Function
+// MK SMS Login
 async function login(email, password) {
-    let tempCookies = ""; 
+    const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+    const body = [
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="email"`,
+        ``,
+        `${email}`,
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="password"`,
+        ``,
+        `${password}`,
+        `--${boundary}--`,
+        ``
+    ].join("\r\n");
 
-    const getRes = await makeRequest("GET", "/login.php", null, {}, tempCookies);
-    if (getRes.headers && getRes.headers["set-cookie"]) {
-        let initialCookies = [];
-        getRes.headers["set-cookie"].forEach(c => initialCookies.push(c.split(";")[0]));
-        tempCookies = initialCookies.join("; ");
-    }
+    const res = await makeRequest("POST", "/API/login_action.php", body, {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        "referer": "https://mknetworkbd.com/login.php",
+        "origin": "https://mknetworkbd.com"
+    });
 
-    const body = new URLSearchParams({
-        login_id: email,
-        password: password
-    }).toString();
-
-    const res = await makeRequest("POST", "/login.php", body, {
-        "content-type": "application/x-www-form-urlencoded",
-        "referer": "https://mknetworkbd.com/login.php"
-    }, tempCookies);
-
+    let newCookie = "";
     if (res.headers && res.headers["set-cookie"]) {
-        let extractedCookies = tempCookies ? tempCookies.split("; ") : [];
-        res.headers["set-cookie"].forEach(c => {
-            let cookiePair = c.split(";")[0];
-            let cookieName = cookiePair.split("=")[0];
-            extractedCookies = extractedCookies.filter(existing => !existing.startsWith(cookieName + "="));
-            extractedCookies.push(cookiePair);
-        });
-        tempCookies = extractedCookies.join("; ");
-    }
-    
-    if (res.status === 302 || tempCookies.includes("mk_remember") || (res.headers && res.headers.location)) {
-        return tempCookies; 
+        newCookie = res.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
+        COOKIES = newCookie;
     }
 
-    throw new Error("Login failed. Please check your email and password.");
+    if (res.data && res.data.status === "success") {
+        return newCookie;
+    }
+    throw new Error((res.data && res.data.message) ? res.data.message : "MK Login failed");
 }
 
-async function verifyCookies(cookieStr) {
-    const oldCookies = COOKIES;
-    COOKIES = cookieStr;
-    try {
-        const res = await makeRequest("GET", "/getnum_test.php");
-        if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
-            COOKIES = oldCookies;
-            throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember.");
-        }
-        if (res.data && typeof res.data === 'string' && !res.data.includes('get_number')) {
-            COOKIES = oldCookies;
-            throw new Error("Dashboard load failed. Please ensure your account is active.");
-        }
-        return true; 
-    } catch (err) {
-        COOKIES = oldCookies;
-        throw err;
-    }
-}
-
+// MK Get Number API
 async function getNumber(range, customCookie = null) {
-    const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
+    const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
     const body = [
         `--${boundary}`,
         `Content-Disposition: form-data; name="action"`,
@@ -132,19 +108,65 @@ async function getNumber(range, customCookie = null) {
     throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
+// MK Check OTP info API (Limit changed to 100)
 async function checkInfo(date, customCookie = null) {
-    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`, null, {
+    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=100&date=${date}`, null, {
         "accept": "*/*",
         "referer": "https://mknetworkbd.com/getnum_test.php"
     }, customCookie);
     
     if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
-        throw new Error("SESSION_EXPIRED");
+        return [];
     }
-    if (res.data && res.data.status === "success" && res.data.data) {
-        return res.data.data; 
+    if (res.data && res.data.status === "success" && res.data.history) {
+        return res.data.history;
     }
     return [];
 }
 
-module.exports = { setCookies, verifyCookies, getNumber, checkInfo, login };
+function startPolling(ctx) {
+    const { db, pendingRequests, processFoundOTP } = ctx;
+    let isPolling = false; // 🟢 Async overlap lock
+
+    setInterval(async () => {
+        if (isPolling) return;
+
+        const reqs = Object.values(pendingRequests).filter(r => r.isMk);
+        if (reqs.length === 0) return;
+
+        isPolling = true; // Lock activated
+        try {
+            const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+
+            for (const cookie of cookiesToPoll) {
+                try {
+                    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+                    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                    const records = await checkInfo(dateStr, cookie);
+
+                    if (Array.isArray(records)) {
+                        records.forEach(rec => {
+                            let rawNum      = String(rec.phone_number || rec.number || "");
+                            let cleanRecNum = rawNum.replace(/\D/g, "");
+                            if (cleanRecNum) {
+                                let pendingKey = Object.keys(pendingRequests).find(
+                                    k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
+                                );
+                                if (pendingKey) {
+                                    let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
+                                    if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                        processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                } catch (e) {}
+            }
+        } finally {
+            isPolling = false; // Lock released
+        }
+    }, 2500);
+}
+
+module.exports = { login, setCookies, getNumber, checkInfo, startPolling };
