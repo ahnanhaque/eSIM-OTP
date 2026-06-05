@@ -10,9 +10,10 @@ function setCookies(cookies) {
 function makeRequest(method, path, body, extraHeaders = {}, customCookies = null) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "accept": "application/json, text/javascript, */*; q=0.01",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
             "cookie": customCookies !== null ? customCookies : (COOKIES || ""),
+            "x-requested-with": "XMLHttpRequest",
             ...extraHeaders
         };
 
@@ -93,7 +94,6 @@ async function getNumber(range, customCookie = null) {
     ].join("\r\n");
 
     const res = await makeRequest("POST", "/API/api_handler_test.php", body, {
-        "accept": "*/*",
         "content-type": `multipart/form-data; boundary=${boundary}`,
         "referer": "https://mknetworkbd.com/getnum_test.php",
         "origin": "https://mknetworkbd.com"
@@ -108,25 +108,17 @@ async function getNumber(range, customCookie = null) {
     throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
-// 🟢 MK Check OTP info API (Updated to LIVE CHECK without Date)
-async function checkInfo(customCookie = null) {
-    // We are now using 'check_otp' instead of 'get_history'
-    const res = await makeRequest("GET", `/API/api_handler_test.php?action=check_otp`, null, {
-        "accept": "*/*",
+// 🟢 MK Check OTP info API (Reverted to get_history with correct BD Date)
+async function checkInfo(dateStr, customCookie = null) {
+    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${dateStr}`, null, {
         "referer": "https://mknetworkbd.com/getnum_test.php"
     }, customCookie);
     
     if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
         return [];
     }
-
-    // Flexible parsing for various JSON response formats
-    if (res.data) {
-        if (Array.isArray(res.data)) return res.data;
-        if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
-        if (res.data.history && Array.isArray(res.data.history)) return res.data.history;
-        if (res.data.otps && Array.isArray(res.data.otps)) return res.data.otps;
-        if (res.data.numbers && Array.isArray(res.data.numbers)) return res.data.numbers;
+    if (res.data && res.data.status === "success" && res.data.history) {
+        return res.data.history;
     }
     return [];
 }
@@ -220,8 +212,11 @@ function startPolling(ctx) {
         const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
         for (const cookie of cookiesToPoll) {
             try {
-                // NO MORE DATE CALCULATION NEEDED HERE 🎉
-                const records = await checkInfo(cookie);
+                // Direct BD Time without offset
+                const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                
+                const records = await checkInfo(dateStr, cookie);
 
                 if (Array.isArray(records)) {
                     records.forEach(rec => {
@@ -232,10 +227,14 @@ function startPolling(ctx) {
                                 k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
                             );
                             if (pendingKey) {
-                                // Added rec.otp to the check list just in case
-                                let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text || rec.otp;
-                                if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                    processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                                // Important: Added rec.otp and rec.status checks
+                                let status = String(rec.status || "").toLowerCase();
+                                let msg = rec.otp || rec.sms || rec.full_sms_list || rec.otps || rec.message || rec.text;
+                                
+                                if (status === "success" || msg) {
+                                    if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                        processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                                    }
                                 }
                             }
                         }
