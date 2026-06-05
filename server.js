@@ -1897,54 +1897,38 @@ setInterval(async () => {
     }
 }, 1500);
 
-// MK Polling (FIXED Logic)
+// MK Polling
 setInterval(async () => {
-    if (!db.mkCookies) return;
-    const hasMkPending = Object.values(pendingRequests).some(req => req.isMk);
-    if (!hasMkPending) return;
+    const reqs = Object.values(pendingRequests).filter(r => r.isMk);
+    if (reqs.length === 0) return;
 
-    try {
-        if (db.mkCookies) mk.setCookies(db.mkCookies); 
-        
-        // Bangladesh time fix
-        const d = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Dhaka"}));
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-        
-     
-        const records = await mk.checkInfo(dateStr); 
-        
-        if (Array.isArray(records)) {
-            records.forEach(rec => {
-                ছে
-                let rawNum = String(rec.phone_number || rec.number || "");
-                let cleanRecNum = rawNum.replace(/\D/g, '');
-                
-                if (cleanRecNum) {
-                    
-                    let pendingKey = Object.keys(pendingRequests).find(k => 
-                        k.replace(/\D/g, '') === cleanRecNum && 
-                        pendingRequests[k].isMk
-                    );
-                    
-                    if (pendingKey) {
-                        // JSON এ যে key গুলো পেয়েছিলে (otps, full_sms_list) সেগুলো যোগ করা হলো
-                        let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
-                        
-                        if (msg && typeof msg === 'string' && 
-                            !msg.toLowerCase().includes("waiting") && 
-                            !msg.toLowerCase().includes("pending")) {
-                            
-                            let reqData = pendingRequests[pendingKey];
-                            processFoundOTP(pendingKey, Date.now(), msg, reqData.country);
+    const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+    for (const cookie of cookiesToPoll) {
+        try {
+            const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            const records = await mk.checkInfo(dateStr, cookie);
+
+            if (Array.isArray(records)) {
+                records.forEach(rec => {
+                    let rawNum      = String(rec.phone_number || rec.number || "");
+                    let cleanRecNum = rawNum.replace(/\D/g, "");
+                    if (cleanRecNum) {
+                        let pendingKey = Object.keys(pendingRequests).find(
+                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
+                        );
+                        if (pendingKey) {
+                            let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
+                            if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
+                            }
                         }
                     }
-                }
-            });
-        }
-    } catch (e) {
-        console.log("[MK Polling Error]:", e.message);
+                });
+            }
+        } catch (e) {}
     }
-}, 1500) 
+}, 1500);
 
 
 // Zenex Polling 
