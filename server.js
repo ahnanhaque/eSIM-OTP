@@ -1363,8 +1363,8 @@ bot.on("callback_query", async (query) => {
                 currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1;
                 dName += ` V${currentV[info.cleanName]}`;
             }
-            let stock = item.type === "iva" ? availPlatformDB[item.range].length : "∞";
-            countryButtons.push([{ text: `${dName} | 📦: ${stock}`, callback_data: `assign_${platform}_${item.range}` }]);
+            let stock = item.type === "iva" ? availPlatformDB[item.range].length : "∞";            
+            countryButtons.push([{ text: `${dName} | 📦: ${stock}`, callback_data: `assign_${item.type}_${platform}_${item.range}` }]);
         });
         countryButtons.push([{ text: "✖ Close Menu", callback_data: "close_menu" }, { text: "⬅️ Back", callback_data: "menu_platform" }]);
         bot.editMessageText(`🌍 Select a country from the available options:`,
@@ -1377,11 +1377,11 @@ bot.on("callback_query", async (query) => {
         if (activeNumberMessages[chatId] && activeNumberMessages[chatId] !== messageId)
             bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(() => {});
         delete activeNumberMessages[chatId];
-
-        const pureData       = data.replace("assign_next_", "").replace("assign_", "");
-        const firstUnderscore = pureData.indexOf("_");
-        const platform        = pureData.substring(0, firstUnderscore);
-        const sel             = pureData.substring(firstUnderscore + 1);
+        const pureData = data.replace("assign_next_", "").replace("assign_", "");
+        const parts    = pureData.split("_");
+        const panelType= parts[0];  
+        const platform = parts[1];  
+        const sel      = parts.slice(2).join("_");
 
         clearPendingForChat(chatId);
 
@@ -1391,7 +1391,7 @@ bot.on("callback_query", async (query) => {
         let nxaEntry = db.nxaRanges?.[platform]?.[sel];
 
         // NXA ASSIGNMENT
-        if (nxaEntry) {
+        if (panelType === "nxa" && nxaEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
             const countryName = typeof nxaEntry === "object" ? nxaEntry.country : nxaEntry;
