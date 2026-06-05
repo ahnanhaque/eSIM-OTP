@@ -40,20 +40,28 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
         if (body && method === "POST") req.write(body);
         req.end();
     });
-}// MK SMS Login
-async function login(email, password) {
-    // নতুন প্যারামিটার অনুযায়ী URL-encoded ডেটা তৈরি
-    const body = new URLSearchParams({
-        login_id: email,
-        password: password
-    }).toString();
+}
 
-    // নতুন এন্ডপয়েন্ট /login.php এ রিকোয়েস্ট পাঠানো
-    const res = await makeRequest("POST", "/login.php", body, {
-        "content-type": "application/x-www-form-urlencoded",
+// 🟢 MK Login API
+async function login(email, password) {
+    const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+    const body = [
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="email"`,
+        ``,
+        `${email}`,
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="password"`,
+        ``,
+        `${password}`,
+        `--${boundary}--`,
+        ``
+    ].join("\r\n");
+
+    const res = await makeRequest("POST", "/API/login_action.php", body, {
+        "content-type": `multipart/form-data; boundary=${boundary}`,
         "referer": "https://mknetworkbd.com/login.php",
-        "origin": "https://mknetworkbd.com",
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+        "origin": "https://mknetworkbd.com"
     });
 
     let newCookie = "";
@@ -62,27 +70,13 @@ async function login(email, password) {
         COOKIES = newCookie;
     }
 
-    // যেহেতু এটি সরাসরি login.php তে ফর্ম সাবমিট, তাই সফল হলে সাধারণত 302 রিডাইরেক্ট হয় বা নতুন কুকি সেট হয়।
-    if (res.status === 302 || (newCookie && newCookie.includes("PHPSESSID"))) {
+    if (res.data && res.data.status === "success") {
         return newCookie;
     }
-
-    // HTML রেসপন্সে কোনো এরর মেসেজ থাকলে সেটি বের করার চেষ্টা
-    let errorMsg = "MK Login failed. Credentials incorrect or server issue.";
-    if (res.data && typeof res.data === 'string' && res.data.includes("alert-danger")) {
-        const match = res.data.match(/<div[^>]*class="[^"]*alert-danger[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-        if (match) {
-            errorMsg = match[1].replace(/<[^>]+>/g, "").trim();
-        }
-    }
-
-    throw new Error(errorMsg);
+    throw new Error((res.data && res.data.message) ? res.data.message : "MK Login failed");
 }
 
-
-
-
-// MK Get Number API
+// 🟢 MK Get Number API
 async function getNumber(range, customCookie = null) {
     const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
     const body = [
@@ -114,9 +108,10 @@ async function getNumber(range, customCookie = null) {
     throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
-// MK Check OTP info API (Limit changed to 100)
-async function checkInfo(date, customCookie = null) {
-    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=100&date=${date}`, null, {
+// 🟢 MK Check OTP info API (Updated to LIVE CHECK without Date)
+async function checkInfo(customCookie = null) {
+    // We are now using 'check_otp' instead of 'get_history'
+    const res = await makeRequest("GET", `/API/api_handler_test.php?action=check_otp`, null, {
         "accept": "*/*",
         "referer": "https://mknetworkbd.com/getnum_test.php"
     }, customCookie);
@@ -124,55 +119,131 @@ async function checkInfo(date, customCookie = null) {
     if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
         return [];
     }
-    if (res.data && res.data.status === "success" && res.data.history) {
-        return res.data.history;
+
+    // Flexible parsing for various JSON response formats
+    if (res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (res.data.data && Array.isArray(res.data.data)) return res.data.data;
+        if (res.data.history && Array.isArray(res.data.history)) return res.data.history;
+        if (res.data.otps && Array.isArray(res.data.otps)) return res.data.otps;
+        if (res.data.numbers && Array.isArray(res.data.numbers)) return res.data.numbers;
     }
     return [];
 }
 
+// ============================================================
+// 🟢 MODULAR ASSIGNMENT & POLLING LOGIC
+// ============================================================
+
+async function assignNumber(ctx) {
+    const {
+        chatId, messageId, queryId, sel, platform, panelEntry,
+        bot, botInfo, db, saveDB, getCountryInfo, GROUP_INVITE_LINK,
+        pendingRequests, inUseNumbers, activeNumberMessages, activeTimeouts
+    } = ctx;
+
+    bot.answerCallbackQuery(queryId, { text: "⏳ Fetching numbers...", show_alert: false }).catch(()=>{});
+    const limit       = db.settings.maxNumbers || 4;
+    const countryName = typeof panelEntry === "object" ? panelEntry.country : panelEntry;
+    const methodName  = typeof panelEntry === "object" ? panelEntry.method  : "";
+    let fetchedNums   = [];
+
+    bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(() => {});
+
+    let userP = db.userPanels[chatId] || {};
+    let isUserMk = db.settings.userPanelAccess && userP.mkCookies;
+    const cookieToUse = isUserMk ? userP.mkCookies : db.mkCookies;
+    const credsToUse  = isUserMk ? userP.mkCreds : db.mkCreds;
+
+    for (let i = 0; i < limit; i++) {
+        try {
+            const numData = await getNumber(sel, cookieToUse);
+            const n = numData.number ? numData.number.replace("+", "") : "";
+            if (n) {
+                fetchedNums.push(n);
+                inUseNumbers[n]    = true;
+                pendingRequests[n] = { chatId, country: countryName, isMk: true, platform, cookie: cookieToUse };
+            }
+        } catch (e) {
+            if (i === 0 && credsToUse?.email) {
+                try {
+                    const newCookie = await login(credsToUse.email, credsToUse.password);
+                    if (isUserMk) db.userPanels[chatId].mkCookies = newCookie; else db.mkCookies = newCookie;
+                    saveDB();
+                    const retryData = await getNumber(sel, newCookie);
+                    const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
+                    if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform, cookie: newCookie }; continue; }
+                } catch (err2) { break; }
+            }
+            break;
+        }
+    }
+
+    if (fetchedNums.length === 0) {
+        bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(() => {});
+        return;
+    }
+
+    const info    = getCountryInfo(countryName);
+    let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+    let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+    if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
+    replyText += `\n\n👇 _Click a number below to copy:_`;
+
+    let actionMenu = { inline_keyboard: [] };
+    fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
+    actionMenu.inline_keyboard.push(
+        [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+        [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+    );
+
+    bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+        activeNumberMessages[chatId] = messageId;
+        activeTimeouts[chatId] = setTimeout(() => {
+            fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+            let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+            if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
+            expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+            fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
+            bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+            delete activeTimeouts[chatId]; 
+        }, 15 * 60 * 1000);
+    }).catch(() => {});
+}
+
 function startPolling(ctx) {
     const { db, pendingRequests, processFoundOTP } = ctx;
-    let isPolling = false; // 🟢 Async overlap lock
-
     setInterval(async () => {
-        if (isPolling) return;
-
         const reqs = Object.values(pendingRequests).filter(r => r.isMk);
         if (reqs.length === 0) return;
 
-        isPolling = true; // Lock activated
-        try {
-            const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+        const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+        for (const cookie of cookiesToPoll) {
+            try {
+                // NO MORE DATE CALCULATION NEEDED HERE 🎉
+                const records = await checkInfo(cookie);
 
-            for (const cookie of cookiesToPoll) {
-                try {
-                    const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
-                    const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-                    const records = await checkInfo(dateStr, cookie);
-
-                    if (Array.isArray(records)) {
-                        records.forEach(rec => {
-                            let rawNum      = String(rec.phone_number || rec.number || "");
-                            let cleanRecNum = rawNum.replace(/\D/g, "");
-                            if (cleanRecNum) {
-                                let pendingKey = Object.keys(pendingRequests).find(
-                                    k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
-                                );
-                                if (pendingKey) {
-                                    let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
-                                    if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                        processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
-                                    }
+                if (Array.isArray(records)) {
+                    records.forEach(rec => {
+                        let rawNum      = String(rec.phone_number || rec.number || "");
+                        let cleanRecNum = rawNum.replace(/\D/g, "");
+                        if (cleanRecNum) {
+                            let pendingKey = Object.keys(pendingRequests).find(
+                                k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
+                            );
+                            if (pendingKey) {
+                                // Added rec.otp to the check list just in case
+                                let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text || rec.otp;
+                                if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
+                                    processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
                                 }
                             }
-                        });
-                    }
-                } catch (e) {}
-            }
-        } finally {
-            isPolling = false; // Lock released
+                        }
+                    });
+                }
+            } catch (e) {}
         }
     }, 2500);
 }
 
-module.exports = { login, setCookies, getNumber, checkInfo, startPolling };
+module.exports = { login, setCookies, getNumber, checkInfo, assignNumber, startPolling };
