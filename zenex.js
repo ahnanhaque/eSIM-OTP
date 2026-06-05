@@ -1,32 +1,18 @@
 const https = require("https");
 
-const BASE_URL = "https://zenexnetwork.com";
-let COOKIES = "";
+const BASE_URL = "https://www.zenexnetwork.com";
 
-function setCookies(cookies) {
-    COOKIES = cookies;
-}
-
-function getCookies() {
-    return COOKIES;
-}
-
-function makeRequest(method, path, body, extraHeaders = {}, customCookies = null) {
+// 🟢 Helper Function for API Requests
+function makeRequest(method, path, body, apiKey = null) {
     return new Promise((resolve, reject) => {
         const headers = {
-            "accept": "application/json, text/plain, */*",
-            "accept-language": "en-US,en;q=0.9",
-            "origin": BASE_URL,
-            "referer": `${BASE_URL}/`,
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-            "cookie": customCookies !== null ? customCookies : (COOKIES || ""),
-            ...extraHeaders
+            "accept": "application/json",
+            "mapikey": apiKey || "", // 🟢 API Key in Header
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         };
 
         if (body && method === "POST") {
-            if (!headers["content-type"]) {
-                headers["content-type"] = "application/json";
-            }
+            headers["content-type"] = "application/json";
             headers["content-length"] = Buffer.byteLength(body);
         }
 
@@ -36,9 +22,9 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
             res.on("end", () => {
                 const text = Buffer.concat(chunks).toString("utf-8");
                 try { 
-                    resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text) }); 
+                    resolve({ status: res.statusCode, data: JSON.parse(text) }); 
                 } catch { 
-                    resolve({ status: res.statusCode, headers: res.headers, data: text }); 
+                    resolve({ status: res.statusCode, data: text }); 
                 }
             });
         });
@@ -49,66 +35,60 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
     });
 }
 
-// 🟢 Login to Zenex SMS
+// 🟢 Fake Login (Saves API Key instead of Cookies)
 async function login(email, password) {
-    const res = await makeRequest("POST", "/api/login", JSON.stringify({ email, password }));
+    // We treat the "password" (or email) input from Telegram as the API Key
+    const apiKey = password || email; 
+
+    // Test the API key by fetching history
+    const res = await makeRequest("GET", "/api/v1/numsuccess/info", null, apiKey);
     
-    let newCookie = "";
-    if (res.headers && res.headers["set-cookie"]) {
-        newCookie = res.headers["set-cookie"].map(c => c.split(";")[0]).join("; ");
-        COOKIES = newCookie;
+    if (res.status === 200 && res.data && res.data.meta && res.data.meta.status === "success") {
+        return apiKey; // This API key will be saved in DB as "zenexCookies"
     }
 
-    if (res.data && res.data.success) {
-        return newCookie;
-    }
-    throw new Error((res.data && res.data.message) ? res.data.message : "Zenex Login failed");
+    throw new Error("Invalid Zenex API Key! Please check your key.");
 }
 
-// 🟢 Get Number API
-async function getNumber(range, customCookie = null) {
-    const body = JSON.stringify({ range_id: range, is_national: false, remove_plus: false });
+// 🟢 Get Number via Official API
+async function getNumber(range, apiKey = null) {
+    if (!apiKey) throw new Error("SESSION_EXPIRED");
+
+    const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
+
     try {
-        const res = await makeRequest("POST", "/api/get-number", body, {}, customCookie);
-        
-        if (res.status === 401 || res.status === 403 || res.status === 302) {
+        const res = await makeRequest("POST", "/api/v1/getnum", body, apiKey);
+
+        if (res.status === 401 || res.status === 403) {
             throw new Error("SESSION_EXPIRED");
         }
 
-        if (res.data && res.data.success && res.data.data) {
+        // Check if status is success based on Zenex documentation
+        if (res.data && res.data.meta && res.data.meta.status === "success" && res.data.data) {
             return { number: res.data.data.full_number || res.data.data.number };
         }
         
-        throw new Error((res.data && res.data.message) ? res.data.message : "Out of stock or error");
+        throw new Error((res.data && res.data.message) ? res.data.message : "Out of stock or error in Zenex");
     } catch (err) {
-        if (err.message.includes("Unexpected token") || err.message.includes("JSON") || err.message.includes("SESSION_EXPIRED")) {
-            throw new Error("SESSION_EXPIRED");
-        }
         throw err;
     }
 }
 
-// 🟢 Check Info (Polling OTPs with Heartbeat)
-async function checkInfo(customCookie = null) {
-    if (!customCookie && !COOKIES) return [];
+// 🟢 Check Info (Polling OTPs via Official API)
+async function checkInfo(apiKey = null) {
+    if (!apiKey) return [];
 
     try {
-        const timestamp = Date.now();
-        
-        // 🟢 Heartbeat
-        await makeRequest("GET", `/api/sync-orders?t=${timestamp}`, null, {}, customCookie);
-
-        // OTP Check
-        const res = await makeRequest("GET", `/api/check-otp?t=${timestamp}`, null, {}, customCookie);
+        const res = await makeRequest("GET", "/api/v1/numsuccess/info", null, apiKey);
 
         if (res.status === 401 || res.status === 403) {
             return []; 
         }
 
-        if (res.data && res.data.success && Array.isArray(res.data.otps)) {
-            return res.data.otps.map(item => ({
+        if (res.data && res.data.data && Array.isArray(res.data.data.otps)) {
+            return res.data.data.otps.map(item => ({
                 number: item.number,
-                sms: item.otp || item.message || item.text
+                sms: item.otp 
             }));
         }
         return [];
@@ -117,10 +97,12 @@ async function checkInfo(customCookie = null) {
     }
 }
 
+// 🟢 Smart Polling with Anti-Firewall Delay
 function startPolling(ctx) {
     const { db, pendingRequests, processFoundOTP } = ctx;
-    let isPolling = false; // 🟢 Async overlap lock
+    let isPolling = false; // Async overlap lock
 
+    // Zenex recommends 3-5 seconds interval to avoid Smart Firewall blocks
     setInterval(async () => {
         if (isPolling) return;
 
@@ -129,19 +111,23 @@ function startPolling(ctx) {
 
         isPolling = true;
         try {
-            const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
-            for (const cookie of cookiesToPoll) {
+            // Here "cookie" is actually our API Key saved from the login function
+            const apiKeysToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
+            
+            for (const apiKey of apiKeysToPoll) {
                 try {
-                    const records = await checkInfo(cookie);
+                    const records = await checkInfo(apiKey);
 
                     if (Array.isArray(records)) {
                         records.forEach(rec => {
                             let rawNum      = String(rec.number || "");
                             let cleanRecNum = rawNum.replace(/\D/g, "");
+                            
                             if (cleanRecNum) {
                                 let pendingKey = Object.keys(pendingRequests).find(
-                                    k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === cookie
+                                    k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === apiKey
                                 );
+                                
                                 if (pendingKey) {
                                     let msg = rec.sms;
                                     if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
@@ -156,7 +142,7 @@ function startPolling(ctx) {
         } finally {
             isPolling = false; // Lock released
         }
-    }, 2500);
+    }, 3500); // 3.5 seconds to comply with Zenex Firewall rules
 }
 
-module.exports = { login, setCookies, getCookies, getNumber, checkInfo, startPolling };
+module.exports = { login, getNumber, checkInfo, startPolling };
