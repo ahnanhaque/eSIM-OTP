@@ -48,7 +48,35 @@ app.get("/api/status", (req, res) => {
         version: "1.0.0"
     });
 });
+app.get("/api/ranges", (req, res) => {
+    try {
 
+        const ranges = [];
+
+        Object.keys(db.numbers || {}).forEach(country => {
+
+            Object.keys(db.numbers[country] || {}).forEach(platform => {
+
+                ranges.push({
+                    country,
+                    platform
+                });
+
+            });
+
+        });
+
+        res.json(ranges);
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/dashboard", (req, res) => {
     res.json({
         totalUsers: db.users.length,
