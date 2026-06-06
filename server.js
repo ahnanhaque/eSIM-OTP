@@ -582,25 +582,26 @@ bot.on("message", async (msg) => {
         ).catch(() => {});
     }
 
-        else if (text === "📈 Live Traffic") {
+            else if (text === "📈 Live Traffic") {
         const apiKey = db.zenexCookies;
         if (!apiKey) {
-            return bot.sendMessage(chatId, "⚠️ **Zenex Panel is not logged in.**\nNo live traffic data available at the moment.", { parse_mode: "Markdown" }).catch(() => {});
+            return bot.sendMessage(chatId, "⚠️ **Panel is not logged in.**\nNo live traffic data available at the moment.", { parse_mode: "Markdown" }).catch(() => {});
         }
-        bot.sendMessage(chatId, "⏳ **Fetching Live Traffic from Zenex...**", { parse_mode: "Markdown" }).then(sentMsg => {
+        bot.sendMessage(chatId, "⏳ **Fetching Live Traffic...**", { parse_mode: "Markdown" }).then(sentMsg => {
             zenex.getLiveTraffic(apiKey).then(routes => {
                 if (!routes || routes.length === 0) {
                     return bot.editMessageText("📭 **No active routing traffic found right now.**", { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
                 }
                 
-                let replyText = "📈 **TOP HIT RANGES (Zenex Live)**\n━━━━━━━━━━━━━━━━━━\n";
+                let replyText = "📈 **LIVE TRAFFIC**\n━━━━━━━━━━━━━━━━━━\n";
                 routes.slice(0, 10).forEach(r => {
                     let cleanRange = String(r.range || "").replace(/X/g, "0");
                     let info = getCountryInfo(detectCountryFromRange(cleanRange));
-                    replyText += `🎯 **Range:** \`${r.range}\`\n`;
+                    
+                    // Removed panel name and range, kept only Country, Platform, and Hits
                     replyText += `🌍 **Country:** ${info.flag} ${info.cleanName}\n`;
-                    replyText += `🌐 **Platform:** ${r.service} ${r.tag ? `[${r.tag}]` : ""}\n`;
-                    replyText += `🔥 **Total Hits:** ${r.hits}\n━━━━━━━━━━━━━━━━━━\n`;
+                    replyText += `🌐 **Platform:** ${r.service}\n`;
+                    replyText += `🔥 **Hits:** ${r.hits}\n━━━━━━━━━━━━━━━━━━\n`;
                 });
                 
                 bot.editMessageText(replyText, { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
@@ -1973,18 +1974,38 @@ setInterval(async () => {
         if (ranges && ranges.length > 0) {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             
+            // Get Country Info
+            let cleanRange = String(randomRoute.range || "").replace(/X/g, "0");
+            let info = getCountryInfo(detectCountryFromRange(cleanRange));
+
+            // Generate and Mask Number
             let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
-            const fakeOtp = Math.floor(100000 + Math.random() * 900000); 
+            let numStr = String(fakeNum);
+            let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+
+            const fakeOtp = Math.floor(10000 + Math.random() * 90000); 
             
             let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-            let msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+            let msgText = `${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
             
-            if (platName === "FACEBOOK") msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
-            else if (platName === "INSTAGRAM") msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
+            // Format SMS exactly like real ones
+            if (platName === "FACEBOOK") msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
+            else if (platName === "INSTAGRAM") msgText = `${fakeOtp} is your Instagram code. Don't share it.`;
             
-            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
+            // Exact Real Message Format
+            let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
             
-            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
+            // Add exactly the same buttons as real OTP
+            let groupMarkup = { inline_keyboard: [] };
+            let groupButtonRow = [];
+            if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
+            groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } });
+            
+            if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
+
+            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { 
+                reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined 
+            }).catch(() => {});
         }
     } catch (e) {}
 }, 12000);
