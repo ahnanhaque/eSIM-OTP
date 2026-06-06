@@ -216,9 +216,10 @@ function getReplyMenu(chatId, username) {
     ];
     
     if (isAdmin(chatId, username)) {
-        keyboard.push([{ text: "💬 Support" }, { text: "⚙️ Admin Panel" }]);
+        keyboard.push([{ text: "💬 Support" }, { text: "📈 Live Traffic" }]);
+        keyboard.push([{ text: "⚙️ Admin Panel" }]);
     } else {
-        keyboard.push([{ text: "💬 Support" }]);
+        keyboard.push([{ text: "💬 Support" }, { text: "📈 Live Traffic" }]);
     }
     return { keyboard, resize_keyboard: true, is_persistent: true };
 }
@@ -439,7 +440,7 @@ bot.on("message", async (msg) => {
 
     if (!text || text.startsWith("/")) return;
 
-    const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel"];
+   const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "📈 Live Traffic"];
     if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
         return sendJoinPrompt(chatId);
     }
@@ -579,6 +580,34 @@ bot.on("message", async (msg) => {
             "💬 <b>Support:</b>\nPlease contact our admin @ahnan_haque_mahi for any assistance.",
             { parse_mode: "HTML" }
         ).catch(() => {});
+    }
+
+        else if (text === "📈 Live Traffic") {
+        const apiKey = db.zenexCookies;
+        if (!apiKey) {
+            return bot.sendMessage(chatId, "⚠️ **Zenex Panel is not logged in.**\nNo live traffic data available at the moment.", { parse_mode: "Markdown" }).catch(() => {});
+        }
+        bot.sendMessage(chatId, "⏳ **Fetching Live Traffic from Zenex...**", { parse_mode: "Markdown" }).then(sentMsg => {
+            zenex.getLiveTraffic(apiKey).then(routes => {
+                if (!routes || routes.length === 0) {
+                    return bot.editMessageText("📭 **No active routing traffic found right now.**", { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
+                }
+                
+                let replyText = "📈 **TOP HIT RANGES (Zenex Live)**\n━━━━━━━━━━━━━━━━━━\n";
+                routes.slice(0, 10).forEach(r => {
+                    let cleanRange = String(r.range || "").replace(/X/g, "0");
+                    let info = getCountryInfo(detectCountryFromRange(cleanRange));
+                    replyText += `🎯 **Range:** \`${r.range}\`\n`;
+                    replyText += `🌍 **Country:** ${info.flag} ${info.cleanName}\n`;
+                    replyText += `🌐 **Platform:** ${r.service} ${r.tag ? `[${r.tag}]` : ""}\n`;
+                    replyText += `🔥 **Total Hits:** ${r.hits}\n━━━━━━━━━━━━━━━━━━\n`;
+                });
+                
+                bot.editMessageText(replyText, { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
+            }).catch(e => {
+                bot.editMessageText("❌ **Failed to fetch traffic data.**", { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
+            });
+        });
     }
 
     else if (text === "⚙️ Admin Panel" && isAdmin(chatId, username)) {
