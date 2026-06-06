@@ -107,19 +107,19 @@ app.get("/api/panels", (req, res) => {
     res.json([
         {
             id: "mk",
-            name: "MK",
+            name: "MK Network",
             connected: !!db.mkCookies,
             activeAccount: db.mkCreds?.email || null
         },
         {
             id: "stex",
-            name: "STEX",
+            name: "STEX SMS",
             connected: !!db.stexToken,
             activeAccount: db.stexCreds?.email || null
         },
         {
             id: "zenex",
-            name: "ZENEX",
+            name: "Zenex",
             connected: !!db.zenexCookies,
             activeAccount: db.zenexCreds?.email || null
         },
