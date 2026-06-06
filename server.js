@@ -101,6 +101,58 @@ app.get("/api/ranges", (req, res) => {
 
     }
 });
+
+app.get("/api/panels", (req, res) => {
+    res.json({
+        mk: {
+            connected: !!db.mkCookies,
+            activeAccount: db.mkCreds?.email || null
+        },
+        stex: {
+            connected: !!db.stexToken,
+            activeAccount: db.stexCreds?.email || null
+        },
+        zenex: {
+            connected: !!db.zenexCookies,
+            activeAccount: db.zenexCreds?.email || null
+        },
+        nxa: {
+            connected: !!db.nxaToken,
+            activeAccount: db.nxaCreds?.email || null
+        }
+    });
+});
+
+app.post("/api/admin/panel/login", async (req, res) => {
+
+    try {
+
+        const { panel, email, password } = req.body;
+
+        if (!panel || !email || !password) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing required fields"
+            });
+        }
+
+        res.json({
+            success: true,
+            panel,
+            email,
+            message: "Login API connected"
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+
+});
 app.get("/api/dashboard", (req, res) => {
     res.json({
         totalUsers: db.users.length,
