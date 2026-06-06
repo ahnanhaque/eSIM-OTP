@@ -62,19 +62,23 @@ app.get("/api/ranges", (req, res) => {
 
                     const item = source[platform][range];
 
-                    ranges.push({
-                        panel,
-                        platform,
-                        country: item.country,
-                        method: item.method,
-                        range
-                    });
+                   function normalizePlatform(platform) {
 
-                });
+    if (platform === "fb") return "Facebook";
+    if (platform === "fb_new") return "Facebook";
+    if (platform === "ig") return "Instagram";
+    if (platform === "wa") return "WhatsApp";
 
-            });
+    return platform;
+}
 
-        }
+ranges.push({
+    panel,
+    platform: normalizePlatform(platform),
+    country: item.country,
+    method: item.method,
+    range
+});
 
         addRanges(db.mkRanges, "MK");
         addRanges(db.stexRanges, "STEX");
