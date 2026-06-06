@@ -136,11 +136,82 @@ app.post("/api/admin/panel/login", async (req, res) => {
             });
         }
 
+        if (panel === "stex") {
+
+            const token = await stex.login(email, password);
+
+            db.stexToken = token;
+            db.stexCreds = { email, password };
+
+            if (!db.savedStexAccounts)
+                db.savedStexAccounts = [];
+
+            if (!db.savedStexAccounts.find(a => a.email === email))
+                db.savedStexAccounts.push({ email, password });
+
+        }
+
+        else if (panel === "mk") {
+
+            const cookieStr = await mk.login(email, password);
+
+            db.mkCookies = cookieStr;
+            db.mkCreds = { email, password };
+
+            if (!db.savedMkAccounts)
+                db.savedMkAccounts = [];
+
+            if (!db.savedMkAccounts.find(a => a.email === email))
+                db.savedMkAccounts.push({ email, password });
+
+        }
+
+        else if (panel === "zenex") {
+
+            const cookieStr = await zenex.login(email, password);
+
+            db.zenexCookies = cookieStr;
+            db.zenexCreds = { email, password };
+
+            if (!db.savedZenexAccounts)
+                db.savedZenexAccounts = [];
+
+            if (!db.savedZenexAccounts.find(a => a.email === email))
+                db.savedZenexAccounts.push({ email, password });
+
+        }
+
+        else if (panel === "nxa") {
+
+            const authData = await nxa.login(email, password);
+
+            db.nxaToken = authData.token;
+            db.nxaCookies = authData.cookie;
+            db.nxaCreds = { email, password };
+
+            if (!db.savedNxaAccounts)
+                db.savedNxaAccounts = [];
+
+            if (!db.savedNxaAccounts.find(a => a.email === email))
+                db.savedNxaAccounts.push({ email, password });
+
+        }
+
+        else {
+
+            return res.status(400).json({
+                success: false,
+                error: "Invalid panel"
+            });
+
+        }
+
+        saveDB();
+
         res.json({
             success: true,
             panel,
-            email,
-            message: "Login API connected"
+            email
         });
 
     } catch (e) {
