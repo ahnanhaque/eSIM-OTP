@@ -1,7 +1,3 @@
-// ============================================================
-// DEPENDENCIES & IMPORTS
-// ============================================================
-
 const express        = require("express");
 const TelegramBot    = require("node-telegram-bot-api");
 const mongoose       = require("mongoose");
@@ -11,10 +7,6 @@ const mk             = require("./mk.js");
 const zenex          = require("./zenex.js"); 
 const nxa            = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
-
-// ============================================================
-// CONFIGURATION
-// ============================================================
 
 const botToken        = process.env.BOT_TOKEN        || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
 const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
@@ -29,10 +21,6 @@ const REQUIRED_CHANNELS = [
     { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
 ];
 
-// ============================================================
-// EXPRESS APP SETUP
-// ============================================================
-
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
@@ -40,10 +28,6 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 });
-
-// ============================================================
-// TELEGRAM BOT SETUP
-// ============================================================
 
 const bot = new TelegramBot(botToken, { webHook: true });
 bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
@@ -65,10 +49,6 @@ bot.setMyCommands([
 
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
-
-// ============================================================
-// DATABASE SCHEMA & MODEL
-// ============================================================
 
 const dbSchema = new mongoose.Schema({
     balances:           Object,
@@ -99,10 +79,6 @@ const dbSchema = new mongoose.Schema({
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
-
-// ============================================================
-// IN-MEMORY STATE VARIABLES
-// ============================================================
 
 let db = {
     balances:          {},
@@ -143,10 +119,6 @@ let activeTempMails        = {};
 let activeNumberMessages   = {};
 let activeTimeouts         = {}; 
 
-// ============================================================
-// DATABASE HELPER FUNCTIONS
-// ============================================================
-
 function saveDB() {
     if (!isDbLoaded) return;
     BotDB.updateOne({}, db, { upsert: true }).catch(() => {});
@@ -161,10 +133,6 @@ function addBalance(chatId, amount) {
     db.balances[chatId] += amount;
     saveDB();
 }
-
-// ============================================================
-// PERMISSION & AUTH HELPER FUNCTIONS
-// ============================================================
 
 function isSuperAdmin(chatId) {
     return chatId === ADMIN_ID;
@@ -220,10 +188,6 @@ function clearPendingForChat(chatId) {
     }
 }
 
-// ============================================================
-// PLATFORM DETECTION UTILITY
-// ============================================================
-
 function detectPlatform(from, subject, body) {
     let str = (from + " " + subject + " " + (body || "")).toLowerCase();
     if (str.includes("facebook"))  return "Facebook";
@@ -244,10 +208,6 @@ function detectPlatform(from, subject, body) {
     }
     return "Unknown Platform";
 }
-
-// ============================================================
-// MENU & KEYBOARD BUILDER FUNCTIONS
-// ============================================================
 
 function getReplyMenu(chatId, username) {
     let keyboard = [
@@ -400,10 +360,6 @@ function renderRemoveMenu(chatId, messageId) {
     ).catch(() => {});
 }
 
-// ============================================================
-// BOT COMMANDS
-// ============================================================
-
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     if (msg.chat.type !== "private") return;
     const chatId   = msg.chat.id;
@@ -439,10 +395,6 @@ bot.onText(/\/admin/, async (msg) => {
         { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" }
     ).catch(() => {});
 });
-
-// ============================================================
-// MESSAGE HANDLER
-// ============================================================
 
 bot.on("message", async (msg) => {
     if (msg.chat.type !== "private") return;
@@ -717,7 +669,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // Admin Panel Credential Inputs
     else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
@@ -816,7 +767,6 @@ bot.on("message", async (msg) => {
         delete userStates[chatId];
     }
 
-    // Admin Panel Range Inputs
     else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
         const range = text.trim();
         if (range.length >= 5) {
@@ -888,10 +838,6 @@ bot.on("message", async (msg) => {
         }
     }
 });
-
-// ============================================================
-// CALLBACK QUERY HANDLER
-// ============================================================
 
 bot.on("callback_query", async (query) => {
     if (query.message.chat.type !== "private") return;
@@ -1021,7 +967,6 @@ bot.on("callback_query", async (query) => {
         bot.answerCallbackQuery(query.id);
     }
 
-    // ADMIN PANEL LOGINS (Stex, Mk, Zenex, NXA)
     else if (["zenex_login", "stex_login", "placeholder_mk_login", "nxa_login"].includes(data)) {
         let panel = data.replace("_login", "").replace("placeholder_", "");
         let savedAccounts = db[`saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`] || [];
@@ -1390,7 +1335,6 @@ bot.on("callback_query", async (query) => {
         let mkEntry = db.mkRanges?.[platform]?.[sel];
         let nxaEntry = db.nxaRanges?.[platform]?.[sel];
 
-        // NXA ASSIGNMENT
         if (panelType === "nxa" && nxaEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
@@ -1440,7 +1384,7 @@ bot.on("callback_query", async (query) => {
             let actionMenu = { inline_keyboard: [] };
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
                 [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
             );
 
@@ -1452,15 +1396,14 @@ bot.on("callback_query", async (query) => {
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${panelType}_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
                     delete activeTimeouts[chatId];
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
         }
 
-        // ZENEX ASSIGNMENT
-        if (zenexEntry) {
+        else if (panelType === "zenex" && zenexEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
             const countryName = typeof zenexEntry === "object" ? zenexEntry.country : zenexEntry;
@@ -1512,7 +1455,7 @@ bot.on("callback_query", async (query) => {
             let actionMenu = { inline_keyboard: [] };
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
                 [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
             );
 
@@ -1524,15 +1467,14 @@ bot.on("callback_query", async (query) => {
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${panelType}_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
                     delete activeTimeouts[chatId];
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
         }
 
-        // STEX ASSIGNMENT
-        else if (stexEntry) {
+        else if (panelType === "stex" && stexEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
             const countryName = typeof stexEntry === "object" ? stexEntry.country : stexEntry;
@@ -1584,7 +1526,7 @@ bot.on("callback_query", async (query) => {
             let actionMenu = { inline_keyboard: [] };
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
                 [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
             );
 
@@ -1596,15 +1538,14 @@ bot.on("callback_query", async (query) => {
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${panelType}_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
                     delete activeTimeouts[chatId]; 
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
         }
 
-        // MK ASSIGNMENT
-        else if (mkEntry) {
+        else if (panelType === "mk" && mkEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
             const limit       = db.settings.maxNumbers || 4;
             const countryName = typeof mkEntry === "object" ? mkEntry.country : mkEntry;
@@ -1656,7 +1597,7 @@ bot.on("callback_query", async (query) => {
             let actionMenu = { inline_keyboard: [] };
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
-                [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
                 [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
             );
 
@@ -1668,52 +1609,50 @@ bot.on("callback_query", async (query) => {
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     fetchedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${panelType}_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
                     delete activeTimeouts[chatId]; 
                 }, 15 * 60 * 1000);
             }).catch(() => {});
             return;
         }
 
-        const nums = db.availableNumbers[platform][sel] || [];
-        if (nums.length === 0)
-            return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
+        else if (panelType === "iva") {
+            const nums = db.availableNumbers[platform][sel] || [];
+            if (nums.length === 0)
+                return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
 
-        const limit       = db.settings.maxNumbers || 4;
-        const assignedNums = nums.splice(0, limit);
-        db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] };
-        saveDB();
+            const limit       = db.settings.maxNumbers || 4;
+            const assignedNums = nums.splice(0, limit);
+            db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] };
+            saveDB();
 
-        assignedNums.forEach(n => { inUseNumbers[n] = true; pendingRequests[n] = { chatId, country: sel, platform }; });
+            assignedNums.forEach(n => { inUseNumbers[n] = true; pendingRequests[n] = { chatId, country: sel, platform }; });
 
-        const info    = getCountryInfo(sel);
-        let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
-        let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n👇 _Click a number below to copy:_`;
+            const info    = getCountryInfo(sel);
+            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n👇 _Click a number below to copy:_`;
 
-        let actionMenu = { inline_keyboard: [] };
-        assignedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
-        actionMenu.inline_keyboard.push(
-            [{ text: "🔄 Change", callback_data: `assign_next_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-            [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
-        );
+            let actionMenu = { inline_keyboard: [] };
+            assignedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
+            actionMenu.inline_keyboard.push(
+                [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
+                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+            );
 
-        bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
-            activeNumberMessages[chatId] = messageId;
-            activeTimeouts[chatId] = setTimeout(() => {
-                assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
-                let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
-                assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
-                bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
-                delete activeTimeouts[chatId]; 
-            }, 15 * 60 * 1000);
-        }).catch(() => {});
-        bot.answerCallbackQuery(query.id);
+            bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
+                activeNumberMessages[chatId] = messageId;
+                activeTimeouts[chatId] = setTimeout(() => {
+                    assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
+                    assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
+                    bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${panelType}_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
+                    delete activeTimeouts[chatId]; 
+                }, 15 * 60 * 1000);
+            }).catch(() => {});
+            bot.answerCallbackQuery(query.id);
+        }
     }
 });
-
-// ============================================================
-// OTP PROCESSING FUNCTION
-// ============================================================
 
 function processFoundOTP(number, time, message, range) {
     const uniqueId = `${number}_${time}`;
@@ -1756,10 +1695,6 @@ function processFoundOTP(number, time, message, range) {
     }
 }
 
-// ============================================================
-// EXPRESS API ROUTES
-// ============================================================
-
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
     if (type === "RANGES") {
@@ -1776,10 +1711,6 @@ app.post("/api/ivas-data", (req, res) => {
 
 app.get("/",     (req, res) => res.status(200).send("Bot is successfully running on Webhook Mode!"));
 app.get("/ping", (req, res) => res.status(200).send("Pong! Bot is alive."));
-
-// ============================================================
-// AUTO-LOGIN FUNCTION
-// ============================================================
 
 async function autoLoginPanels() {
     if (!isDbLoaded) return;
@@ -1812,10 +1743,6 @@ async function autoLoginPanels() {
         } catch (e) {}
     }
 }
-
-// ============================================================
-// DATABASE CONNECTION & SERVER START
-// ============================================================
 
 mongoose.connect(MONGODB_URI).then(async () => {
     const data = await BotDB.findOne();
@@ -1859,13 +1786,8 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
 }).catch(err => console.log(err));
 
-// ============================================================
-// BACKGROUND POLLING INTERVALS
-// ============================================================
-
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
-// Stex Polling
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isStex);
     if (reqs.length === 0) return;
@@ -1897,7 +1819,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-// MK Polling
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isMk);
     if (reqs.length === 0) return;
@@ -1930,8 +1851,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-
-// Zenex Polling 
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
     if (reqs.length === 0) return;
@@ -1962,7 +1881,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-// NXA Polling 
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isNxa);
     if (reqs.length === 0) return;
