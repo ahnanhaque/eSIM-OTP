@@ -1975,15 +1975,23 @@ setInterval(async () => {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             
             let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
-            const fakeOtp = Math.floor(100000 + Math.random() * 900000); 
-            
             let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-            let msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+            let fakeOtp, msgText;
+
+            if (platName === "FACEBOOK") {
+                const fbLengths = [5, 6, 8];
+                const fbLen = fbLengths[Math.floor(Math.random() * fbLengths.length)];
+                fakeOtp = Math.floor(Math.pow(10, fbLen - 1) + Math.random() * (Math.pow(10, fbLen) - Math.pow(10, fbLen - 1)));
+                msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
+            } else if (platName === "INSTAGRAM") {
+                fakeOtp = Math.floor(100000 + Math.random() * 900000);
+                msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
+            } else {
+                fakeOtp = Math.floor(100000 + Math.random() * 900000);
+                msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+            }
             
-            if (platName === "FACEBOOK") msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
-            else if (platName === "INSTAGRAM") msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
-            
-            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
+            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New OTP RECEIVED🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
             
             bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
         }
