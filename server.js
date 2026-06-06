@@ -54,30 +54,32 @@ app.get("/api/ranges", (req, res) => {
 
         const ranges = [];
 
-        ["fb", "ig", "wa"].forEach(platform => {
+        function addRanges(source, panel) {
 
-            const platformName =
-                platform === "fb"
-                    ? "Facebook"
-                    : platform === "ig"
-                    ? "Instagram"
-                    : "WhatsApp";
+            Object.keys(source || {}).forEach(platform => {
 
-            Object.keys(db.availableNumbers?.[platform] || {}).forEach(country => {
+                Object.keys(source[platform] || {}).forEach(range => {
 
-                if (
-                    db.availableNumbers[platform][country] &&
-                    db.availableNumbers[platform][country].length > 0
-                ) {
+                    const item = source[platform][range];
+
                     ranges.push({
-                        country,
-                        platform: platformName
+                        panel,
+                        platform,
+                        country: item.country,
+                        method: item.method,
+                        range
                     });
-                }
+
+                });
 
             });
 
-        });
+        }
+
+        addRanges(db.mkRanges, "MK");
+        addRanges(db.stexRanges, "STEX");
+        addRanges(db.zenexRanges, "ZENEX");
+        addRanges(db.nxaRanges, "NXA");
 
         res.json(ranges);
 
