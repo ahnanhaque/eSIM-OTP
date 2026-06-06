@@ -1,7 +1,3 @@
-// ============================================================
-// DEPENDENCIES & IMPORTS
-// ============================================================
-
 const express        = require("express");
 const TelegramBot    = require("node-telegram-bot-api");
 const mongoose       = require("mongoose");
@@ -11,10 +7,6 @@ const mk             = require("./mk.js");
 const zenex          = require("./zenex.js"); 
 const nxa            = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
-
-// ============================================================
-// CONFIGURATION
-// ============================================================
 
 const botToken        = process.env.BOT_TOKEN        || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
 const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
@@ -29,10 +21,6 @@ const REQUIRED_CHANNELS = [
     { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
 ];
 
-// ============================================================
-// EXPRESS APP SETUP
-// ============================================================
-
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
@@ -40,10 +28,6 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
 });
-
-// ============================================================
-// TELEGRAM BOT SETUP
-// ============================================================
 
 const bot = new TelegramBot(botToken, { webHook: true });
 bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
@@ -65,10 +49,6 @@ bot.setMyCommands([
 
 let botInfo = {};
 bot.getMe().then(info => botInfo = info).catch(console.error);
-
-// ============================================================
-// DATABASE SCHEMA & MODEL
-// ============================================================
 
 const dbSchema = new mongoose.Schema({
     balances:           Object,
@@ -99,10 +79,6 @@ const dbSchema = new mongoose.Schema({
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
-
-// ============================================================
-// IN-MEMORY STATE VARIABLES
-// ============================================================
 
 let db = {
     balances:          {},
@@ -143,13 +119,6 @@ let activeTempMails        = {};
 let activeNumberMessages   = {};
 let activeTimeouts         = {}; 
 
-// MOBILE APP MEMORY
-let appPendingOTPs         = {}; 
-
-// ============================================================
-// DATABASE HELPER FUNCTIONS
-// ============================================================
-
 function saveDB() {
     if (!isDbLoaded) return;
     BotDB.updateOne({}, db, { upsert: true }).catch(() => {});
@@ -164,10 +133,6 @@ function addBalance(chatId, amount) {
     db.balances[chatId] += amount;
     saveDB();
 }
-
-// ============================================================
-// PERMISSION & AUTH HELPER FUNCTIONS
-// ============================================================
 
 function isSuperAdmin(chatId) {
     return chatId === ADMIN_ID;
@@ -223,10 +188,6 @@ function clearPendingForChat(chatId) {
     }
 }
 
-// ============================================================
-// PLATFORM DETECTION UTILITY
-// ============================================================
-
 function detectPlatform(from, subject, body) {
     let str = (from + " " + subject + " " + (body || "")).toLowerCase();
     if (str.includes("facebook"))  return "Facebook";
@@ -248,19 +209,17 @@ function detectPlatform(from, subject, body) {
     return "Unknown Platform";
 }
 
-// ============================================================
-// MENU & KEYBOARD BUILDER FUNCTIONS
-// ============================================================
-
 function getReplyMenu(chatId, username) {
     let keyboard = [
         [{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }],
-        [{ text: "🔑 2FA" },        { text: "👤 Profile" }],
-        [{ text: "💬 Support" },    { text: "Live Traffic 📈" }]
+        [{ text: "🔑 2FA" },        { text: "👤 Profile" }]
     ];
     
     if (isAdmin(chatId, username)) {
+        keyboard.push([{ text: "💬 Support" }, { text: "📈 Live Traffic" }]);
         keyboard.push([{ text: "⚙️ Admin Panel" }]);
+    } else {
+        keyboard.push([{ text: "💬 Support" }, { text: "📈 Live Traffic" }]);
     }
     return { keyboard, resize_keyboard: true, is_persistent: true };
 }
@@ -402,10 +361,6 @@ function renderRemoveMenu(chatId, messageId) {
     ).catch(() => {});
 }
 
-// ============================================================
-// BOT COMMANDS
-// ============================================================
-
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     if (msg.chat.type !== "private") return;
     const chatId   = msg.chat.id;
@@ -441,10 +396,6 @@ bot.onText(/\/admin/, async (msg) => {
         { reply_markup: getAdminMenu(msg.chat.id), parse_mode: "Markdown" }
     ).catch(() => {});
 });
-
-// ============================================================
-// MESSAGE HANDLER
-// ============================================================
 
 bot.on("message", async (msg) => {
     if (msg.chat.type !== "private") return;
@@ -489,7 +440,7 @@ bot.on("message", async (msg) => {
 
     if (!text || text.startsWith("/")) return;
 
-    const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "Live Traffic 📈"];
+   const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "📈 Live Traffic"];
     if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
         return sendJoinPrompt(chatId);
     }
@@ -630,43 +581,33 @@ bot.on("message", async (msg) => {
             { parse_mode: "HTML" }
         ).catch(() => {});
     }
-    
-    // ==========================================
-    // NEW FEATURE: LIVE TRAFFIC
-    // ==========================================
-    else if (text === "Live Traffic 📈") {
-        bot.sendMessage(chatId, "⏳ **Fetching live traffic data...**", { parse_mode: "Markdown" }).then(async (sentMsg) => {
-            try {
-                const cookieToUse = db.zenexCookies || db.zenexCreds?.password;
-                if (!cookieToUse) {
-                    return bot.editMessageText("❌ Zenex panel is not connected. Please check admin settings.", { chat_id: chatId, message_id: sentMsg.message_id });
-                }
-                
-                const trafficData = await zenex.getLiveTraffic(cookieToUse);
-                
-                if (!trafficData || trafficData.length === 0) {
-                     return bot.editMessageText("📭 No live traffic data available at the moment.", { chat_id: chatId, message_id: sentMsg.message_id });
-                }
 
-                trafficData.sort((a, b) => b.hits - a.hits);
-                const topRanges = trafficData.slice(0, 15);
+            else if (text === "📈 Live Traffic") {
+        const apiKey = db.zenexCookies;
+        if (!apiKey) {
+            return bot.sendMessage(chatId, "⚠️ **Panel is not logged in.**\nNo live traffic data available at the moment.", { parse_mode: "Markdown" }).catch(() => {});
+        }
+        bot.sendMessage(chatId, "⏳ **Fetching Live Traffic...**", { parse_mode: "Markdown" }).then(sentMsg => {
+            zenex.getLiveTraffic(apiKey).then(routes => {
+                if (!routes || routes.length === 0) {
+                    return bot.editMessageText("📭 **No active routing traffic found right now.**", { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
+                }
                 
-                let replyText = "📈 **LIVE TRAFFIC (TOP HITS)**\n━━━━━━━━━━━━━━━━━━━━\n\n";
-                
-                topRanges.forEach((item, index) => {
-                    let cleanRange = item.range.replace(/X/ig, "");
-                    let countryInfo = getCountryInfo(detectCountryFromRange(cleanRange));
+                let replyText = "📈 **LIVE TRAFFIC**\n━━━━━━━━━━━━━━━━━━\n";
+                routes.slice(0, 10).forEach(r => {
+                    let cleanRange = String(r.range || "").replace(/X/g, "0");
+                    let info = getCountryInfo(detectCountryFromRange(cleanRange));
                     
-                    replyText += `**${index + 1}.** ${countryInfo.flag} \`${item.range}\`\n`;
-                    replyText += `   🌐 ${item.service} | 🔥 **${item.hits} Hits**\n`;
-                    if (item.tag) replyText += `   🏷️ ${item.tag}\n`;
-                    replyText += `\n`;
+                    // Removed panel name and range, kept only Country, Platform, and Hits
+                    replyText += `🌍 **Country:** ${info.flag} ${info.cleanName}\n`;
+                    replyText += `🌐 **Platform:** ${r.service}\n`;
+                    replyText += `🔥 **Hits:** ${r.hits}\n━━━━━━━━━━━━━━━━━━\n`;
                 });
-
+                
                 bot.editMessageText(replyText, { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
-            } catch (e) {
-                 bot.editMessageText("❌ Failed to fetch traffic data: " + e.message, { chat_id: chatId, message_id: sentMsg.message_id }).catch(() => {});
-            }
+            }).catch(e => {
+                bot.editMessageText("❌ **Failed to fetch traffic data.**", { chat_id: chatId, message_id: sentMsg.message_id, parse_mode: "Markdown" }).catch(() => {});
+            });
         });
     }
 
@@ -927,10 +868,6 @@ bot.on("message", async (msg) => {
         }
     }
 });
-
-// ============================================================
-// CALLBACK QUERY HANDLER
-// ============================================================
 
 bot.on("callback_query", async (query) => {
     if (query.message.chat.type !== "private") return;
@@ -1747,10 +1684,6 @@ bot.on("callback_query", async (query) => {
     }
 });
 
-// ============================================================
-// OTP PROCESSING FUNCTION
-// ============================================================
-
 function processFoundOTP(number, time, message, range) {
     const uniqueId = `${number}_${time}`;
     if (lastProcessedOTPTime[uniqueId]) return;
@@ -1758,10 +1691,6 @@ function processFoundOTP(number, time, message, range) {
 
     let otpMatch = message.match(/\b\d{5,8}\b/);
     let otpCode  = otpMatch ? otpMatch[0] : null;
-
-    // SAVE TO APP MEMORY SO APP CAN FETCH OTP
-    appPendingOTPs[number] = { code: otpCode, message: message };
-    setTimeout(() => { delete appPendingOTPs[number]; }, 15 * 60 * 1000);
 
     const cName   = typeof range === "object" ? range.country : range;
     const info    = getCountryInfo(cName || "UNKNOWN");
@@ -1796,63 +1725,6 @@ function processFoundOTP(number, time, message, range) {
     }
 }
 
-// ============================================================
-// 📱 REST API ENDPOINTS FOR MOBILE APP (FLUTTER / REACT NATIVE)
-// ============================================================
-
-// 1. Get User Profile & Balance
-app.get("/api/app/profile/:userId", (req, res) => {
-    const userId = Number(req.params.userId);
-    if (!userId) return res.status(400).json({ success: false, message: "Invalid User ID" });
-    res.json({ success: true, userId: userId, balance: getBalance(userId) });
-});
-
-// 2. Get Live Traffic for App Dashboard
-app.get("/api/app/live-traffic", async (req, res) => {
-    try {
-        const cookieToUse = db.zenexCookies || db.zenexCreds?.password;
-        if (!cookieToUse) return res.json({ success: false, message: "Zenex not connected" });
-        const trafficData = await zenex.getLiveTraffic(cookieToUse);
-        if (!trafficData || trafficData.length === 0) return res.json({ success: true, data: [] });
-        
-        trafficData.sort((a, b) => b.hits - a.hits);
-        res.json({ success: true, data: trafficData.slice(0, 15) });
-    } catch (e) {
-        res.json({ success: false, error: e.message });
-    }
-});
-
-// 3. Check OTP Status for a Specific Number
-app.get("/api/app/check-otp/:number", (req, res) => {
-    const num = req.params.number;
-    if (appPendingOTPs[num]) {
-        res.json({ success: true, status: "completed", otp: appPendingOTPs[num].code, full_message: appPendingOTPs[num].message });
-    } else if (inUseNumbers[num]) {
-        res.json({ success: true, status: "waiting", message: "Waiting for OTP..." });
-    } else {
-        res.json({ success: false, status: "expired", message: "Number expired or invalid" });
-    }
-});
-
-// 4. Request Number (Connect this to your App's 'Get Number' button)
-app.post("/api/app/get-number", async (req, res) => {
-    const { userId, panel, platform, range } = req.body;
-    if(!userId || !panel || !platform || !range) return res.status(400).json({ success: false, message: "Missing parameters" });
-    
-    // NOTE FOR AI BUILDER: You can copy the logic from Telegram `assign_` callback block 
-    // here to fetch the actual number from NXA/MK/Zenex APIs. 
-    // For now, this returns a mock number to test the App UI.
-    res.json({ 
-        success: true, 
-        number: "88017" + Math.floor(100000 + Math.random() * 900000),
-        message: "Connect real assignment logic here"
-    });
-});
-
-// ============================================================
-// WEBHOOK & EXPRESS ROUTES
-// ============================================================
-
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
     if (type === "RANGES") {
@@ -1869,10 +1741,6 @@ app.post("/api/ivas-data", (req, res) => {
 
 app.get("/",     (req, res) => res.status(200).send("Bot is successfully running on Webhook Mode!"));
 app.get("/ping", (req, res) => res.status(200).send("Pong! Bot is alive."));
-
-// ============================================================
-// AUTO-LOGIN FUNCTION
-// ============================================================
 
 async function autoLoginPanels() {
     if (!isDbLoaded) return;
@@ -1905,10 +1773,6 @@ async function autoLoginPanels() {
         } catch (e) {}
     }
 }
-
-// ============================================================
-// DATABASE CONNECTION & SERVER START
-// ============================================================
 
 mongoose.connect(MONGODB_URI).then(async () => {
     const data = await BotDB.findOne();
@@ -1952,13 +1816,8 @@ mongoose.connect(MONGODB_URI).then(async () => {
 
 }).catch(err => console.log(err));
 
-// ============================================================
-// BACKGROUND POLLING INTERVALS
-// ============================================================
-
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
-// Stex Polling
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isStex);
     if (reqs.length === 0) return;
@@ -1990,7 +1849,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-// MK Polling
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isMk);
     if (reqs.length === 0) return;
@@ -2023,8 +1881,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-
-// Zenex Polling 
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
     if (reqs.length === 0) return;
@@ -2055,7 +1911,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-// NXA Polling 
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isNxa);
     if (reqs.length === 0) return;
@@ -2110,9 +1965,6 @@ setInterval(async () => {
     }
 }, 1500);
 
-// ==========================================
-// FAKE OTP LIVE FEED (MK/ZENEX SIMULATOR)
-// ==========================================
 setInterval(async () => {
     if (!db.zenexCookies && !db.zenexCreds) return;
     try {
@@ -2122,32 +1974,59 @@ setInterval(async () => {
         if (ranges && ranges.length > 0) {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             
-            let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
-            let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-            let fakeOtp, msgText;
+            // Get Country Info
+            let cleanRange = String(randomRoute.range || "").replace(/X/g, "0");
+            let info = getCountryInfo(detectCountryFromRange(cleanRange));
 
-            if (platName === "FACEBOOK") {
-                const fbLengths = [5, 6, 8];
-                const fbLen = fbLengths[Math.floor(Math.random() * fbLengths.length)];
-                fakeOtp = Math.floor(Math.pow(10, fbLen - 1) + Math.random() * (Math.pow(10, fbLen) - Math.pow(10, fbLen - 1)));
-                msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
-            } else if (platName === "INSTAGRAM") {
+            // Generate and Mask Number
+            let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
+            let numStr = String(fakeNum);
+            let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+
+            let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
+            let fakeOtp;
+            let msgText;
+
+            // Generate OTP based on Platform
+if (platName === "FACEBOOK") {
+    const lengths = [5, 6, 8];
+    const selectedLength = lengths[Math.floor(Math.random() * lengths.length)];
+    
+    if (selectedLength === 5) {
+        fakeOtp = Math.floor(10000 + Math.random() * 90000); // 5 digits
+    } else if (selectedLength === 6) {
+        fakeOtp = Math.floor(100000 + Math.random() * 900000); // 6 digits
+    } else {
+        fakeOtp = Math.floor(10000000 + Math.random() * 90000000); // 8 digits
+    }
+    msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
+}
+
+            else if (platName === "INSTAGRAM") {
+                // ৬ ডিজিটের কোড জেনারেটর
                 fakeOtp = Math.floor(100000 + Math.random() * 900000);
-                msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
-            } else {
-                fakeOtp = Math.floor(100000 + Math.random() * 900000);
-                msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+                msgText = `${fakeOtp} is your Instagram code. Don't share it.`;
+            } 
+            else {
+                // Default ৫ ডিজিটের কোড
+                fakeOtp = Math.floor(10000 + Math.random() * 90000);
+                msgText = `${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
             }
             
-            let groupMarkup = {
-                inline_keyboard: [
-                    [{ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } }]
-                ]
-            };
-
-            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
+            // Format SMS
+            let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
             
-            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup }).catch(() => {});
+            // Add Buttons
+            let groupMarkup = { inline_keyboard: [] };
+            let groupButtonRow = [];
+            if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
+            groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } });
+            
+            if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
+
+            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { 
+                reply_markup: groupMarkup 
+            }).catch(() => {});
         }
     } catch (e) {}
 }, 12000);
