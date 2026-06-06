@@ -40,12 +40,13 @@ app.post(`/bot${botToken}`, (req, res) => {
 // ANDROID APP API
 // =====================================
 
-app.get("/api/status", (req, res) => {
+app.get("/api/debug", (req, res) => {
     res.json({
-        success: true,
-        bot: "online",
-        serverTime: Date.now(),
-        version: "1.0.0"
+        availableNumbers: db.availableNumbers,
+        stexRanges: db.stexRanges,
+        mkRanges: db.mkRanges,
+        zenexRanges: db.zenexRanges,
+        nxaRanges: db.nxaRanges
     });
 });
 app.get("/api/ranges", (req, res) => {
