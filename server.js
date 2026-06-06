@@ -296,6 +296,71 @@ app.get("/api/live-traffic", async (req, res) => {
         });
     }
 });
+
+app.post("/api/get-number", async (req, res) => {
+
+    try {
+
+        const { platform, country } = req.body;
+
+        if (!platform || !country) {
+            return res.status(400).json({
+                success: false,
+                error: "Platform and country required"
+            });
+        }
+
+        const ranges = [];
+
+        function checkRanges(source, panelName) {
+            Object.keys(source || {}).forEach(p => {
+
+                Object.keys(source[p] || {}).forEach(range => {
+
+                    const item = source[p][range];
+
+                    const pName =
+                        p === "fb" || p === "fb_new" ? "Facebook" :
+                        p === "ig" ? "Instagram" :
+                        p === "wa" ? "WhatsApp" :
+                        p;
+
+                    if (
+                        pName === platform &&
+                        item.country === country
+                    ) {
+                        ranges.push({
+                            panel: panelName,
+                            range,
+                            method: item.method
+                        });
+                    }
+
+                });
+
+            });
+        }
+
+        checkRanges(db.mkRanges, "MK");
+        checkRanges(db.stexRanges, "STEX");
+        checkRanges(db.zenexRanges, "ZENEX");
+        checkRanges(db.nxaRanges, "NXA");
+
+        res.json({
+            success: true,
+            ranges
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+
+});
 bot.on("error", (err) => {
     if (err && err.message && !err.message.includes("message is not modified"))
         console.log("\n[Telegram Bot Error]", err.message);
