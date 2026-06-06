@@ -2,12 +2,11 @@ const https = require("https");
 
 const BASE_URL = "https://www.zenexnetwork.com";
 
-// 🟢 Helper Function for API Requests
 function makeRequest(method, path, body, apiKey = null) {
     return new Promise((resolve, reject) => {
         const headers = {
             "accept": "application/json",
-            "mapikey": apiKey || "", // 🟢 API Key in Header
+            "mapikey": apiKey || "",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         };
 
@@ -35,61 +34,41 @@ function makeRequest(method, path, body, apiKey = null) {
     });
 }
 
-// 🟢 Fake Login (Saves API Key instead of Cookies)
 async function login(email, password) {
-    // We treat the "password" (or email) input from Telegram as the API Key
     const apiKey = password || email; 
-
-    // Test the API key by fetching history
     const res = await makeRequest("GET", "/api/v1/numsuccess/info", null, apiKey);
     
     if (res.status === 200 && res.data && res.data.meta && res.data.meta.status === "success") {
-        return apiKey; // This API key will be saved in DB as "zenexCookies"
+        return apiKey;
     }
-
     throw new Error("Invalid Zenex API Key! Please check your key.");
 }
 
-// 🟢 Get Number via Official API
 async function getNumber(range, apiKey = null) {
     if (!apiKey) throw new Error("SESSION_EXPIRED");
-
     const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
 
     try {
         const res = await makeRequest("POST", "/api/v1/getnum", body, apiKey);
+        if (res.status === 401 || res.status === 403) throw new Error("SESSION_EXPIRED");
 
-        if (res.status === 401 || res.status === 403) {
-            throw new Error("SESSION_EXPIRED");
-        }
-
-        // Check if status is success based on Zenex documentation
         if (res.data && res.data.meta && res.data.meta.status === "success" && res.data.data) {
             return { number: res.data.data.full_number || res.data.data.number };
         }
-        
         throw new Error((res.data && res.data.message) ? res.data.message : "Out of stock or error in Zenex");
     } catch (err) {
         throw err;
     }
 }
 
-// 🟢 Check Info (Polling OTPs via Official API)
 async function checkInfo(apiKey = null) {
     if (!apiKey) return [];
-
     try {
         const res = await makeRequest("GET", "/api/v1/numsuccess/info", null, apiKey);
-
-        if (res.status === 401 || res.status === 403) {
-            return []; 
-        }
+        if (res.status === 401 || res.status === 403) return []; 
 
         if (res.data && res.data.data && Array.isArray(res.data.data.otps)) {
-            return res.data.data.otps.map(item => ({
-                number: item.number,
-                sms: item.otp 
-            }));
+            return res.data.data.otps.map(item => ({ number: item.number, sms: item.otp }));
         }
         return [];
     } catch (e) {
@@ -97,52 +76,18 @@ async function checkInfo(apiKey = null) {
     }
 }
 
-// 🟢 Smart Polling with Anti-Firewall Delay
-function startPolling(ctx) {
-    const { db, pendingRequests, processFoundOTP } = ctx;
-    let isPolling = false; // Async overlap lock
-
-    // Zenex recommends 3-5 seconds interval to avoid Smart Firewall blocks
-    setInterval(async () => {
-        if (isPolling) return;
-
-        const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
-        if (reqs.length === 0) return;
-
-        isPolling = true;
-        try {
-            // Here "cookie" is actually our API Key saved from the login function
-            const apiKeysToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
-            
-            for (const apiKey of apiKeysToPoll) {
-                try {
-                    const records = await checkInfo(apiKey);
-
-                    if (Array.isArray(records)) {
-                        records.forEach(rec => {
-                            let rawNum      = String(rec.number || "");
-                            let cleanRecNum = rawNum.replace(/\D/g, "");
-                            
-                            if (cleanRecNum) {
-                                let pendingKey = Object.keys(pendingRequests).find(
-                                    k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === apiKey
-                                );
-                                
-                                if (pendingKey) {
-                                    let msg = rec.sms;
-                                    if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
-                                        processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
-                                    }
-                                }
-                            }
-                        });
-                    }
-                } catch (e) {}
-            }
-        } finally {
-            isPolling = false; // Lock released
+async function getLiveTraffic(apiKey = null) {
+    if (!apiKey) return [];
+    try {
+        const res = await makeRequest("GET", "/api/v1/active-ranges", null, apiKey);
+        if (res.status === 401 || res.status === 403) return [];
+        if (res.data && res.data.success && res.data.data && Array.isArray(res.data.data.active_ranges)) {
+            return res.data.data.active_ranges;
         }
-    }, 3500); // 3.5 seconds to comply with Zenex Firewall rules
+        return [];
+    } catch (e) {
+        return [];
+    }
 }
 
-module.exports = { login, getNumber, checkInfo, startPolling };
+module.exports = { login, getNumber, checkInfo, getLiveTraffic };
