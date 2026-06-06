@@ -1975,9 +1975,6 @@ setInterval(async () => {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
             
-            // কান্ট্রি এবং ফ্ল্যাগ ডিটেকশন
-            const countryInfo = getCountryInfo(detectCountryFromRange(randomRoute.range));
-            
             let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
             let otpLength = 6;
             if (platName === "FACEBOOK" || platName === "FB") {
@@ -1989,11 +1986,11 @@ setInterval(async () => {
             for (let i = 0; i < otpLength; i++) fakeOtp += Math.floor(Math.random() * 10).toString();
             
             let msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
-            if (platName === "FACEBOOK" || platName === "FB") msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
+            if (platName === "FACEBOOK" || platName === "FB") msgText = `<#> ${fakeOtp} is your Facebook code.`;
             else if (platName === "INSTAGRAM" || platName === "IG") msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
             
-
-            let groupReplyText = `☁️ eSIM LIVE FEED ☁️\n✉️ New Intercepted SMS 🔥\n\n🌍 Country: ${countryInfo.flag} ${countryInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> ${msgText}`;
+            // হুবহু স্ক্রিনশটের ফরম্যাট অনুযায়ী
+            let groupReplyText = `☁️ eSIM LIVE FEED ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n📞 Number: ${fakeNum}\n✉️ Message:\n> ${msgText}`;
             
             bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
         }
