@@ -53,14 +53,26 @@ app.get("/api/ranges", (req, res) => {
 
         const ranges = [];
 
-        Object.keys(db.numbers || {}).forEach(country => {
+        ["fb", "ig", "wa"].forEach(platform => {
 
-            Object.keys(db.numbers[country] || {}).forEach(platform => {
+            const platformName =
+                platform === "fb"
+                    ? "Facebook"
+                    : platform === "ig"
+                    ? "Instagram"
+                    : "WhatsApp";
 
-                ranges.push({
-                    country,
-                    platform
-                });
+            Object.keys(db.availableNumbers?.[platform] || {}).forEach(country => {
+
+                if (
+                    db.availableNumbers[platform][country] &&
+                    db.availableNumbers[platform][country].length > 0
+                ) {
+                    ranges.push({
+                        country,
+                        platform: platformName
+                    });
+                }
 
             });
 
