@@ -36,7 +36,100 @@ app.post(`/bot${botToken}`, (req, res) => {
     bot.processUpdate(req.body);
     res.sendStatus(200);
 });
+// =====================================
+// ANDROID APP API
+// =====================================
 
+app.get("/api/status", (req, res) => {
+    res.json({
+        success: true,
+        bot: "online",
+        serverTime: Date.now(),
+        version: "1.0.0"
+    });
+});
+
+app.get("/api/dashboard", (req, res) => {
+    res.json({
+        totalUsers: db.users.length,
+        activeRequests: Object.keys(pendingRequests).length,
+        balanceUsers: Object.keys(db.balances).length,
+        maxNumbers: db.settings.maxNumbers || 4
+    });
+});
+
+app.get("/api/panels", (req, res) => {
+    res.json({
+        stex: {
+            connected: !!db.stexToken,
+            activeAccount: db.stexCreds?.email || null
+        },
+        mk: {
+            connected: !!db.mkCookies,
+            activeAccount: db.mkCreds?.email || null
+        },
+        zenex: {
+            connected: !!db.zenexCookies,
+            activeAccount: db.zenexCreds?.email || null
+        },
+        nxa: {
+            connected: !!db.nxaToken,
+            activeAccount: db.nxaCreds?.email || null
+        }
+    });
+});
+
+app.get("/api/admin/panel/accounts", (req, res) => {
+    res.json({
+        stex: db.savedStexAccounts || [],
+        mk: db.savedMkAccounts || [],
+        zenex: db.savedZenexAccounts || [],
+        nxa: db.savedNxaAccounts || []
+    });
+});
+
+app.get("/api/admin/panel/active", (req, res) => {
+    res.json({
+        stex: db.stexCreds || null,
+        mk: db.mkCreds || null,
+        zenex: db.zenexCreds || null,
+        nxa: db.nxaCreds || null
+    });
+});
+
+app.get("/api/profile/:id", (req, res) => {
+    const userId = req.params.id;
+
+    res.json({
+        userId,
+        balance: db.balances[userId] || 0,
+        referredBy: db.referred[userId] || null,
+        isAdmin:
+            userId == ADMIN_ID ||
+            db.adminUsernames.includes(
+                "@" + String(userId).toLowerCase()
+            )
+    });
+});
+
+app.get("/api/live-traffic", async (req, res) => {
+    try {
+        if (!db.zenexCookies) {
+            return res.json([]);
+        }
+
+        const routes = await zenex.getLiveTraffic(
+            db.zenexCookies
+        );
+
+        res.json(routes);
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 bot.on("error", (err) => {
     if (err && err.message && !err.message.includes("message is not modified"))
         console.log("\n[Telegram Bot Error]", err.message);
