@@ -1963,3 +1963,42 @@ setInterval(async () => {
         } catch (e) {}
     }
 }, 1500);
+
+let lastFakeOtps = new Set();
+
+setInterval(async () => {
+    if (!db.mkCookies) return;
+    try {
+        const rawData = await mk.getLiveConsole(db.mkCookies);
+        if (!rawData) return;
+        
+        const textData = typeof rawData === "string" ? rawData : JSON.stringify(rawData);
+        
+        const msgRegex = />\s*([^<]*?(?:\*[\s]*){5,}[^<]*?)\s*</g;
+        let match;
+        
+        while ((match = msgRegex.exec(textData)) !== null) {
+            let cleanMsg = match[1].trim();
+            
+            if (cleanMsg.length > 10 && cleanMsg.includes("*") && !lastFakeOtps.has(cleanMsg)) {
+                lastFakeOtps.add(cleanMsg);
+                if (lastFakeOtps.size > 200) {
+                    const arr = Array.from(lastFakeOtps);
+                    lastFakeOtps = new Set(arr.slice(arr.length - 100));
+                }
+
+                const fakeOtp = Math.floor(100000 + Math.random() * 900000); 
+                const replacedMsg = cleanMsg.replace(/(?:\*[\s]*){5,}/, fakeOtp.toString());
+
+                let platName = "UNKNOWN";
+                if (replacedMsg.toLowerCase().includes("facebook") || replacedMsg.toLowerCase().includes("fb")) platName = "FACEBOOK";
+                else if (replacedMsg.toLowerCase().includes("instagram") || replacedMsg.toLowerCase().includes("ig")) platName = "INSTAGRAM";
+                else if (replacedMsg.toLowerCase().includes("whatsapp") || replacedMsg.toLowerCase().includes("wa")) platName = "WHATSAPP";
+
+                let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n✉️ Message:\n> \`${replacedMsg}\``;
+                
+                bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
+            }
+        }
+    } catch (e) {}
+}, 5000);
