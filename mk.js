@@ -17,7 +17,9 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
         };
 
         if (body && method === "POST") {
-            if (!headers["content-type"]) headers["content-type"] = "application/json";
+            if (!headers["content-type"]) {
+                headers["content-type"] = "application/json";
+            }
             headers["content-length"] = Buffer.byteLength(body);
         }
 
@@ -26,8 +28,11 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
             res.on("data", d => chunks.push(d));
             res.on("end", () => {
                 const text = Buffer.concat(chunks).toString("utf-8");
-                try { resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text) }); } 
-                catch { resolve({ status: res.statusCode, headers: res.headers, data: text }); }
+                try { 
+                    resolve({ status: res.statusCode, headers: res.headers, data: JSON.parse(text) }); 
+                } catch { 
+                    resolve({ status: res.statusCode, headers: res.headers, data: text }); 
+                }
             });
         });
 
@@ -39,6 +44,7 @@ function makeRequest(method, path, body, extraHeaders = {}, customCookies = null
 
 async function login(email, password) {
     let tempCookies = ""; 
+
     const getRes = await makeRequest("GET", "/login.php", null, {}, tempCookies);
     if (getRes.headers && getRes.headers["set-cookie"]) {
         let initialCookies = [];
@@ -46,7 +52,11 @@ async function login(email, password) {
         tempCookies = initialCookies.join("; ");
     }
 
-    const body = new URLSearchParams({ login_id: email, password: password }).toString();
+    const body = new URLSearchParams({
+        login_id: email,
+        password: password
+    }).toString();
+
     const res = await makeRequest("POST", "/login.php", body, {
         "content-type": "application/x-www-form-urlencoded",
         "referer": "https://mknetworkbd.com/login.php"
@@ -66,15 +76,43 @@ async function login(email, password) {
     if (res.status === 302 || tempCookies.includes("mk_remember") || (res.headers && res.headers.location)) {
         return tempCookies; 
     }
+
     throw new Error("Login failed. Please check your email and password.");
+}
+
+async function verifyCookies(cookieStr) {
+    const oldCookies = COOKIES;
+    COOKIES = cookieStr;
+    try {
+        const res = await makeRequest("GET", "/getnum_test.php");
+        if (res.status === 302 || (res.data && typeof res.data === 'string' && res.data.includes('name="login_id"'))) {
+            COOKIES = oldCookies;
+            throw new Error("Invalid or Expired Cookies! Please copy fresh PHPSESSID and mk_remember.");
+        }
+        if (res.data && typeof res.data === 'string' && !res.data.includes('get_number')) {
+            COOKIES = oldCookies;
+            throw new Error("Dashboard load failed. Please ensure your account is active.");
+        }
+        return true; 
+    } catch (err) {
+        COOKIES = oldCookies;
+        throw err;
+    }
 }
 
 async function getNumber(range, customCookie = null) {
     const boundary = "----WebKitFormBoundaryd1BBMabQSSbA47sv";
     const body = [
-        `--${boundary}`, `Content-Disposition: form-data; name="action"`, ``, `get_number`,
-        `--${boundary}`, `Content-Disposition: form-data; name="range"`, ``, `${range}`,
-        `--${boundary}--`, ``
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="action"`,
+        ``,
+        `get_number`,
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="range"`,
+        ``,
+        `${range}`,
+        `--${boundary}--`,
+        ``
     ].join("\r\n");
 
     const res = await makeRequest("POST", "/API/api_handler_test.php", body, {
@@ -84,29 +122,43 @@ async function getNumber(range, customCookie = null) {
         "origin": "https://mknetworkbd.com"
     }, customCookie);
     
-    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) throw new Error("SESSION_EXPIRED");
-    if (res.data && res.data.status === "success" && res.data.number) return res.data;
+    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
+        throw new Error("SESSION_EXPIRED");
+    }
+    if (res.data && res.data.status === "success" && res.data.number) {
+        return res.data;
+    }
     throw new Error((res.data && res.data.message) ? res.data.message : "SESSION_EXPIRED");
 }
 
 async function checkInfo(date, customCookie = null) {
     const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=15&date=${date}`, null, {
-        "accept": "*/*", "referer": "https://mknetworkbd.com/getnum_test.php"
+        "accept": "*/*",
+        "referer": "https://mknetworkbd.com/getnum_test.php"
     }, customCookie);
     
-    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) throw new Error("SESSION_EXPIRED");
-    if (res.data && res.data.status === "success" && res.data.data) return res.data.data; 
+    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
+        throw new Error("SESSION_EXPIRED");
+    }
+    if (res.data && res.data.status === "success" && res.data.data) {
+        return res.data.data; 
+    }
     return [];
 }
 
 async function getLiveConsole(customCookie = null) {
-    const res = await makeRequest("GET", `/API/api_handler_test.php?action=get_history&filter=all&page=1&limit=20`, null, {
-        "accept": "*/*", "referer": "https://mknetworkbd.com/"
-    }, customCookie);
-    
-    if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) return [];
-    if (res.data && res.data.status === "success" && res.data.data) return res.data.data; 
-    return [];
+    try {
+        const res = await makeRequest("GET", "/console.php?ajax=1", null, {
+            "accept": "*/*",
+            "referer": "https://mknetworkbd.com/console.php"
+        }, customCookie);
+        if (res.status === 302 || (typeof res.data === 'string' && res.data.includes('login_id'))) {
+            throw new Error("SESSION_EXPIRED");
+        }
+        return res.data;
+    } catch (err) {
+        return null;
+    }
 }
 
-module.exports = { setCookies, getNumber, checkInfo, login, getLiveConsole };
+module.exports = { setCookies, verifyCookies, getNumber, checkInfo, login, getLiveConsole };
