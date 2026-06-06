@@ -1974,26 +1974,54 @@ setInterval(async () => {
         if (ranges && ranges.length > 0) {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             
-            let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
-            let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-            let fakeOtp, msgText;
+            // Get Country Info
+            let cleanRange = String(randomRoute.range || "").replace(/X/g, "0");
+            let info = getCountryInfo(detectCountryFromRange(cleanRange));
 
+            // Generate and Mask Number
+            let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
+            let numStr = String(fakeNum);
+            let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+
+            let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
+            let fakeOtp;
+            let msgText;
+
+            // Generate OTP based on Platform
             if (platName === "FACEBOOK") {
-                const fbLengths = [5, 6, 8];
-                const fbLen = fbLengths[Math.floor(Math.random() * fbLengths.length)];
-                fakeOtp = Math.floor(Math.pow(10, fbLen - 1) + Math.random() * (Math.pow(10, fbLen) - Math.pow(10, fbLen - 1)));
-                msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
-            } else if (platName === "INSTAGRAM") {
+                // ৫, ৬ বা ৮ ডিজিটের র‍্যান্ডম কোড জেনারেটর
+                const lengths = [5, 6, 8];
+                const selectedLength = lengths[Math.floor(Math.random() * lengths.length)];
+                const min = Math.pow(10, selectedLength - 1);
+                const max = Math.pow(10, selectedLength) - 1;
+                fakeOtp = Math.floor(Math.random() * (max - min + 1)) + min;
+                msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
+            } 
+            else if (platName === "INSTAGRAM") {
+                // ৬ ডিজিটের কোড জেনারেটর
                 fakeOtp = Math.floor(100000 + Math.random() * 900000);
-                msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
-            } else {
-                fakeOtp = Math.floor(100000 + Math.random() * 900000);
-                msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+                msgText = `${fakeOtp} is your Instagram code. Don't share it.`;
+            } 
+            else {
+                // Default ৫ ডিজিটের কোড
+                fakeOtp = Math.floor(10000 + Math.random() * 90000);
+                msgText = `${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
             }
             
-            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New OTP RECEIVED🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
+            // Format SMS
+            let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
             
-            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
+            // Add Buttons
+            let groupMarkup = { inline_keyboard: [] };
+            let groupButtonRow = [];
+            if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
+            groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } });
+            
+            if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
+
+            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { 
+                reply_markup: groupMarkup 
+            }).catch(() => {});
         }
     } catch (e) {}
 }, 12000);
