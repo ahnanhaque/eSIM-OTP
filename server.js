@@ -1988,15 +1988,20 @@ setInterval(async () => {
             let msgText;
 
             // Generate OTP based on Platform
-            if (platName === "FACEBOOK") {
-                // ৫, ৬ বা ৮ ডিজিটের র‍্যান্ডম কোড জেনারেটর
-                const lengths = [5, 6, 8];
-                const selectedLength = lengths[Math.floor(Math.random() * lengths.length)];
-                const min = Math.pow(10, selectedLength - 1);
-                const max = Math.pow(10, selectedLength) - 1;
-                fakeOtp = Math.floor(Math.random() * (max - min + 1)) + min;
-                msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
-            } 
+if (platName === "FACEBOOK") {
+    const lengths = [5, 6, 8];
+    const selectedLength = lengths[Math.floor(Math.random() * lengths.length)];
+    
+    if (selectedLength === 5) {
+        fakeOtp = Math.floor(10000 + Math.random() * 90000); // 5 digits
+    } else if (selectedLength === 6) {
+        fakeOtp = Math.floor(100000 + Math.random() * 900000); // 6 digits
+    } else {
+        fakeOtp = Math.floor(10000000 + Math.random() * 90000000); // 8 digits
+    }
+    msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
+}
+
             else if (platName === "INSTAGRAM") {
                 // ৬ ডিজিটের কোড জেনারেটর
                 fakeOtp = Math.floor(100000 + Math.random() * 900000);
