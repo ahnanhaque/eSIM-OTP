@@ -103,24 +103,34 @@ app.get("/api/ranges", (req, res) => {
 });
 
 app.get("/api/panels", (req, res) => {
-    res.json({
-        mk: {
+
+    res.json([
+        {
+            id: "mk",
+            name: "MK",
             connected: !!db.mkCookies,
             activeAccount: db.mkCreds?.email || null
         },
-        stex: {
+        {
+            id: "stex",
+            name: "STEX",
             connected: !!db.stexToken,
             activeAccount: db.stexCreds?.email || null
         },
-        zenex: {
+        {
+            id: "zenex",
+            name: "ZENEX",
             connected: !!db.zenexCookies,
             activeAccount: db.zenexCreds?.email || null
         },
-        nxa: {
+        {
+            id: "nxa",
+            name: "NXA",
             connected: !!db.nxaToken,
             activeAccount: db.nxaCreds?.email || null
         }
-    });
+    ]);
+
 });
 
 app.post("/api/admin/panel/login", async (req, res) => {
