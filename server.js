@@ -1973,39 +1973,32 @@ setInterval(async () => {
         
         if (ranges && ranges.length > 0) {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
-            
-            // Get Country Info
-            let cleanRange = String(randomRoute.range || "").replace(/X/g, "0");
-            let info = getCountryInfo(detectCountryFromRange(cleanRange));
-
-            // Generate and Mask Number
             let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
-            let numStr = String(fakeNum);
-            let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
-
-            const fakeOtp = Math.floor(10000 + Math.random() * 90000); 
             
             let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-            let msgText = `${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+            let otpLength = 6;
             
-            // Format SMS exactly like real ones
-            if (platName === "FACEBOOK") msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
-            else if (platName === "INSTAGRAM") msgText = `${fakeOtp} is your Instagram code. Don't share it.`;
+            if (platName === "FACEBOOK" || platName === "FB") {
+                const lengths = [5, 6, 8];
+                otpLength = lengths[Math.floor(Math.random() * lengths.length)];
+            }
             
-            // Exact Real Message Format
-            let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
+            let fakeOtp = "";
+            for (let i = 0; i < otpLength; i++) {
+                fakeOtp += Math.floor(Math.random() * 10).toString();
+            }
             
-            // Add exactly the same buttons as real OTP
-            let groupMarkup = { inline_keyboard: [] };
-            let groupButtonRow = [];
-            if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
-            groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } });
+            let msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
             
-            if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
-
-            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { 
-                reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined 
-            }).catch(() => {});
+            if (platName === "FACEBOOK" || platName === "FB") {
+                msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
+            } else if (platName === "INSTAGRAM" || platName === "IG") {
+                msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
+            }
+            
+            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
+            
+            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
         }
     } catch (e) {}
 }, 12000);
