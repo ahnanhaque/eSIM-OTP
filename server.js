@@ -303,16 +303,10 @@ app.post("/api/get-number", async (req, res) => {
 
         const { platform, country } = req.body;
 
-        if (!platform || !country) {
-            return res.status(400).json({
-                success: false,
-                error: "Platform and country required"
-            });
-        }
+        let selected = null;
 
-        const ranges = [];
+        function findRange(source, panelName) {
 
-        function checkRanges(source, panelName) {
             Object.keys(source || {}).forEach(p => {
 
                 Object.keys(source[p] || {}).forEach(range => {
@@ -326,29 +320,96 @@ app.post("/api/get-number", async (req, res) => {
                         p;
 
                     if (
+                        !selected &&
                         pName === platform &&
                         item.country === country
                     ) {
-                        ranges.push({
+                        selected = {
                             panel: panelName,
                             range,
                             method: item.method
-                        });
+                        };
                     }
 
                 });
 
             });
+
         }
 
-        checkRanges(db.mkRanges, "MK");
-        checkRanges(db.stexRanges, "STEX");
-        checkRanges(db.zenexRanges, "ZENEX");
-        checkRanges(db.nxaRanges, "NXA");
+        findRange(db.mkRanges, "MK");
+        findRange(db.stexRanges, "STEX");
+        findRange(db.zenexRanges, "ZENEX");
+        findRange(db.nxaRanges, "NXA");
+
+        if (!selected) {
+            return res.status(404).json({
+                success: false,
+                error: "No route found"
+            });
+        }
+
+        let number = null;
+
+        if (selected.panel === "MK") {
+
+            const data = await mk.getNumber(
+                selected.range,
+                db.mkCookies
+            );
+
+            number = data.number;
+
+        } else if (selected.panel === "STEX") {
+
+            const data = await stex.getNumber(
+                selected.range,
+                db.stexToken
+            );
+
+            number = data.full_number;
+
+        } else if (selected.panel === "ZENEX") {
+
+            const data = await zenex.getNumber(
+                selected.range
+            );
+
+            number = data.number;
+
+        } else if (selected.panel === "NXA") {
+
+            const data = await nxa.getNumber(
+                selected.range,
+                db.nxaToken,
+                db.nxaCookies
+            );
+
+            number = data.number;
+
+        }
+
+        if (!number) {
+            return res.status(500).json({
+                success: false,
+                error: "No number received"
+            });
+        }
+
+        inUseNumbers[number] = true;
+
+        pendingRequests[number] = {
+            country,
+            platform,
+            createdAt: Date.now()
+        };
 
         res.json({
             success: true,
-            ranges
+            number,
+            country,
+            platform,
+            expiresIn: 900
         });
 
     } catch (e) {
