@@ -1964,45 +1964,27 @@ setInterval(async () => {
     }
 }, 1500);
 
-let lastFakeOtps = new Set();
-
 setInterval(async () => {
-    if (!db.mkCookies) return;
+    if (!db.zenexCookies && !db.zenexCreds) return;
     try {
-        const rawData = await mk.getLiveConsole(db.mkCookies);
-        if (!rawData) return;
+        const apiKey = db.zenexCookies || db.zenexCreds?.password;
+        const ranges = await zenex.getLiveTraffic(apiKey);
         
-        const textData = typeof rawData === "string" ? rawData : JSON.stringify(rawData);
-        
-        let plainText = textData.replace(/<\/?(div|span|td|tr|table|tbody|p|b|i|strong|br|a|li|ul)[^>]*>/gi, "\n");
-        plainText = plainText.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ");
-        
-        let lines = plainText.split("\n").map(l => l.trim());
-        
-        for (let line of lines) {
-            if (line.match(/(?:\*[\s]*){4,}/)) {
-                let cleanMsg = line;
-                
-                if (cleanMsg.length > 10 && !lastFakeOtps.has(cleanMsg)) {
-                    lastFakeOtps.add(cleanMsg);
-                    if (lastFakeOtps.size > 200) {
-                        const arr = Array.from(lastFakeOtps);
-                        lastFakeOtps = new Set(arr.slice(arr.length - 100));
-                    }
-
-                    const fakeOtp = Math.floor(100000 + Math.random() * 900000); 
-                    const replacedMsg = cleanMsg.replace(/(?:\*[\s]*){4,}/, fakeOtp.toString());
-
-                    let platName = "UNKNOWN";
-                    if (replacedMsg.toLowerCase().includes("facebook") || replacedMsg.toLowerCase().includes("fb")) platName = "FACEBOOK";
-                    else if (replacedMsg.toLowerCase().includes("instagram") || replacedMsg.toLowerCase().includes("ig")) platName = "INSTAGRAM";
-                    else if (replacedMsg.toLowerCase().includes("whatsapp") || replacedMsg.toLowerCase().includes("wa")) platName = "WHATSAPP";
-
-                    let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n✉️ Message:\n> \`${replacedMsg}\``;
-                    
-                    bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
-                }
-            }
+        if (ranges && ranges.length > 0) {
+            const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
+            
+            let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
+            const fakeOtp = Math.floor(100000 + Math.random() * 900000); 
+            
+            let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
+            let msgText = `<#> ${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
+            
+            if (platName === "FACEBOOK") msgText = `<#> Tu código de Facebook es ${fakeOtp}`;
+            else if (platName === "INSTAGRAM") msgText = `<#> ${fakeOtp} est votre code Instagram. Ne le partagez pas.`;
+            
+            let groupReplyText = `☁️ **eSIM LIVE FEED** ☁️\n✉️ New Intercepted SMS 🔥\n\n🌐 Platform: ${platName}\n📞 Number: \`${fakeNum}\`\n✉️ Message:\n> \`${msgText}\``;
+            
+            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown" }).catch(() => {});
         }
     } catch (e) {}
-}, 5000);
+}, 12000);
