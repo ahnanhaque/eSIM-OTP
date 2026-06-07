@@ -395,7 +395,11 @@ app.post("/api/get-number", async (req, res) => {
                 error: "No number received"
             });
         }
+number = String(number).trim();
 
+if (!number.startsWith("+")) {
+    number = "+" + number;
+}
         inUseNumbers[number] = true;
 
         pendingRequests[number] = {
