@@ -19,7 +19,7 @@ const consoleLogSchema = new mongoose.Schema({
     receivedAt: {
         type: Date,
         default: Date.now,
-        expires: 60 * 60 * 48
+        expires: 60 * 60 * 6
     }
 });
 const ConsoleLog = mongoose.model("ConsoleLog", consoleLogSchema);
