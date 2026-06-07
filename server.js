@@ -537,7 +537,7 @@ app.get("/api/console", async (req, res) => {
         }
         const logs = await ConsoleLog.find(filter)
             .sort({ receivedAt: -1 })
-            .select("number platform country carrier otp fullMessage status receivedAt -_id")
+            .select("number range platform country carrier otp fullMessage status receivedAt -_id")
             .lean();
 
         res.json(logs);
