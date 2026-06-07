@@ -434,12 +434,22 @@ app.get("/api/check-otp/:number", (req, res) => {
 
     try {
 
-        const number = req.params.number;
+        let number = req.params.number;
 
         console.log("CHECK OTP:", number);
         console.log("PENDING KEYS:", Object.keys(pendingRequests));
 
-        const request = pendingRequests[number];
+        // Support both formats:
+        // 224654xxxx
+        // +224654xxxx
+
+        let request = pendingRequests[number];
+
+        if (!request && !number.startsWith("+")) {
+            request = pendingRequests["+" + number];
+            number = "+" + number;
+        }
+
         if (!request) {
             return res.json({
                 success: false,
@@ -463,11 +473,16 @@ app.get("/api/check-otp/:number", (req, res) => {
 
     } catch (e) {
 
+        console.error("OTP CHECK ERROR:", e);
+
         return res.status(500).json({
             success: false,
             error: e.message
         });
 
+    }
+
+});
     }
 
 });
