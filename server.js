@@ -432,8 +432,10 @@ app.get("/api/check-otp/:number", (req, res) => {
 
         const number = req.params.number;
 
-        const request = pendingRequests[number];
+        console.log("CHECK OTP:", number);
+        console.log("PENDING KEYS:", Object.keys(pendingRequests));
 
+        const request = pendingRequests[number];
         if (!request) {
             return res.json({
                 success: false,
