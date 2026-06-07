@@ -2157,19 +2157,27 @@ bot.on("callback_query", async (query) => {
 });
 
 function processFoundOTP(number, time, message, range) {
-    const uniqueId = `${number}_${time}`;
-    if (lastProcessedOTPTime[uniqueId]) return;
-    lastProcessedOTPTime[uniqueId] = true;
-
+    // 1. Extract OTP code first
     let otpMatch = message.match(/\b\d{5,8}\b/);
     let otpCode  = otpMatch ? otpMatch[0] : null;
+
+    // 2. OTP-based deduplication
+    // Fallback to the full message if no explicit OTP code is found to prevent spamming
+    const otpKey = otpCode ? `${number}_${otpCode}` : `${number}_${message.trim()}`;
+    
+    if (lastProcessedOTPTime[otpKey]) return;
+    lastProcessedOTPTime[otpKey] = Date.now();
+
+    let reqData  = pendingRequests[number];
+
+    // 3. Additional safety: Don't process if the exact OTP is already assigned to this request
+    if (reqData && reqData.otp && reqData.otp === otpCode) return;
 
     const cName   = typeof range === "object" ? range.country : range;
     const info    = getCountryInfo(cName || "UNKNOWN");
     const numStr  = String(number);
     const maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
 
-    let reqData  = pendingRequests[number];
     let platCode = reqData ? reqData.platform : "unknown";
     let platName = platCode === "fb" ? "FACEBOOK" : platCode === "ig" ? "INSTAGRAM" : platCode === "wa" ? "WHATSAPP" : platCode.toUpperCase();
 
@@ -2538,3 +2546,13 @@ setInterval(() => {
         syncPending();
     }
 }, 60 * 1000);
+
+// Clean up old OTP records to prevent memory bloat
+setInterval(() => {
+    const now = Date.now();
+    for (const key in lastProcessedOTPTime) {
+        if (now - lastProcessedOTPTime[key] > 12 * 60 * 60 * 1000) {
+            delete lastProcessedOTPTime[key];
+        }
+    }
+}, 60 * 60 * 1000); // Runs every 1 hour
