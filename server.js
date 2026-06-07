@@ -422,6 +422,49 @@ app.post("/api/get-number", async (req, res) => {
     }
 
 });
+// =====================================
+// OTP CHECK API
+// =====================================
+
+app.get("/api/check-otp/:number", (req, res) => {
+
+    try {
+
+        const number = req.params.number;
+
+        const request = pendingRequests[number];
+
+        if (!request) {
+            return res.json({
+                success: false,
+                status: "expired"
+            });
+        }
+
+        if (request.otp) {
+            return res.json({
+                success: true,
+                status: "success",
+                otp: request.otp,
+                message: request.message || ""
+            });
+        }
+
+        return res.json({
+            success: true,
+            status: "pending"
+        });
+
+    } catch (e) {
+
+        return res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+
+});
 bot.on("error", (err) => {
     if (err && err.message && !err.message.includes("message is not modified"))
         console.log("\n[Telegram Bot Error]", err.message);
