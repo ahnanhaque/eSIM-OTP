@@ -1,6 +1,6 @@
 const https = require("https");
 
-const BASE_URL = "https://www.zenexnetwork.com";
+const BASE_URL = "https://api.zenexnetwork.com";
 
 function makeRequest(method, path, body, apiKey = null) {
     return new Promise((resolve, reject) => {
@@ -35,11 +35,24 @@ function makeRequest(method, path, body, apiKey = null) {
 }
 
 async function login(email, password) {
-    const apiKey = password || email; 
+    const apiKey = password || email;
 
-    const res = await makeRequest("GET", "/api/v1/numsuccess/info", null, apiKey);
-    
-    if (res.status === 200 && res.data && res.data.meta && res.data.meta.status === "success") {
+    const res = await makeRequest(
+        "GET",
+        "/v1/numsuccess/info",
+        null,
+        apiKey
+    );
+
+    console.log("ZENEX LOGIN STATUS:", res.status);
+    console.log("ZENEX LOGIN RESPONSE:", JSON.stringify(res.data, null, 2));
+
+    if (
+        res.status === 200 &&
+        res.data &&
+        res.data.meta &&
+        res.data.meta.status === "success"
+    ) {
         return apiKey;
     }
 
@@ -52,7 +65,12 @@ async function getNumber(range, apiKey = null) {
     const body = JSON.stringify({ range: range, is_national: false, remove_plus: false });
 
     try {
-        const res = await makeRequest("POST", "/api/v1/getnum", body, apiKey);
+      const res = await makeRequest(
+    "POST",
+    "/v1/getnum",
+    body,
+    apiKey
+);
 
         if (res.status === 401 || res.status === 403) {
             throw new Error("SESSION_EXPIRED");
@@ -72,7 +90,12 @@ async function checkInfo(apiKey = null) {
     if (!apiKey) return [];
 
     try {
-        const res = await makeRequest("GET", "/api/v1/numsuccess/info", null, apiKey);
+        const res = await makeRequest(
+    "GET",
+    "/v1/numsuccess/info",
+    null,
+    apiKey
+);
 
         if (res.status === 401 || res.status === 403) {
             return []; 
@@ -134,18 +157,29 @@ function startPolling(ctx) {
         }
     }, 3500);
 }
-
 async function getLiveTraffic(apiKey = null) {
     if (!apiKey) return [];
+
     try {
-        const res = await makeRequest("GET", "/api/v1/active-ranges", null, apiKey);
-        if (res.status === 200 && res.data && res.data.data && Array.isArray(res.data.data.active_ranges)) {
+        const res = await makeRequest(
+            "GET",
+            "/v1/active-ranges",
+            null,
+            apiKey
+        );
+
+        if (
+            res.status === 200 &&
+            res.data &&
+            res.data.data &&
+            Array.isArray(res.data.data.active_ranges)
+        ) {
             return res.data.data.active_ranges;
         }
+
         return [];
     } catch (e) {
         return [];
     }
 }
-
 module.exports = { login, getNumber, checkInfo, startPolling, getLiveTraffic };
