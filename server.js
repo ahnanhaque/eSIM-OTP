@@ -427,6 +427,7 @@ app.post("/api/get-number", async (req, res) => {
         pendingRequests[number] = {
             country,
             platform,
+            range: selected.range,
             carrier: selected.method,
             createdAt: Date.now(),
             isStex: selected.panel === "STEX",
@@ -2333,20 +2334,18 @@ function processFoundOTP(number, time, message, range) {
         { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
     ).then(doc => {
         if (!doc) {
-            ConsoleLog.create({
-                number: String(number),
-                platform: platName,
-                country: info.cleanName.toUpperCase(),
-                carrier: reqData ? reqData.carrier : "System",
-                fullMessage: message,
-                otp: otpCode,
-                status: "success",
-                receivedAt: Date.now()
-            }).catch(()=>{});
-        }
-    }).catch(()=>{});
-}
-
+   ConsoleLog.create({
+    number: String(number),
+    platform: platName,
+    country: info.cleanName.toUpperCase(),
+    range: reqData?.range || "",
+    carrier: reqData ? reqData.carrier : "System",
+    fullMessage: message,
+    otp: otpCode,
+    status: "success",
+    receivedAt: Date.now()
+}).catch(()=>{});
+            
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
     if (type === "RANGES") {
