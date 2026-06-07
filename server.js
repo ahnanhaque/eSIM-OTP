@@ -427,6 +427,7 @@ app.post("/api/get-number", async (req, res) => {
             country,
             platform,
             carrier: selected.method,
+            range: selected.range,
             createdAt: Date.now(),
             isStex: selected.panel === "STEX",
             token: selected.panel === "STEX" ? db.stexToken : (selected.panel === "NXA" ? db.nxaToken : undefined),
