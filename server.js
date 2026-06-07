@@ -423,67 +423,179 @@ if (!number.startsWith("+")) {
             error: e.message
         });
 
+app.post("/api/get-number", async (req, res) => {
+
+try {
+
+    const { platform, country } = req.body;
+
+    let selected = null;
+
+    function findRange(source, panelName) {
+
+        Object.keys(source || {}).forEach(p => {
+
+            Object.keys(source[p] || {}).forEach(range => {
+
+                const item = source[p][range];
+
+                const pName =
+                    p === "fb" || p === "fb_new" ? "Facebook" :
+                    p === "ig" ? "Instagram" :
+                    p === "wa" ? "WhatsApp" :
+                    p;
+
+                if (
+                    !selected &&
+                    pName === platform &&
+                    item.country === country
+                ) {
+                    selected = {
+                        panel: panelName,
+                        range,
+                        method: item.method
+                    };
+                }
+
+            });
+
+        });
+
     }
 
+    findRange(db.mkRanges, "MK");
+    findRange(db.stexRanges, "STEX");
+    findRange(db.zenexRanges, "ZENEX");
+    findRange(db.nxaRanges, "NXA");
+
+    if (!selected) {
+        return res.status(404).json({
+            success: false,
+            error: "No route found"
+        });
+    }
+
+    let number = null;
+
+    if (selected.panel === "MK") {
+
+        const data = await mk.getNumber(
+            selected.range,
+            db.mkCookies
+        );
+
+        number = data.number;
+
+    } else if (selected.panel === "STEX") {
+
+        const data = await stex.getNumber(
+            selected.range,
+            db.stexToken
+        );
+
+        number = data.full_number;
+
+    } else if (selected.panel === "ZENEX") {
+
+        const data = await zenex.getNumber(
+            selected.range
+        );
+
+        number = data.number;
+
+    } else if (selected.panel === "NXA") {
+
+        const data = await nxa.getNumber(
+            selected.range,
+            db.nxaToken,
+            db.nxaCookies
+        );
+
+        number = data.number;
+
+    }
+
+    if (!number) {
+        return res.status(500).json({
+            success: false,
+            error: "No number received"
+        });
+    }
+
+    // Normalize number
+    number = String(number).replace("+", "").trim();
+
+    inUseNumbers[number] = true;
+
+    pendingRequests[number] = {
+        country,
+        platform,
+        createdAt: Date.now(),
+        status: "pending"
+    };
+
+    res.json({
+        success: true,
+        number: "+" + number,
+        country,
+        platform,
+        expiresIn: 900
+    });
+
+} catch (e) {
+
+    res.status(500).json({
+        success: false,
+        error: e.message
+    });
+
+}
+
 });
+
 // =====================================
 // OTP CHECK API
 // =====================================
 
 app.get("/api/check-otp/:number", (req, res) => {
 
-    try {
+try {
 
-        let number = req.params.number;
+    let number = String(req.params.number)
+        .replace("+", "")
+        .trim();
 
-        console.log("CHECK OTP:", number);
-        console.log("PENDING KEYS:", Object.keys(pendingRequests));
+    const request = pendingRequests[number];
 
-        // Support both formats:
-        // 224654xxxx
-        // +224654xxxx
+    if (!request) {
+        return res.json({
+            success: false,
+            status: "expired"
+        });
+    }
 
-        let request = pendingRequests[number];
-
-        if (!request && !number.startsWith("+")) {
-            request = pendingRequests["+" + number];
-            number = "+" + number;
-        }
-
-        if (!request) {
-            return res.json({
-                success: false,
-                status: "expired"
-            });
-        }
-
-        if (request.otp) {
-            return res.json({
-                success: true,
-                status: "success",
-                otp: request.otp,
-                message: request.message || ""
-            });
-        }
-
+    if (request.otp) {
         return res.json({
             success: true,
-            status: "pending"
+            status: "success",
+            otp: request.otp,
+            message: request.message || ""
         });
-
-    } catch (e) {
-
-        console.error("OTP CHECK ERROR:", e);
-
-        return res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
     }
 
-});
-    }
+    return res.json({
+        success: true,
+        status: "pending"
+    });
+
+} catch (e) {
+
+    return res.status(500).json({
+        success: false,
+        error: e.message
+    });
+
+}
 
 });
 bot.on("error", (err) => {
