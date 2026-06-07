@@ -12,7 +12,6 @@ const consoleLogSchema = new mongoose.Schema({
     number: String,
     platform: String,
     country: String,
-    range: String,
     carrier: String,
     otp: String,
     fullMessage: String,
@@ -427,7 +426,6 @@ app.post("/api/get-number", async (req, res) => {
         pendingRequests[number] = {
             country,
             platform,
-            range: selected.range,
             carrier: selected.method,
             createdAt: Date.now(),
             isStex: selected.panel === "STEX",
@@ -444,7 +442,6 @@ app.post("/api/get-number", async (req, res) => {
             number,
             platform,
             country,
-             range: selected.range,
             carrier: selected.method,
             status: "pending"
         }).catch(()=>{});
@@ -538,7 +535,7 @@ app.get("/api/console", async (req, res) => {
         }
         const logs = await ConsoleLog.find(filter)
             .sort({ receivedAt: -1 })
-            .select("number range platform country carrier otp fullMessage status receivedAt -_id")
+            .select("number platform country carrier otp fullMessage status receivedAt -_id")
             .lean();
 
         res.json(logs);
@@ -2334,18 +2331,20 @@ function processFoundOTP(number, time, message, range) {
         { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
     ).then(doc => {
         if (!doc) {
-   ConsoleLog.create({
-    number: String(number),
-    platform: platName,
-    country: info.cleanName.toUpperCase(),
-    range: reqData?.range || "",
-    carrier: reqData ? reqData.carrier : "System",
-    fullMessage: message,
-    otp: otpCode,
-    status: "success",
-    receivedAt: Date.now()
-}).catch(()=>{});
-            
+            ConsoleLog.create({
+                number: String(number),
+                platform: platName,
+                country: info.cleanName.toUpperCase(),
+                carrier: reqData ? reqData.carrier : "System",
+                fullMessage: message,
+                otp: otpCode,
+                status: "success",
+                receivedAt: Date.now()
+            }).catch(()=>{});
+        }
+    }).catch(()=>{});
+}
+
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
     if (type === "RANGES") {
