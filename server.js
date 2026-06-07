@@ -350,6 +350,7 @@ app.post("/api/get-number", async (req, res) => {
         }
 
         let number = null;
+        let internal_id = null;
 
         if (selected.panel === "MK") {
 
@@ -386,6 +387,7 @@ app.post("/api/get-number", async (req, res) => {
             );
 
             number = data.number;
+            internal_id = data.internal_id;
 
         }
 
@@ -395,18 +397,26 @@ app.post("/api/get-number", async (req, res) => {
                 error: "No number received"
             });
         }
-number = String(number).trim();
+        number = String(number).trim();
 
-if (!number.startsWith("+")) {
-    number = "+" + number;
-}
+        if (!number.startsWith("+")) {
+            number = "+" + number;
+        }
         inUseNumbers[number] = true;
 
         pendingRequests[number] = {
             country,
             platform,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            isStex: selected.panel === "STEX",
+            token: selected.panel === "STEX" ? db.stexToken : (selected.panel === "NXA" ? db.nxaToken : undefined),
+            isMk: selected.panel === "MK",
+            cookie: selected.panel === "MK" ? db.mkCookies : (selected.panel === "ZENEX" ? db.zenexCookies : (selected.panel === "NXA" ? db.nxaCookies : undefined)),
+            isZenex: selected.panel === "ZENEX",
+            isNxa: selected.panel === "NXA",
+            internal_id: selected.panel === "NXA" ? internal_id : undefined
         };
+        syncPending();
 
         res.json({
             success: true,
@@ -436,18 +446,15 @@ app.get("/api/check-otp/:number", (req, res) => {
 
         let number = req.params.number;
 
-        console.log("CHECK OTP:", number);
-        console.log("PENDING KEYS:", Object.keys(pendingRequests));
-
-        // Support both formats:
-        // 224654xxxx
-        // +224654xxxx
-
         let request = pendingRequests[number];
 
         if (!request && !number.startsWith("+")) {
             request = pendingRequests["+" + number];
-            number = "+" + number;
+            if (request) number = "+" + number;
+        }
+        if (!request && number.startsWith("+")) {
+            request = pendingRequests[number.substring(1)];
+            if (request) number = number.substring(1);
         }
 
         if (!request) {
@@ -457,7 +464,7 @@ app.get("/api/check-otp/:number", (req, res) => {
             });
         }
 
-        if (request.otp) {
+        if (request.status === "success" || request.otp) {
             return res.json({
                 success: true,
                 status: "success",
@@ -522,7 +529,8 @@ const dbSchema = new mongoose.Schema({
     savedStexAccounts:  Array,
     savedMkAccounts:    Array,
     savedZenexAccounts: Array,
-    savedNxaAccounts:   Array
+    savedNxaAccounts:   Array,
+    pendingRequests:    Object
 }, { strict: false });
 
 const BotDB = mongoose.model("BotData", dbSchema);
@@ -552,7 +560,8 @@ let db = {
     savedStexAccounts: [],
     savedMkAccounts:   [],
     savedZenexAccounts:[],
-    savedNxaAccounts:  []
+    savedNxaAccounts:  [],
+    pendingRequests:   {}
 };
 
 let isDbLoaded             = false;
@@ -565,6 +574,11 @@ let tempAdminData          = {};
 let activeTempMails        = {};
 let activeNumberMessages   = {};
 let activeTimeouts         = {}; 
+
+function syncPending() {
+    db.pendingRequests = pendingRequests;
+    saveDB();
+}
 
 function saveDB() {
     if (!isDbLoaded) return;
@@ -628,11 +642,12 @@ function clearPendingForChat(chatId) {
         delete activeTimeouts[chatId];
     }
     for (let num in pendingRequests) {
-        if (pendingRequests[num].chatId === chatId) {
+        if (pendingRequests[num].chatId === chatId && pendingRequests[num].status !== "success") {
             delete inUseNumbers[num];
             delete pendingRequests[num];
         }
     }
+    syncPending();
 }
 
 function detectPlatform(from, subject, body) {
@@ -1832,7 +1847,7 @@ bot.on("callback_query", async (query) => {
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isNxa: true, platform, token: tokenToUse, cookie: cookieToUse, internal_id: numData.internal_id };
+                        pendingRequests[n] = { chatId, country: countryName, isNxa: true, platform, token: tokenToUse, cookie: cookieToUse, internal_id: numData.internal_id, createdAt: Date.now() };
                     }
                 } catch (e) {
                     if (i === 0 && credsToUse?.email) {
@@ -1842,12 +1857,13 @@ bot.on("callback_query", async (query) => {
                             saveDB();
                             const retryData = await nxa.getNumber(sel, authData.token, authData.cookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isNxa: true, platform, token: authData.token, cookie: authData.cookie, internal_id: retryData.internal_id }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isNxa: true, platform, token: authData.token, cookie: authData.cookie, internal_id: retryData.internal_id, createdAt: Date.now() }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
                 }
             }
+            syncPending();
 
             if (fetchedNums.length === 0)
                 return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(() => {});
@@ -1868,7 +1884,8 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
                 activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    fetchedNums.forEach(n => { if (pendingRequests[n] && pendingRequests[n].status !== "success") { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    syncPending();
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
@@ -1901,7 +1918,7 @@ bot.on("callback_query", async (query) => {
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isZenex: true, platform, cookie: cookieToUse };
+                        pendingRequests[n] = { chatId, country: countryName, isZenex: true, platform, cookie: cookieToUse, createdAt: Date.now() };
                     }
                 } catch (e) {
                     if (i === 0 && credsToUse?.email) {
@@ -1911,12 +1928,13 @@ bot.on("callback_query", async (query) => {
                             saveDB();
                             const retryData = await zenex.getNumber(sel, newCookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isZenex: true, platform, cookie: newCookie }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isZenex: true, platform, cookie: newCookie, createdAt: Date.now() }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
                 }
             }
+            syncPending();
 
             if (fetchedNums.length === 0)
                 return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
@@ -1939,7 +1957,8 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
                 activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    fetchedNums.forEach(n => { if (pendingRequests[n] && pendingRequests[n].status !== "success") { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    syncPending();
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
@@ -1972,7 +1991,7 @@ bot.on("callback_query", async (query) => {
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isStex: true, platform, token: tokenToUse };
+                        pendingRequests[n] = { chatId, country: countryName, isStex: true, platform, token: tokenToUse, createdAt: Date.now() };
                     }
                 } catch (e) {
                     if (i === 0 && credsToUse?.email) {
@@ -1982,12 +2001,13 @@ bot.on("callback_query", async (query) => {
                             saveDB();
                             const retryData = await stex.getNumber(sel, newToken);
                             const retryN    = retryData.full_number || retryData.number.replace("+", "");
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isStex: true, platform, token: newToken }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isStex: true, platform, token: newToken, createdAt: Date.now() }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
                 }
             }
+            syncPending();
 
             if (fetchedNums.length === 0)
                 return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
@@ -2010,7 +2030,8 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
                 activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    fetchedNums.forEach(n => { if (pendingRequests[n] && pendingRequests[n].status !== "success") { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    syncPending();
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
@@ -2043,7 +2064,7 @@ bot.on("callback_query", async (query) => {
                     if (n) {
                         fetchedNums.push(n);
                         inUseNumbers[n]    = true;
-                        pendingRequests[n] = { chatId, country: countryName, isMk: true, platform, cookie: cookieToUse };
+                        pendingRequests[n] = { chatId, country: countryName, isMk: true, platform, cookie: cookieToUse, createdAt: Date.now() };
                     }
                 } catch (e) {
                     if (i === 0 && credsToUse?.email) {
@@ -2053,12 +2074,13 @@ bot.on("callback_query", async (query) => {
                             saveDB();
                             const retryData = await mk.getNumber(sel, newCookie);
                             const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
-                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform, cookie: newCookie }; continue; }
+                            if (retryN) { fetchedNums.push(retryN); inUseNumbers[retryN] = true; pendingRequests[retryN] = { chatId, country: countryName, isMk: true, platform, cookie: newCookie, createdAt: Date.now() }; continue; }
                         } catch (err2) { break; }
                     }
                     break;
                 }
             }
+            syncPending();
 
             if (fetchedNums.length === 0)
                 return bot.editMessageText(`❌ Out of stock or error fetching the number.`,
@@ -2081,7 +2103,8 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
                 activeTimeouts[chatId] = setTimeout(() => {
-                    fetchedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    fetchedNums.forEach(n => { if (pendingRequests[n] && pendingRequests[n].status !== "success") { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    syncPending();
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
                     if (methodName) expiredText += `\n📝 **Method:** ${methodName}`;
                     expiredText += `\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
@@ -2103,7 +2126,8 @@ bot.on("callback_query", async (query) => {
             db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] };
             saveDB();
 
-            assignedNums.forEach(n => { inUseNumbers[n] = true; pendingRequests[n] = { chatId, country: sel, platform }; });
+            assignedNums.forEach(n => { inUseNumbers[n] = true; pendingRequests[n] = { chatId, country: sel, platform, createdAt: Date.now() }; });
+            syncPending();
 
             const info    = getCountryInfo(sel);
             let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
@@ -2119,7 +2143,8 @@ bot.on("callback_query", async (query) => {
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
                 activeNumberMessages[chatId] = messageId;
                 activeTimeouts[chatId] = setTimeout(() => {
-                    assignedNums.forEach(n => { if (pendingRequests[n]) { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    assignedNums.forEach(n => { if (pendingRequests[n] && pendingRequests[n].status !== "success") { delete pendingRequests[n]; delete inUseNumbers[n]; } });
+                    syncPending();
                     let expiredText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n⚠️ **Status:** 🔴 **EXPIRED (15m validity ended)**\n\n`;
                     assignedNums.forEach(n => { expiredText += `~~${info.flag} +${n}~~\n`; });
                     bot.editMessageText(expiredText, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "Next ➡️", callback_data: `assign_next_${panelType}_${platform}_${sel}` }], [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] }, parse_mode: "Markdown" }).catch(() => {});
@@ -2159,16 +2184,22 @@ function processFoundOTP(number, time, message, range) {
     ).catch(() => {});
 
     if (reqData) {
-        const reqInfo    = getCountryInfo(cName);
-        let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
-        let userMarkup   = { inline_keyboard: [] };
-        if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-        bot.sendMessage(reqData.chatId, userReplyText,
-            { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }
-        ).catch(() => {});
-        addBalance(reqData.chatId, 0.50);
-        delete pendingRequests[number];
-        delete inUseNumbers[number];
+        reqData.otp = otpCode;
+        reqData.message = message;
+        reqData.status = "success";
+        reqData.receivedAt = Date.now();
+        syncPending();
+
+        if (reqData.chatId) {
+            const reqInfo    = getCountryInfo(cName);
+            let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
+            let userMarkup   = { inline_keyboard: [] };
+            if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
+            bot.sendMessage(reqData.chatId, userReplyText,
+                { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }
+            ).catch(() => {});
+            addBalance(reqData.chatId, 0.50);
+        }
     }
 }
 
@@ -2252,6 +2283,16 @@ mongoose.connect(MONGODB_URI).then(async () => {
         if (db.zenexCreds?.email&& db.savedZenexAccounts.length=== 0) db.savedZenexAccounts.push(db.zenexCreds);
         if (db.nxaCreds?.email  && db.savedNxaAccounts.length  === 0) db.savedNxaAccounts.push(db.nxaCreds);
 
+        if (!db.pendingRequests) db.pendingRequests = {};
+        pendingRequests = db.pendingRequests;
+        for (let num in pendingRequests) {
+            if (pendingRequests[num].status !== "success" || (Date.now() - pendingRequests[num].receivedAt < 12 * 60 * 60 * 1000)) {
+                inUseNumbers[num] = true;
+            } else {
+                delete pendingRequests[num];
+            }
+        }
+
     } else {
         await BotDB.create(db);
     }
@@ -2266,7 +2307,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
 setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isStex);
+    const reqs = Object.values(pendingRequests).filter(r => r.isStex && r.status !== "success");
     if (reqs.length === 0) return;
 
     const tokensToPoll = [...new Set(reqs.map(r => r.token).filter(Boolean))];
@@ -2297,7 +2338,7 @@ setInterval(async () => {
 }, 1500);
 
 setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isMk);
+    const reqs = Object.values(pendingRequests).filter(r => r.isMk && r.status !== "success");
     if (reqs.length === 0) return;
 
     const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
@@ -2329,7 +2370,7 @@ setInterval(async () => {
 }, 1500);
 
 setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isZenex);
+    const reqs = Object.values(pendingRequests).filter(r => r.isZenex && r.status !== "success");
     if (reqs.length === 0) return;
 
     const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
@@ -2359,7 +2400,7 @@ setInterval(async () => {
 }, 1500);
 
 setInterval(async () => {
-    const reqs = Object.values(pendingRequests).filter(r => r.isNxa);
+    const reqs = Object.values(pendingRequests).filter(r => r.isNxa && r.status !== "success");
     if (reqs.length === 0) return;
 
     const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
@@ -2477,3 +2518,23 @@ if (platName === "FACEBOOK") {
         }
     } catch (e) {}
 }, 12000);
+
+setInterval(() => {
+    let changed = false;
+    const now = Date.now();
+    for (const num in pendingRequests) {
+        const req = pendingRequests[num];
+        if (req.status === "success" && req.receivedAt && (now - req.receivedAt > 12 * 60 * 60 * 1000)) {
+            delete pendingRequests[num];
+            delete inUseNumbers[num];
+            changed = true;
+        } else if (req.status !== "success" && req.createdAt && (now - req.createdAt > 20 * 60 * 1000)) {
+            delete pendingRequests[num];
+            delete inUseNumbers[num];
+            changed = true;
+        }
+    }
+    if (changed) {
+        syncPending();
+    }
+}, 60 * 1000);
