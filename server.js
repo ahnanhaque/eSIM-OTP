@@ -12,6 +12,7 @@ const consoleLogSchema = new mongoose.Schema({
     number: String,
     platform: String,
     country: String,
+    range: String,
     carrier: String,
     otp: String,
     fullMessage: String,
@@ -442,6 +443,7 @@ app.post("/api/get-number", async (req, res) => {
             number,
             platform,
             country,
+             range: selected.range,
             carrier: selected.method,
             status: "pending"
         }).catch(()=>{});
