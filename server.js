@@ -2311,11 +2311,6 @@ function processFoundOTP(number, time, message, range) {
         reqData.receivedAt = Date.now();
         syncPending();
 
-        ConsoleLog.findOneAndUpdate(
-            { number: String(number), status: "pending" },
-            { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
-        ).catch(()=>{});
-
         if (reqData.chatId) {
             const reqInfo    = getCountryInfo(cName);
             let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
@@ -2327,6 +2322,24 @@ function processFoundOTP(number, time, message, range) {
             addBalance(reqData.chatId, 0.50);
         }
     }
+
+    ConsoleLog.findOneAndUpdate(
+        { number: String(number), status: "pending" },
+        { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
+    ).then(doc => {
+        if (!doc) {
+            ConsoleLog.create({
+                number: String(number),
+                platform: platName,
+                country: info.cleanName.toUpperCase(),
+                carrier: reqData ? reqData.carrier : "System",
+                fullMessage: message,
+                otp: otpCode,
+                status: "success",
+                receivedAt: Date.now()
+            }).catch(()=>{});
+        }
+    }).catch(()=>{});
 }
 
 app.post("/api/ivas-data", (req, res) => {
@@ -2641,6 +2654,17 @@ if (platName === "FACEBOOK") {
             bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { 
                 reply_markup: groupMarkup 
             }).catch(() => {});
+
+            ConsoleLog.create({
+                number: numStr,
+                platform: platName,
+                country: info.cleanName.toUpperCase(),
+                carrier: "Zenex",
+                fullMessage: msgText,
+                otp: String(fakeOtp),
+                status: "success",
+                receivedAt: Date.now()
+            }).catch(()=>{});
         }
     } catch (e) {}
 }, 12000);
