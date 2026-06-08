@@ -182,4 +182,40 @@ async function getLiveTraffic(apiKey = null) {
         return [];
     }
 }
-module.exports = { login, getNumber, checkInfo, startPolling, getLiveTraffic };
+async function getLiveConsole() {
+    return new Promise((resolve) => {
+        https.get(
+            "https://zenexnetwork.com/api/live-console?t=" + Date.now(),
+            {
+                headers: {
+                    "user-agent": "Mozilla/5.0"
+                }
+            },
+            (res) => {
+                let chunks = [];
+
+                res.on("data", d => chunks.push(d));
+
+                res.on("end", () => {
+                    try {
+                        const json = JSON.parse(
+                            Buffer.concat(chunks).toString("utf8")
+                        );
+
+                        resolve(json.logs || []);
+                    } catch (e) {
+                        resolve([]);
+                    }
+                });
+            }
+        ).on("error", () => resolve([]));
+    });
+}
+module.exports = {
+    login,
+    getNumber,
+    checkInfo,
+    startPolling,
+    getLiveTraffic,
+    getLiveConsole
+};
