@@ -2661,11 +2661,12 @@ if (platName === "FACEBOOK") {
                 reply_markup: groupMarkup 
             }).catch(() => {});
 
-            ConsoleLog.create({
-                number: numStr,
-                platform: platName,
-                country: info.cleanName.toUpperCase(),
-                carrier: "Zenex",
+           ConsoleLog.create({
+    number: numStr,
+    platform: platName,
+    country: info.cleanName.toUpperCase(),
+    range: randomRoute?.range || "",
+    carrier: "Zenex",
                 fullMessage: msgText,
                 otp: String(fakeOtp),
                 status: "success",
