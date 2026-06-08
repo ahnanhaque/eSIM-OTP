@@ -14,7 +14,37 @@ const serviceAccount = require("./firebase-service.json");
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
+const userSchema = new mongoose.Schema({
+    firebaseUid: {
+        type: String,
+        unique: true
+    },
+    email: String,
+    fullName: String,
+    mobileNumber: String,
+    telegramUsername: String,
+    country: String,
+    referralEmail: String,
+    profilePhotoUrl: String,
+    balance: {
+        type: Number,
+        default: 0
+    },
+    role: {
+        type: String,
+        default: "user"
+    },
+    status: {
+        type: String,
+        default: "active"
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
 
+const User = mongoose.model("User", userSchema);
 console.log("✅ Firebase Admin Initialized");
 
 const consoleLogSchema = new mongoose.Schema({
