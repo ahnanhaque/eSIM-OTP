@@ -426,7 +426,57 @@ app.get("/api/live-traffic", async (req, res) => {
         });
     }
 });
+app.post("/api/auth/firebase", async (req, res) => {
+    try {
+        const {
+            firebaseUid,
+            email,
+            fullName,
+            mobileNumber,
+            telegramUsername,
+            country,
+            referralEmail
+        } = req.body;
 
+        if (!firebaseUid || !email) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing firebaseUid or email"
+            });
+        }
+
+        let user = await User.findOne({
+            firebaseUid
+        });
+
+        if (!user) {
+            user = await User.create({
+                firebaseUid,
+                email,
+                fullName: fullName || "",
+                mobileNumber: mobileNumber || "",
+                telegramUsername: telegramUsername || "",
+                country: country || "",
+                referralEmail: referralEmail || "",
+                profilePhotoUrl: "",
+                balance: 0,
+                role: "user",
+                status: "active"
+            });
+        }
+
+        res.json({
+            success: true,
+            user
+        });
+
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 app.post("/api/get-number", async (req, res) => {
 
     try {
