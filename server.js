@@ -561,11 +561,8 @@ app.post("/api/admin/broadcast", async (req, res) => {
             isRead: false
         });
 
-        // SEND PUSH NOTIFICATION
-       if (db.fcmTokens && db.fcmTokens.length > 0) {
-    const unsentTokens = db.fcmTokens.filter(t => !broadcast.fcmSentTo.includes(t));
-    if (unsentTokens.length > 0) {
-        try {
+        if (db.fcmTokens && db.fcmTokens.length > 0) {
+            try {
                 const response = await admin.messaging().sendEachForMulticast({
                     notification: {
                         title: subject || "New Broadcast",
@@ -584,6 +581,7 @@ app.post("/api/admin/broadcast", async (req, res) => {
             success: true,
             broadcast
         });
+
     } catch (e) {
         res.status(500).json({
             success: false,
