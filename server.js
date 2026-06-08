@@ -2678,7 +2678,17 @@ function processFoundOTP(number, time, message, range) {
             addBalance(reqData.chatId, 0.50);
         }
     }
-
+History.findOneAndUpdate(
+    {
+        number: String(number)
+    },
+    {
+        $set: {
+            otp: otpCode,
+            status: "success"
+        }
+    }
+).catch(() => {});
     ConsoleLog.findOneAndUpdate(
         { number: String(number), status: "pending" },
         { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
