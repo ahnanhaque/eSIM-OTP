@@ -33,11 +33,9 @@ const broadcastSchema = new mongoose.Schema({
     attachmentType: String,
     sentBy: String,
     isRead: {
-    type: Boolean,
-    default: false
-},
-
-Schem
+        type: Boolean,
+        default: false
+    },
     createdAt: {
         type: Date,
         default: Date.now
