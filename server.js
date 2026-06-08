@@ -597,6 +597,8 @@ app.delete("/api/admin/broadcast/:id", async (req, res) => {
 app.post("/api/fcm/register", async (req, res) => {
     try {
         const { token } = req.body;
+        console.log("FCM REGISTER HIT");
+console.log("TOKEN:", token?.substring(0, 20));
 
         if (!token) {
             return res.status(400).json({
