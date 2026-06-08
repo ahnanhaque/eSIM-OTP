@@ -471,13 +471,19 @@ app.get("/api/history/:firebaseUid", async (req, res) => {
     try {
 
         const firebaseUid = req.params.firebaseUid;
-
+  console.log(
+            "HISTORY UID:",
+            firebaseUid
+        );
         const history = await History.find({
             firebaseUid
         })
         .sort({ createdAt: -1 })
         .lean();
-
+ console.log(
+            "FOUND:",
+            history.length
+        );
         res.json(history);
 
     } catch (e) {
