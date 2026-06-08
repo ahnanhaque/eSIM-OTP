@@ -141,6 +141,22 @@ app.post(`/bot${botToken}`, (req, res) => {
 // =====================================
 // ANDROID APP API
 // =====================================
+app.get("/api/history-test", async (req, res) => {
+    try {
+
+        const data = await History.find({})
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean();
+
+        res.json(data);
+
+    } catch (e) {
+        res.status(500).json({
+            error: e.message
+        });
+    }
+});
 app.get("/api/test-live-console", async (req, res) => {
     try {
         const logs = await zenex.getLiveConsole();
