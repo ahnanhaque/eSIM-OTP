@@ -24,7 +24,21 @@ const consoleLogSchema = new mongoose.Schema({
     }
 });
 const ConsoleLog = mongoose.model("ConsoleLog", consoleLogSchema);
+const broadcastSchema = new mongoose.Schema({
+    subject: String,
+    message: String,
+    category: String,
+    priority: String,
+    attachmentUrl: String,
+    attachmentType: String,
+    sentBy: String,
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
 
+const Broadcast = mongoose.model("Broadcast", broadcastSchema);
 const botToken        = process.env.BOT_TOKEN        || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
 const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
 const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
@@ -523,7 +537,34 @@ console.log("MSG TEXT:", msgText);
     }
 
 });
+app.post("/api/admin/broadcast", async (req, res) => {
+    try {
+        const {
+            subject,
+            message,
+            category,
+            priority
+        } = req.body;
 
+        const broadcast = await Broadcast.create({
+            subject,
+            message,
+            category,
+            priority,
+            sentBy: "System"
+        });
+
+        res.json({
+            success: true,
+            broadcast
+        });
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 app.get("/api/console", async (req, res) => {
     try {
         const query = req.query.q || "";
