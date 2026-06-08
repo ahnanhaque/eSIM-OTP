@@ -477,25 +477,15 @@ app.get("/api/profile/:firebaseUid", async (req, res) => {
 app.get("/api/history/:firebaseUid", async (req, res) => {
     try {
 
-        const firebaseUid = req.params.firebaseUid;
+        const history = await History.find({}).lean();
 
-        const allData = await History.find({}).lean();
-
-        const history = allData.filter(
-            x => x.firebaseUid === firebaseUid
+        const filtered = history.filter(
+            item =>
+                String(item.firebaseUid).trim() ===
+                String(req.params.firebaseUid).trim()
         );
 
-        console.log(
-    JSON.stringify(firebaseUid)
-);
-
-console.log(
-    JSON.stringify(allData[0]?.firebaseUid)
-);console.log("HISTORY UID:", firebaseUid);
-        console.log("ALL RECORDS:", allData.length);
-        console.log("FOUND:", history.length);
-
-        res.json(history);
+        res.json(filtered);
 
     } catch (e) {
 
