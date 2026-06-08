@@ -451,7 +451,28 @@ app.get("/api/profile/:firebaseUid", async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+app.get("/api/history/:firebaseUid", async (req, res) => {
+    try {
 
+        const firebaseUid = req.params.firebaseUid;
+
+        const history = await History.find({
+            firebaseUid
+        })
+        .sort({ createdAt: -1 })
+        .lean();
+
+        res.json(history);
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/live-traffic", async (req, res) => {
     try {
         if (!db.zenexCookies) {
