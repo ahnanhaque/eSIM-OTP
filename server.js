@@ -565,6 +565,21 @@ app.post("/api/admin/broadcast", async (req, res) => {
         });
     }
 });
+
+app.get("/api/notifications", async (req, res) => {
+    try {
+        const notifications = await Broadcast.find()
+            .sort({ createdAt: -1 })
+            .lean();
+
+        res.json(notifications);
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 app.get("/api/console", async (req, res) => {
     try {
         const query = req.query.q || "";
