@@ -63,6 +63,38 @@ const consoleLogSchema = new mongoose.Schema({
     }
 });
 const ConsoleLog = mongoose.model("ConsoleLog", consoleLogSchema);
+const historySchema = new mongoose.Schema({
+    firebaseUid: {
+        type: String,
+        required: true
+    },
+
+    number: String,
+    platform: String,
+    country: String,
+    range: String,
+    carrier: String,
+
+    otp: {
+        type: String,
+        default: ""
+    },
+
+    status: {
+        type: String,
+        default: "pending"
+    },
+
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+const History = mongoose.model(
+    "History",
+    historySchema
+);
 const broadcastSchema = new mongoose.Schema({
     subject: String,
     message: String,
