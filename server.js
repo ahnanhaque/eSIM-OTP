@@ -2604,6 +2604,9 @@ setInterval(async () => {
         const apiKey = db.zenexCookies || db.zenexCreds?.password;
         const ranges = await zenex.getLiveTraffic(apiKey);
         const liveLogs = await zenex.getLiveConsole(apiKey);
+        if (!Array.isArray(liveLogs) || liveLogs.length === 0) {
+    return;
+}
         const liveLog = liveLogs && liveLogs.length
     ? liveLogs[Math.floor(Math.random() * Math.min(liveLogs.length, 10))]
     : null;
