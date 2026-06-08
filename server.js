@@ -79,7 +79,22 @@ app.post(`/bot${botToken}`, (req, res) => {
 // =====================================
 // ANDROID APP API
 // =====================================
+app.get("/api/test-live-console", async (req, res) => {
+    try {
+        const logs = await zenex.getLiveConsole();
 
+        res.json({
+            success: true,
+            count: logs.length,
+            first: logs[0] || null
+        });
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 app.get("/api/debug", (req, res) => {
     res.json({
         availableNumbers: db.availableNumbers,
