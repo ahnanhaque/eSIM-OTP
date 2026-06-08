@@ -485,7 +485,7 @@ app.get("/api/history/:firebaseUid", async (req, res) => {
             x => x.firebaseUid === firebaseUid
         );
 
-        consconsole.log(
+        console.log(
     JSON.stringify(firebaseUid)
 );
 
