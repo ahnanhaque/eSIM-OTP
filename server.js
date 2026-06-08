@@ -543,7 +543,7 @@ app.post("/api/get-number", async (req, res) => {
 
     try {
 
-        const { platform, country } = req.body;
+        const {     firebaseUid,     platform,     country } = req.body;
 
         let selected = null;
 
