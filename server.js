@@ -512,7 +512,9 @@ app.get("/api/check-otp/:number", (req, res) => {
     } catch (e) {
 
         console.error("OTP CHECK ERROR:", e);
-
+         console.log("LIVE CONSOLE ERROR:", e);
+console.log("SELECTED LOG:", JSON.stringify(liveLog, null, 2));
+console.log("MSG TEXT:", msgText);
         return res.status(500).json({
             success: false,
             error: e.message
