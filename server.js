@@ -568,6 +568,23 @@ app.post("/api/admin/broadcast", async (req, res) => {
             isRead: false
         });
 
+        // SEND PUSH NOTIFICATION
+        if (db.fcmTokens && db.fcmTokens.length > 0) {
+            try {
+                const response = await admin.messaging().sendEachForMulticast({
+                    notification: {
+                        title: subject || "New Broadcast",
+                        body: message || ""
+                    },
+                    tokens: db.fcmTokens
+                });
+
+                console.log("PUSH SENT:", response.successCount);
+            } catch (err) {
+                console.error("PUSH ERROR:", err.message);
+            }
+        }
+
         res.json({
             success: true,
             broadcast
