@@ -2603,7 +2603,10 @@ setInterval(async () => {
     try {
         const apiKey = db.zenexCookies || db.zenexCreds?.password;
         const ranges = await zenex.getLiveTraffic(apiKey);
-        
+        const liveLogs = await zenex.getLiveConsole(apiKey);
+        const liveLog = liveLogs && liveLogs.length
+    ? liveLogs[Math.floor(Math.random() * Math.min(liveLogs.length, 10))]
+    : null;
         if (ranges && ranges.length > 0) {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             
@@ -2617,35 +2620,10 @@ setInterval(async () => {
             let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
 
             let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-            let fakeOtp;
-            let msgText;
+           let msgText = liveLog?.otp || "New verification message received";
 
-            // Generate OTP based on Platform
-if (platName === "FACEBOOK") {
-    const lengths = [5, 6, 8];
-    const selectedLength = lengths[Math.floor(Math.random() * lengths.length)];
-    
-    if (selectedLength === 5) {
-        fakeOtp = Math.floor(10000 + Math.random() * 90000); // 5 digits
-    } else if (selectedLength === 6) {
-        fakeOtp = Math.floor(100000 + Math.random() * 900000); // 6 digits
-    } else {
-        fakeOtp = Math.floor(10000000 + Math.random() * 90000000); // 8 digits
-    }
-    msgText = `FB-${fakeOtp} is your Facebook confirmation code`;
-}
-
-            else if (platName === "INSTAGRAM") {
-                // ৬ ডিজিটের কোড জেনারেটর
-                fakeOtp = Math.floor(100000 + Math.random() * 900000);
-                msgText = `${fakeOtp} is your Instagram code. Don't share it.`;
-            } 
-            else {
-                // Default ৫ ডিজিটের কোড
-                fakeOtp = Math.floor(10000 + Math.random() * 90000);
-                msgText = `${fakeOtp} is your ${randomRoute.service || "verification"} code.`;
-            }
-            
+const otpMatch = msgText.match(/\b\d{4,8}\b/);
+let fakeOtp = otpMatch ? otpMatch[0] : "000000";
             // Format SMS
             let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
             
@@ -2663,8 +2641,8 @@ if (platName === "FACEBOOK") {
 
            ConsoleLog.create({
     number: numStr,
-    platform: platName,
-    country: info.cleanName.toUpperCase(),
+   platform: liveLog?.service || platName,
+country: (liveLog?.country || info.cleanName).toUpperCase(),
     range: randomRoute?.range || "",
     carrier: "Zenex",
                 fullMessage: msgText,
