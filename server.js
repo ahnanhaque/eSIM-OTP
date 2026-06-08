@@ -393,19 +393,31 @@ app.get("/api/admin/panel/active", (req, res) => {
     });
 });
 
-app.get("/api/profile/:id", (req, res) => {
-    const userId = req.params.id;
+app.get("/api/profile/:firebaseUid", async (req, res) => {
+    try {
+        const firebaseUid = req.params.firebaseUid;
+        const user = await User.findOne({ firebaseUid });
 
-    res.json({
-        userId,
-        balance: db.balances[userId] || 0,
-        referredBy: db.referred[userId] || null,
-        isAdmin:
-            userId == ADMIN_ID ||
-            db.adminUsernames.includes(
-                "@" + String(userId).toLowerCase()
-            )
-    });
+        if (!user) {
+            return res.status(404).json({ success: false, error: "User not found" });
+        }
+
+        res.json({
+            firebaseUid: user.firebaseUid,
+            fullName: user.fullName || "Unknown",
+            email: user.email,
+            mobileNumber: user.mobileNumber || null,
+            telegramUsername: user.telegramUsername || null,
+            country: user.country || null,
+            referralEmail: user.referralEmail || null,
+            profilePhotoUrl: user.profilePhotoUrl || null,
+            balance: user.balance,
+            role: user.role,
+            status: user.status
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 app.get("/api/live-traffic", async (req, res) => {
@@ -475,6 +487,24 @@ app.post("/api/auth/firebase", async (req, res) => {
             success: false,
             error: e.message
         });
+    }
+});
+app.post("/api/profile/photo", async (req, res) => {
+    try {
+        const { firebaseUid, photoUrl } = req.body;
+        if (!firebaseUid || !photoUrl) return res.status(400).json({ success: false, error: "Missing parameters" });
+
+        const user = await User.findOneAndUpdate(
+            { firebaseUid },
+            { profilePhotoUrl: photoUrl },
+            { new: true, upsert: false }
+        );
+
+        if (!user) return res.status(404).json({ success: false, error: "User not found" });
+
+        res.json({ success: true, profilePhotoUrl: user.profilePhotoUrl });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
 });
 app.post("/api/get-number", async (req, res) => {
