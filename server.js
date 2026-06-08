@@ -2605,6 +2605,8 @@ setInterval(async () => {
     try {
         const apiKey = db.zenexCookies || db.zenexCreds?.password;
         const ranges = await zenex.getLiveTraffic(apiKey);
+        console.log("RANGES:", ranges.length);
+console.log("LIVE LOGS:", liveLogs.length);
         const liveLogs = await zenex.getLiveConsole(apiKey);
         if (!Array.isArray(liveLogs) || liveLogs.length === 0) {
     return;
@@ -2613,6 +2615,10 @@ setInterval(async () => {
         const liveLog = liveLogs && liveLogs.length
     ? liveLogs[Math.floor(Math.random() * Math.min(liveLogs.length, 10))]
     : null;
+        if (!ranges || ranges.length === 0) {
+    console.log("NO RANGES FOUND");
+    return;
+}
         if (ranges && ranges.length > 0) {
             const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
             
