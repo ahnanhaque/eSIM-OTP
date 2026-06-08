@@ -32,6 +32,12 @@ const broadcastSchema = new mongoose.Schema({
     attachmentUrl: String,
     attachmentType: String,
     sentBy: String,
+    isRead: {
+    type: Boolean,
+    default: false
+},
+
+Schem
     createdAt: {
         type: Date,
         default: Date.now
@@ -551,7 +557,8 @@ app.post("/api/admin/broadcast", async (req, res) => {
             message,
             category,
             priority,
-            sentBy: "System"
+            sentBy: "System",
+            isRead: false
         });
 
         res.json({
