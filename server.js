@@ -38,17 +38,10 @@ const broadcastSchema = new mongoose.Schema({
     message: String,
     category: String,
     priority: String,
-    attachmentUrl: String,
-    attachmentType: String,
     sentBy: String,
-    isRead: {
-        type: Boolean,
-        default: false
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
+    isRead: { type: Boolean, default: false },
+    fcmSentTo: { type: [String], default: [] }, // tokens already sent
+    createdAt: { type: Date, default: Date.now }
 });
 
 const Broadcast = mongoose.model("Broadcast", broadcastSchema);
@@ -569,8 +562,10 @@ app.post("/api/admin/broadcast", async (req, res) => {
         });
 
         // SEND PUSH NOTIFICATION
-        if (db.fcmTokens && db.fcmTokens.length > 0) {
-            try {
+       if (db.fcmTokens && db.fcmTokens.length > 0) {
+    const unsentTokens = db.fcmTokens.filter(t => !broadcast.fcmSentTo.includes(t));
+    if (unsentTokens.length > 0) {
+        try {
                 const response = await admin.messaging().sendEachForMulticast({
                     notification: {
                         title: subject || "New Broadcast",
