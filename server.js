@@ -12,6 +12,7 @@ const consoleLogSchema = new mongoose.Schema({
     number: String,
     platform: String,
     country: String,
+    range: String,
     carrier: String,
     otp: String,
     fullMessage: String,
@@ -439,13 +440,14 @@ app.post("/api/get-number", async (req, res) => {
         };
         syncPending();
 
-        ConsoleLog.create({
-            number,
-            platform,
-            country,
-            carrier: selected.method,
-            status: "pending"
-        }).catch(()=>{});
+       ConsoleLog.create({
+    number,
+    platform,
+    country,
+    range: selected.range,
+    carrier: selected.method,
+    status: "pending"
+}).catch(()=>{});
 
         res.json({
             success: true,
@@ -536,7 +538,7 @@ app.get("/api/console", async (req, res) => {
         }
         const logs = await ConsoleLog.find(filter)
             .sort({ receivedAt: -1 })
-            .select("number platform country carrier otp fullMessage status receivedAt -_id")
+            .select("number range platform country carrier otp fullMessage status receivedAt -_id")
             .lean();
 
         res.json(logs);
