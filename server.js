@@ -141,6 +141,13 @@ app.post(`/bot${botToken}`, (req, res) => {
 // =====================================
 // ANDROID APP API
 // =====================================
+app.get("/api/history-debug", async (req, res) => {
+    const docs = await History.find({})
+        .limit(5)
+        .lean();
+
+    res.json(docs);
+});
 app.get("/api/history-test", async (req, res) => {
     try {
 
