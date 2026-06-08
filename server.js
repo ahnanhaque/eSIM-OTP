@@ -756,7 +756,6 @@ function saveDB() {
     if (!isDbLoaded) return;
     BotDB.updateOne({}, db, { upsert: true }).catch(() => {});
 }
-
 function getBalance(chatId) {
     return db.balances[chatId] || 0;
 }
