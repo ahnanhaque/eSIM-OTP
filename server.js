@@ -96,6 +96,64 @@ const History = mongoose.model(
     "History",
     historySchema
 );
+async function requireAdmin(req, res, next) {
+
+    const firebaseUid =
+        req.body.firebaseUid ||
+        req.params.firebaseUid ||
+        req.query.firebaseUid;
+
+    if (!firebaseUid) {
+        return res.status(401).json({
+            success: false,
+            error: "firebaseUid required"
+        });
+    }
+
+    const user = await User.findOne({
+        firebaseUid
+    });
+
+    if (!user) {
+        return res.status(404).json({
+            success: false,
+            error: "User not found"
+        });
+    }
+
+    if (
+        user.role !== "admin" &&
+        user.role !== "superadmin"
+    ) {
+        return res.status(403).json({
+            success: false,
+            error: "Admin access required"
+        });
+    }
+
+    next();
+}
+
+async function requireSuperAdmin(req, res, next) {
+
+    const firebaseUid =
+        req.body.firebaseUid ||
+        req.params.firebaseUid ||
+        req.query.firebaseUid;
+
+    const user = await User.findOne({
+        firebaseUid
+    });
+
+    if (!user || user.role !== "superadmin") {
+        return res.status(403).json({
+            success: false,
+            error: "Superadmin access required"
+        });
+    }
+
+    next();
+}
 const broadcastSchema = new mongoose.Schema({
     subject: String,
     message: String,
@@ -319,7 +377,10 @@ app.get("/api/panels", (req, res) => {
 
 });
 
-app.post("/api/admin/panel/login", async (req, res) => {
+app.post(
+    "/api/admin/panel/login",
+    requireAdmin,
+    async (req, res) => {
 
     try {
 
@@ -804,7 +865,10 @@ console.log("MSG TEXT:", msgText);
     }
 
 });
-app.post("/api/admin/broadcast", async (req, res) => {
+app.post(
+    "/api/admin/broadcast",
+    requireAdmin,
+    async (req, res) => {
     try {
         const {
             subject,
@@ -850,7 +914,10 @@ app.post("/api/admin/broadcast", async (req, res) => {
         });
     }
 });
-app.delete("/api/admin/broadcast/:id", async (req, res) => {
+app.delete(
+    "/api/admin/broadcast/:id",
+    requireAdmin,
+    async (req, res) => {
     try {
         const { id } = req.params;
 
