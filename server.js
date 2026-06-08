@@ -485,7 +485,13 @@ app.get("/api/history/:firebaseUid", async (req, res) => {
             x => x.firebaseUid === firebaseUid
         );
 
-        console.log("HISTORY UID:", firebaseUid);
+        consconsole.log(
+    JSON.stringify(firebaseUid)
+);
+
+console.log(
+    JSON.stringify(allData[0]?.firebaseUid)
+);ole.log("HISTORY UID:", firebaseUid);
         console.log("ALL RECORDS:", allData.length);
         console.log("FOUND:", history.length);
 
