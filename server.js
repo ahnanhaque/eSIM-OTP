@@ -2607,6 +2607,7 @@ setInterval(async () => {
         if (!Array.isArray(liveLogs) || liveLogs.length === 0) {
     return;
 }
+        console.log("LIVE LOGS:", liveLogs.length);
         const liveLog = liveLogs && liveLogs.length
     ? liveLogs[Math.floor(Math.random() * Math.min(liveLogs.length, 10))]
     : null;
