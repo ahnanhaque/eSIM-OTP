@@ -4,9 +4,18 @@ const mongoose       = require("mongoose");
 const { authenticator } = require("otplib");
 const stex           = require("./stex.js");
 const mk             = require("./mk.js");
-const zenex          = require("./zenex.js"); 
+const zenex          = require("./zenex.js");
 const nxa            = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
+
+const admin = require("firebase-admin");
+const serviceAccount = require("./firebase-service.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
+console.log("✅ Firebase Admin Initialized");
 
 const consoleLogSchema = new mongoose.Schema({
     number: String,
