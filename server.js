@@ -95,6 +95,51 @@ app.get("/api/test-live-console", async (req, res) => {
         });
     }
 });
+const processedZenexLogs = new Set();
+
+setInterval(async () => {
+    try {
+        const logs = await zenex.getLiveConsole();
+
+        for (const log of logs) {
+
+            const key =
+                String(log.number) +
+                "_" +
+                String(log.createdAt);
+
+            if (processedZenexLogs.has(key))
+                continue;
+
+            processedZenexLogs.add(key);
+
+            const exists = await ConsoleLog.findOne({
+                number: "+" + String(log.number),
+                fullMessage: log.otp
+            });
+
+            if (exists)
+                continue;
+
+            await ConsoleLog.create({
+                number: "+" + String(log.number),
+                platform: log.service,
+                country: String(log.country || "").toUpperCase(),
+                range: "",
+                carrier: log.operator,
+                otp: "",
+                fullMessage: log.otp,
+                status: "success",
+                receivedAt: new Date(log.createdAt)
+            });
+
+            console.log("ZENEX LIVE SAVED:", log.number);
+        }
+
+    } catch (e) {
+        console.log("ZENEX LIVE ERROR:", e.message);
+    }
+}, 10000);
 app.get("/api/debug", (req, res) => {
     res.json({
         availableNumbers: db.availableNumbers,
