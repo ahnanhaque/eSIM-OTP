@@ -670,7 +670,21 @@ app.post("/api/get-number", async (req, res) => {
     carrier: selected.method,
     status: "pending"
 }).catch(()=>{});
+        
+if (firebaseUid) {
+    History.create({
+        firebaseUid,
 
+        number,
+        platform,
+        country,
+
+        range: selected.range,
+        carrier: selected.method,
+
+        status: "pending"
+    }).catch(() => {});
+}
         res.json({
             success: true,
             number,
