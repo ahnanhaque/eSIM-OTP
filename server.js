@@ -596,6 +596,33 @@ app.delete("/api/admin/broadcast/:id", async (req, res) => {
         });
     }
 });
+app.post("/api/fcm/register", async (req, res) => {
+    try {
+        const { token } = req.body;
+
+        if (!token) {
+            return res.status(400).json({
+                success: false,
+                error: "Token required"
+            });
+        }
+
+        if (!db.fcmTokens.includes(token)) {
+            db.fcmTokens.push(token);
+            saveDb();
+        }
+
+        res.json({
+            success: true
+        });
+
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 app.get("/api/notifications", async (req, res) => {
     try {
         const notifications = await Broadcast.find()
@@ -705,7 +732,8 @@ let db = {
     savedMkAccounts:   [],
     savedZenexAccounts:[],
     savedNxaAccounts:  [],
-    pendingRequests:   {}
+    pendingRequests:   {},
+    fcmTokens: []
 };
 
 let isDbLoaded             = false;
