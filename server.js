@@ -565,7 +565,30 @@ app.post("/api/admin/broadcast", async (req, res) => {
         });
     }
 });
+app.delete("/api/admin/broadcast/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
 
+        const deleted = await Broadcast.findByIdAndDelete(id);
+
+        if (!deleted) {
+            return res.status(404).json({
+                success: false,
+                error: "Broadcast not found"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Broadcast deleted successfully"
+        });
+    } catch (e) {
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+    }
+});
 app.get("/api/notifications", async (req, res) => {
     try {
         const notifications = await Broadcast.find()
