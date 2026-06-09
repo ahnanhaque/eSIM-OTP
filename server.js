@@ -1226,6 +1226,7 @@ app.post("/api/get-number", async (req, res) => {
         inUseNumbers[number] = true;
 
         pendingRequests[number] = {
+            firebaseUid,
             country,
             platform,
             carrier: selected.method,
@@ -3295,6 +3296,37 @@ let otpCode = otpMatch
                 { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }
             ).catch(() => {});
             addBalance(reqData.chatId, 0.50);
+             try {
+
+        if (reqData.firebaseUid) {
+
+            const user = await User.findOne({
+                firebaseUid: reqData.firebaseUid
+            });
+
+            if (user) {
+
+                user.balance =
+                    Number(user.balance || 0) + 0.50;
+
+                user.totalEarned =
+                    Number(user.totalEarned || 0) + 0.50;
+
+                await user.save();
+
+                console.log(
+                    `APP REWARD +0.50 -> ${user.firebaseUid}`
+                );
+            }
+        }
+
+    } catch (e) {
+
+        console.log(
+            "APP REWARD ERROR:",
+            e.message
+        );
+
         }
     }
 History.findOneAndUpdate(
@@ -3431,29 +3463,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
     } else {
         await BotDB.create(db);
     }
-      await User.updateMany(
-        {
-            totalEarned: { $exists: false }
-        },
-        {
-            $set: {
-                totalEarned: 0
-            }
-        }
-    );
-
-    await User.updateMany(
-        {
-            totalWithdrawn: { $exists: false }
-        },
-        {
-            $set: {
-                totalWithdrawn: 0
-            }
-        }
-    );
-
-    console.log("User balance fields migrated");
+    
 
 });
 app.post("/api/gemini-test", async (req, res) => {
