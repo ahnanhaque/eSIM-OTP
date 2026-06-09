@@ -36,7 +36,7 @@ const userSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        default: "active"
+      default: "pending"
     },
     createdAt: {
         type: Date,
@@ -611,10 +611,24 @@ app.post("/api/auth/firebase", async (req, res) => {
                 profilePhotoUrl: "",
                 balance: 0,
                 role: "user",
-                status: "active"
+               status: "pending"
             });
         }
+if (user.status === "pending") {
+    return res.status(403).json({
+        success: false,
+        status: "pending",
+        error: "Account awaiting approval"
+    });
+}
 
+if (user.status === "suspended") {
+    return res.status(403).json({
+        success: false,
+        status: "suspended",
+        error: "Account suspended"
+    });
+}
         res.json({
             success: true,
             user
