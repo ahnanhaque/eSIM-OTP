@@ -8,8 +8,12 @@ const zenex          = require("./zenex.js");
 const nxa            = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const genAI = new GoogleGenerativeAI(
+    process.env.GEMINI_API_KEY
+);
+
 const geminiModel = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash"
+    model: "gemini-2.5-flash"
 });
 const admin = require("firebase-admin");
 const serviceAccount = require("./firebase-service.json");
@@ -3289,6 +3293,26 @@ app.post("/api/gemini-test", async (req, res) => {
             success: false,
             error: e.message,
             stack: e.stack
+        });
+
+    }
+});
+    app.get("/api/gemini-debug", async (req, res) => {
+    try {
+
+        const result = await geminiModel.generateContent("hello");
+
+        res.json({
+            success: true,
+            text: result.response.text()
+        });
+
+    } catch (e) {
+
+        res.json({
+            success: false,
+            message: e.message,
+            details: e
         });
 
     }
