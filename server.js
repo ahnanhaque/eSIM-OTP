@@ -1,32 +1,62 @@
-const express        = require("express");
-const TelegramBot    = require("node-telegram-bot-api");
-const mongoose       = require("mongoose");
+/* ==========================================================
+IMPORTS & CONFIGURATION
+========================================================== */
+const express = require("express");
+const TelegramBot = require("node-telegram-bot-api");
+const mongoose = require("mongoose");
 const { authenticator } = require("otplib");
-const stex           = require("./stex.js");
-const mk             = require("./mk.js");
-const zenex          = require("./zenex.js");
+const stex = require("./stex.js");
+const mk = require("./mk.js");
+const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
-const nxa            = require("./nxa.js");
+const nxa = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const genAI = new GoogleGenerativeAI(
-    process.env.GEMINI_API_KEY
-);
-
-const geminiModel = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash"
-});
 const admin = require("firebase-admin");
-const serviceAccount = require("./firebase-service.json");
+const path = require("path");
 
+const serviceAccount = require("./firebase-service.json");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+const botToken = process.env.BOT_TOKEN || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
+const ADMIN_ID = Number(process.env.ADMIN_ID) || 8278612952;
+const GROUP_CHAT_ID = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
+const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1";
+const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
+const PORT = process.env.PORT || 3000;
+const RENDER_URL = "https://esim-otp-btup.onrender.com";
+
+const REQUIRED_CHANNELS = [
+    { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
+    { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
+];
+
+/* ==========================================================
+FIREBASE SETUP
+========================================================== */
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 });
+console.log("✅ Firebase Admin Initialized");
+
+/* ==========================================================
+EXPRESS SETUP
+========================================================== */
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    next();
+});
+
+/* ==========================================================
+DATABASE MODELS
+========================================================== */
 const userSchema = new mongoose.Schema({
-    firebaseUid: {
-        type: String,
-        unique: true
-    },
+    firebaseUid: { type: String, unique: true },
     email: String,
     fullName: String,
     mobileNumber: String,
@@ -34,50 +64,16 @@ const userSchema = new mongoose.Schema({
     country: String,
     referralEmail: String,
     profilePhotoUrl: String,
-   balance: {
-    type: Number,
-    default: 0
-},
-    totalEarned: {
-        type: Number,
-        default: 0
-    },
-
-    totalWithdrawn: {
-        type: Number,
-        default: 0
-    },
-walletPin: {
-    type: String,
-    default: null
-},
-
-walletPinEnabled: {
-    type: Boolean,
-    default: false
-},
-
-role: {
-        type: String,
-        enum: [
-        "user",
-        "admin",
-        "superadmin"
-    ],
-        default: "user"
-    },
-    status: {
-        type: String,
-      default: "pending"
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    }
+    balance: { type: Number, default: 0 },
+    totalEarned: { type: Number, default: 0 },
+    totalWithdrawn: { type: Number, default: 0 },
+    walletPin: { type: String, default: null },
+    walletPinEnabled: { type: Boolean, default: false },
+    role: { type: String, enum: ["user", "admin", "superadmin"], default: "user" },
+    status: { type: String, default: "pending" },
+    createdAt: { type: Date, default: Date.now }
 });
-
 const User = mongoose.model("User", userSchema);
-console.log("✅ Firebase Admin Initialized");
 
 const consoleLogSchema = new mongoose.Schema({
     number: String,
@@ -88,122 +84,23 @@ const consoleLogSchema = new mongoose.Schema({
     otp: String,
     fullMessage: String,
     status: String,
-    receivedAt: {
-        type: Date,
-        default: Date.now,
-        expires: 60 * 60 * 6
-    }
+    receivedAt: { type: Date, default: Date.now, expires: 60 * 60 * 6 }
 });
 const ConsoleLog = mongoose.model("ConsoleLog", consoleLogSchema);
-const historySchema = new mongoose.Schema({
-    firebaseUid: {
-        type: String,
-        required: true
-    },
 
+const historySchema = new mongoose.Schema({
+    firebaseUid: { type: String, required: true },
     number: String,
     platform: String,
     country: String,
     range: String,
     carrier: String,
-
-    otp: {
-        type: String,
-        default: ""
-    },
-
-    status: {
-        type: String,
-        default: "pending"
-    },
-
-    createdAt: {
-        type: Date,
-        default: Date.now,
-        expires: 60 * 60 * 24 * 7
-    }
+    otp: { type: String, default: "" },
+    status: { type: String, default: "pending" },
+    createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 }
 });
+const History = mongoose.model("History", historySchema);
 
-const History = mongoose.model(
-    "History",
-    historySchema
-);
-async function requireAdmin(req, res, next) {
-
-    try {
-
-        const firebaseUid =
-            req.body?.firebaseUid ||
-            req.params?.firebaseUid ||
-            req.query?.firebaseUid;
-
-        console.log("ADMIN UID:", firebaseUid);
-
-        if (!firebaseUid) {
-            return res.status(401).json({
-                success: false,
-                error: "firebaseUid required"
-            });
-        }
-
-        const user = await User.findOne({
-            firebaseUid
-        });
-
-        console.log("ADMIN USER:", user);
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                error: "User not found"
-            });
-        }
-
-        if (
-            user.role !== "admin" &&
-            user.role !== "superadmin"
-        ) {
-            return res.status(403).json({
-                success: false,
-                error: "Admin access required"
-            });
-        }
-
-        next();
-
-    } catch (e) {
-
-        console.error("REQUIRE ADMIN ERROR:", e);
-
-        return res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-
-}
-
-async function requireSuperAdmin(req, res, next) {
-
-    const firebaseUid =
-        req.body.firebaseUid ||
-        req.params.firebaseUid ||
-        req.query.firebaseUid;
-
-    const user = await User.findOne({
-        firebaseUid
-    });
-
-    if (!user || user.role !== "superadmin") {
-        return res.status(403).json({
-            success: false,
-            error: "Superadmin access required"
-        });
-    }
-
-    next();
-}
 const broadcastSchema = new mongoose.Schema({
     subject: String,
     message: String,
@@ -211,1367 +108,72 @@ const broadcastSchema = new mongoose.Schema({
     priority: String,
     sentBy: String,
     isRead: { type: Boolean, default: false },
-    fcmSentTo: { type: [String], default: [] }, // tokens already sent
+    fcmSentTo: { type: [String], default: [] },
     createdAt: { type: Date, default: Date.now }
 });
-
 const Broadcast = mongoose.model("Broadcast", broadcastSchema);
-const botToken        = process.env.BOT_TOKEN        || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
-const ADMIN_ID        = Number(process.env.ADMIN_ID) || 8278612952;
-const GROUP_CHAT_ID   = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
-const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1";
-const MONGODB_URI     = process.env.MONGODB_URI      || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
-const PORT            = process.env.PORT             || 3000;
-const RENDER_URL      = "https://esim-otp-btup.onrender.com"; 
-
-const REQUIRED_CHANNELS = [
-    { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
-    { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
-];
-
-const app = express();
-app.use(express.json());
-const path = require("path");
-
-app.use(express.static(path.join(__dirname, "public")));
-app.use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*");
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    next();
-});
-
-const bot = new TelegramBot(botToken, { webHook: true });
-bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
-
-app.post(`/bot${botToken}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-});
-// =====================================
-// ANDROID APP API
-// =====================================
-app.get("/api/history-debug", async (req, res) => {
-    const docs = await History.find({})
-        .limit(5)
-        .lean();
-
-    res.json(docs);
-});
-app.get("/api/history-test", async (req, res) => {
-    try {
-
-        const data = await History.find({})
-            .sort({ createdAt: -1 })
-            .limit(10)
-            .lean();
-
-        res.json(data);
-
-    } catch (e) {
-        res.status(500).json({
-            error: e.message
-        });
-    }
-});
-app.get("/api/test-live-console", async (req, res) => {
-    try {
-        const logs = await zenex.getLiveConsole();
-
-        res.json({
-            success: true,
-            count: logs.length,
-            first: logs[0] || null
-        });
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-const processedZenexLogs = new Set();
-
-setInterval(async () => {
-    try {
-        const logs = await zenex.getLiveConsole();
-
-        for (const log of logs) {
-
-            const key =
-                String(log.number) +
-                "_" +
-                String(log.createdAt);
-
-            if (processedZenexLogs.has(key))
-                continue;
-
-            processedZenexLogs.add(key);
-
-            const exists = await ConsoleLog.findOne({
-                number: "+" + String(log.number),
-                fullMessage: log.otp
-            });
-
-            if (exists)
-                continue;
-const fullNumber = String(log.number);
-
-const range =
-    fullNumber.length >= 6
-        ? fullNumber.substring(0, 6) + "XXX"
-        : fullNumber;
-
-            await ConsoleLog.create({
-           number: "+" + fullNumber,
-                platform: log.service,
-                country: String(log.country || "").toUpperCase(),
-                range: range,
-                carrier: log.operator,
-                otp: "",
-                fullMessage: log.otp,
-                status: "success",
-                receivedAt: new Date(log.createdAt)
-            });
-
-            console.log("ZENEX LIVE SAVED:", log.number);
-        }
-
-    } catch (e) {
-        console.log("ZENEX LIVE ERROR:", e.message);
-    }
-}, 10000);
-app.get("/api/debug", (req, res) => {
-    res.json({
-        availableNumbers: db.availableNumbers,
-        stexRanges: db.stexRanges,
-        mkRanges: db.mkRanges,
-        zenexRanges: db.zenexRanges,
-        nxaRanges: db.nxaRanges
-    });
-});
-app.get("/api/ranges", (req, res) => {
-    try {
-
-        const ranges = [];
-
-        function normalizePlatform(platform) {
-            if (platform === "fb") return "Facebook";
-            if (platform === "fb_new") return "Facebook";
-            if (platform === "ig") return "Instagram";
-            if (platform === "wa") return "WhatsApp";
-
-            return platform;
-        }
-
-        function addRanges(source, panel) {
-
-            Object.keys(source || {}).forEach(platform => {
-
-                Object.keys(source[platform] || {}).forEach(range => {
-
-                    const item = source[platform][range];
-
-                    ranges.push({
-                        panel,
-                        platform: normalizePlatform(platform),
-                        country: item.country,
-                        method: item.method,
-                        range
-                    });
-
-                });
-
-            });
-
-        }
-
-        addRanges(db.mkRanges, "MK");
-        addRanges(db.stexRanges, "STEX");
-        addRanges(db.zenexRanges, "ZENEX");
-        addRanges(db.nxaRanges, "NXA");
-
-        res.json(ranges);
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-});
-
-app.get("/api/panels", (req, res) => {
-
-    res.json([
-        {
-            id: "mk",
-            name: "MK Network",
-            connected: !!db.mkCookies,
-            activeAccount: db.mkCreds?.email || null
-        },
-        {
-            id: "stex",
-            name: "STEX SMS",
-            connected: !!db.stexToken,
-            activeAccount: db.stexCreds?.email || null
-        },
-        {
-            id: "zenex",
-            name: "Zenex",
-            connected: !!db.zenexCookies,
-            activeAccount: db.zenexCreds?.email || null
-        },
-        {
-            id: "nxa",
-            name: "NXA",
-            connected: !!db.nxaToken,
-            activeAccount: db.nxaCreds?.email || null
-        }
-    ]);
-
-});
-app.post("/api/wallet/set-pin", async (req, res) => {
-
-    try {
-
-        const { firebaseUid, pin } = req.body;
-
-        if (!firebaseUid || !pin) {
-            return res.status(400).json({
-                success: false,
-                message: "Missing data"
-            });
-        }
-
-        if (!/^\d{4}$/.test(pin)) {
-            return res.status(400).json({
-                success: false,
-                message: "PIN must be 4 digits"
-            });
-        }
-
-        const user = await User.findOne({ firebaseUid });
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found"
-            });
-        }
-
-        const hashedPin = await bcrypt.hash(pin, 10);
-
-        user.walletPin = hashedPin;
-        user.walletPinEnabled = true;
-
-        await user.save();
-
-        res.json({
-            success: true,
-            message: "Wallet PIN set successfully"
-        });
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            message: e.message
-        });
-
-    }
-
-});
-app.post("/api/wallet/verify-pin", async (req, res) => {
-
-    try {
-
-        const { firebaseUid, pin } = req.body;
-
-        const user = await User.findOne({ firebaseUid });
-
-        if (!user || !user.walletPinEnabled) {
-            return res.status(404).json({
-                success: false,
-                message: "PIN not set"
-            });
-        }
-
-        const valid = await bcrypt.compare(
-            pin,
-            user.walletPin
-        );
-
-        res.json({
-            success: valid
-        });
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            message: e.message
-        });
-
-    }
-
-});
-app.get("/api/wallet/pin-status/:firebaseUid", async (req, res) => {
-
-    try {
-
-        const user = await User.findOne({
-            firebaseUid: req.params.firebaseUid
-        });
-
-        res.json({
-            success: true,
-            pinEnabled: !!user?.walletPinEnabled
-        });
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false
-        });
-
-    }
-
-});
-app.post(
-    "/api/admin/panel/login",
-    requireAdmin,
-    async (req, res) => {
-
-    try {
-
-        const { panel, email, password } = req.body;
-
-        if (!panel || !email || !password) {
-            return res.status(400).json({
-                success: false,
-                error: "Missing required fields"
-            });
-        }
-
-        if (panel === "stex") {
-
-            const token = await stex.login(email, password);
-
-            db.stexToken = token;
-            db.stexCreds = { email, password };
-
-            if (!db.savedStexAccounts)
-                db.savedStexAccounts = [];
-
-            if (!db.savedStexAccounts.find(a => a.email === email))
-                db.savedStexAccounts.push({ email, password });
-
-        }
-
-        else if (panel === "mk") {
-
-            const cookieStr = await mk.login(email, password);
-
-            db.mkCookies = cookieStr;
-            db.mkCreds = { email, password };
-
-            if (!db.savedMkAccounts)
-                db.savedMkAccounts = [];
-
-            if (!db.savedMkAccounts.find(a => a.email === email))
-                db.savedMkAccounts.push({ email, password });
-
-        }
-
-        else if (panel === "zenex") {
-
-            const cookieStr = await zenex.login(email, password);
-
-            db.zenexCookies = cookieStr;
-            db.zenexCreds = { email, password };
-
-            if (!db.savedZenexAccounts)
-                db.savedZenexAccounts = [];
-
-            if (!db.savedZenexAccounts.find(a => a.email === email))
-                db.savedZenexAccounts.push({ email, password });
-
-        }
-
-        else if (panel === "nxa") {
-
-            const authData = await nxa.login(email, password);
-
-            db.nxaToken = authData.token;
-            db.nxaCookies = authData.cookie;
-            db.nxaCreds = { email, password };
-
-            if (!db.savedNxaAccounts)
-                db.savedNxaAccounts = [];
-
-            if (!db.savedNxaAccounts.find(a => a.email === email))
-                db.savedNxaAccounts.push({ email, password });
-
-        }
-
-        else {
-
-            return res.status(400).json({
-                success: false,
-                error: "Invalid panel"
-            });
-
-        }
-
-        saveDB();
-
-        res.json({
-            success: true,
-            panel,
-            email
-        });
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-
-});
-app.get("/api/dashboard", (req, res) => {
-    res.json({
-        totalUsers: db.users.length,
-        activeRequests: Object.keys(pendingRequests).length,
-        balanceUsers: Object.keys(db.balances).length,
-        maxNumbers: db.settings.maxNumbers || 4
-    });
-});
-
-
-
-app.get("/api/admin/panel/accounts", (req, res) => {
-    res.json({
-        stex: db.savedStexAccounts || [],
-        mk: db.savedMkAccounts || [],
-        zenex: db.savedZenexAccounts || [],
-        nxa: db.savedNxaAccounts || []
-    });
-});
-
-app.get("/api/admin/panel/active", (req, res) => {
-    res.json({
-        stex: db.stexCreds || null,
-        mk: db.mkCreds || null,
-        zenex: db.zenexCreds || null,
-        nxa: db.nxaCreds || null
-    });
-});
-
-app.get("/api/profile/:firebaseUid", async (req, res) => {
-    try {
-        const firebaseUid = req.params.firebaseUid;
-        const user = await User.findOne({ firebaseUid });
-
-        if (!user) {
-            return res.status(404).json({ success: false, error: "User not found" });
-        }
-
-        res.json({
-            firebaseUid: user.firebaseUid,
-            fullName: user.fullName || "Unknown",
-            email: user.email,
-            mobileNumber: user.mobileNumber || null,
-            telegramUsername: user.telegramUsername || null,
-            country: user.country || null,
-            referralEmail: user.referralEmail || null,
-            profilePhotoUrl: user.profilePhotoUrl || null,
-            balance: user.balance,
-            role: user.role,
-            status: user.status
-        });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-app.get(
-    "/api/admin/users",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const users = await User.find({})
-                .select(
-                    "firebaseUid fullName email role status country createdAt"
-                )
-                .sort({ createdAt: -1 })
-                .lean();
-
-            res.json(users);
-
-        } catch (e) {
-
-    console.error("USERS API ERROR:", e);
-
-    res.status(500).json({
-        success: false,
-        error: e.message
-    });
-
-}
-
-    }
-);
-app.get(
-    "/api/admin/user-stats",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const total =
-                await User.countDocuments();
-
-            const pending =
-                await User.countDocuments({
-                    status: "pending"
-                });
-
-            const approved =
-                await User.countDocuments({
-                    status: "approved"
-                });
-
-            const suspended =
-                await User.countDocuments({
-                    status: "suspended"
-                });
-
-            const admins =
-                await User.countDocuments({
-                    role: "admin"
-                });
-
-            const superadmins =
-                await User.countDocuments({
-                    role: "superadmin"
-                });
-
-            res.json({
-                total,
-                pending,
-                approved,
-                suspended,
-                admins,
-                superadmins
-            });
-
-        } catch (e) {
-
-            res.status(500).json({
-                success: false,
-                error: e.message
-            });
-
-        }
-
-    }
-);
-app.post(
-    "/api/admin/user/approve",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const { targetUid } = req.body;
-const targetUser =
-    await User.findOne({
-        firebaseUid: targetUid
-    });
-
-if (
-    targetUser &&
-    targetUser.role === "superadmin"
-) {
-    return res.status(403).json({
-        success: false,
-        error: "Cannot modify superadmin"
-    });
-}
-            const user =
-                await User.findOneAndUpdate(
-                    {
-                        firebaseUid: targetUid
-                    },
-                    {
-                        status: "approved"
-                    },
-                    {
-                        new: true
-                    }
-                );
-
-            res.json({
-                success: true,
-                user
-            });
-
-        } catch (e) {
-
-            res.status(500).json({
-                success: false,
-                error: e.message
-            });
-
-        }
-
-    }
-);
-app.post(
-    "/api/admin/user/suspend",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const { targetUid } = req.body;
-
-            const targetUser =
-                await User.findOne({
-                    firebaseUid: targetUid
-                });
-
-            if (
-                targetUser &&
-                targetUser.role === "superadmin"
-            ) {
-                return res.status(403).json({
-                    success: false,
-                    error: "Cannot suspend superadmin"
-                });
-            }
-
-            const user =
-                await User.findOneAndUpdate(
-                    {
-                        firebaseUid: targetUid
-                    },
-                    {
-                        status: "suspended"
-                    },
-                    {
-                        new: true
-                    }
-                );
-
-            res.json({
-                success: true,
-                user
-            });
-
-        } catch (e) {
-
-            res.status(500).json({
-                success: false,
-                error: e.message
-            });
-
-        }
-
-    }
-);
-app.post(
-    "/api/admin/user/unsuspend",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const { targetUid } = req.body;
-
-            const user =
-                await User.findOneAndUpdate(
-                    {
-                        firebaseUid: targetUid
-                    },
-                    {
-                        status: "approved"
-                    },
-                    {
-                        new: true
-                    }
-                );
-
-            res.json({
-                success: true,
-                user
-            });
-
-        } catch (e) {
-
-            res.status(500).json({
-                success: false,
-                error: e.message
-            });
-
-        }
-
-    }
-);
-
-
-app.post(
-    "/api/admin/user/change-role",
-    requireSuperAdmin,
-    async (req, res) => {
-
-        try {
-
-            const { targetUid, role } = req.body;
-
-            const targetUser =
-                await User.findOne({
-                    firebaseUid: targetUid
-                });
-
-            if (
-                targetUser &&
-                targetUser.role === "superadmin"
-            ) {
-                return res.status(403).json({
-                    success: false,
-                    error: "Cannot modify superadmin"
-                });
-            }
-
-            if (
-                !["user", "admin"].includes(role)
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    error: "Invalid role"
-                });
-            }
-
-            const user =
-                await User.findOneAndUpdate(
-                    {
-                        firebaseUid: targetUid
-                    },
-                    {
-                        role
-                    },
-                    {
-                        new: true
-                    }
-                );
-
-            res.json({
-                success: true,
-                user
-            });
-
-        } catch (e) {
-
-            res.status(500).json({
-                success: false,
-                error: e.message
-            });
-
-        }
-
-    }
-);
-
-app.get("/api/history/:firebaseUid", async (req, res) => {
-    try {
-
-        const history = await History.find({}).lean();
-
-        const filtered = history.filter(
-            item =>
-                String(item.firebaseUid).trim() ===
-                String(req.params.firebaseUid).trim()
-        );
-
-        res.json(filtered);
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-});
-app.get("/api/live-traffic", async (req, res) => {
-    try {
-        if (!db.zenexCookies) {
-            return res.json([]);
-        }
-
-        const routes = await zenex.getLiveTraffic(
-            db.zenexCookies
-        );
-
-        res.json(routes);
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-app.post("/api/auth/firebase", async (req, res) => {
-    try {
-        const {
-            firebaseUid,
-            email,
-            fullName,
-            mobileNumber,
-            telegramUsername,
-            country,
-            referralEmail
-        } = req.body;
-
-        if (!firebaseUid || !email) {
-            return res.status(400).json({
-                success: false,
-                error: "Missing firebaseUid or email"
-            });
-        }
-
-        let user = await User.findOne({
-            firebaseUid
-        });
-
-        if (!user) {
-            user = await User.create({
-                firebaseUid,
-                email,
-                fullName: fullName || "",
-                mobileNumber: mobileNumber || "",
-                telegramUsername: telegramUsername || "",
-                country: country || "",
-                referralEmail: referralEmail || "",
-                profilePhotoUrl: "",
-                balance: 0,
-                role: "user",
-               status: "pending"
-            });
-        }
-if (user.status === "pending") {
-    return res.status(403).json({
-        success: false,
-        status: "pending",
-        error: "Account awaiting approval"
-    });
-}
-if (user.status === "suspended") {
-    return res.status(403).json({
-        success: false,
-        status: "suspended",
-        error: "Account suspended"
-    });
-}
-if (user.status === "suspended") {
-    return res.status(403).json({
-        success: false,
-        status: "suspended",
-        error: "Account suspended"
-    });
-}
-        res.json({
-            success: true,
-            user
-        });
-
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-app.post("/api/profile/photo", async (req, res) => {
-    try {
-        const { firebaseUid, photoUrl } = req.body;
-        if (!firebaseUid || !photoUrl) return res.status(400).json({ success: false, error: "Missing parameters" });
-
-        const user = await User.findOneAndUpdate(
-            { firebaseUid },
-            { profilePhotoUrl: photoUrl },
-            { new: true, upsert: false }
-        );
-
-        if (!user) return res.status(404).json({ success: false, error: "User not found" });
-
-        res.json({ success: true, profilePhotoUrl: user.profilePhotoUrl });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-app.post("/api/get-number", async (req, res) => {
-
-    try {
-
-        const {     firebaseUid,     platform,     country } = req.body;
-
-        let selected = null;
-
-        function findRange(source, panelName) {
-
-            Object.keys(source || {}).forEach(p => {
-
-                Object.keys(source[p] || {}).forEach(range => {
-
-                    const item = source[p][range];
-
-                    const pName =
-                        p === "fb" || p === "fb_new" ? "Facebook" :
-                        p === "ig" ? "Instagram" :
-                        p === "wa" ? "WhatsApp" :
-                        p;
-
-                    if (
-                        !selected &&
-                        pName === platform &&
-                        item.country === country
-                    ) {
-                        selected = {
-                            panel: panelName,
-                            range,
-                            method: item.method
-                        };
-                    }
-
-                });
-
-            });
-
-        }
-
-        findRange(db.mkRanges, "MK");
-        findRange(db.stexRanges, "STEX");
-        findRange(db.zenexRanges, "ZENEX");
-        findRange(db.nxaRanges, "NXA");
-
-        if (!selected) {
-            return res.status(404).json({
-                success: false,
-                error: "No route found"
-            });
-        }
-
-        let number = null;
-        let internal_id = null;
-
-        if (selected.panel === "MK") {
-
-            const data = await mk.getNumber(
-                selected.range,
-                db.mkCookies
-            );
-
-            number = data.number;
-
-        } else if (selected.panel === "STEX") {
-
-            const data = await stex.getNumber(
-                selected.range,
-                db.stexToken
-            );
-
-            number = data.full_number;
-
-        } else if (selected.panel === "ZENEX") {
-
-            const data = await zenex.getNumber(
-                selected.range
-            );
-
-            number = data.number;
-
-        } else if (selected.panel === "NXA") {
-
-            const data = await nxa.getNumber(
-                selected.range,
-                db.nxaToken,
-                db.nxaCookies
-            );
-
-            number = data.number;
-            internal_id = data.internal_id;
-
-        }
-
-        if (!number) {
-            return res.status(500).json({
-                success: false,
-                error: "No number received"
-            });
-        }
-        number = String(number).trim();
-
-        if (!number.startsWith("+")) {
-            number = "+" + number;
-        }
-        inUseNumbers[number] = true;
-
-        pendingRequests[number] = {
-            firebaseUid,
-            country,
-            platform,
-            carrier: selected.method,
-            range: selected.range,
-            createdAt: Date.now(),
-            isStex: selected.panel === "STEX",
-            token: selected.panel === "STEX" ? db.stexToken : (selected.panel === "NXA" ? db.nxaToken : undefined),
-            isMk: selected.panel === "MK",
-            cookie: selected.panel === "MK" ? db.mkCookies : (selected.panel === "ZENEX" ? db.zenexCookies : (selected.panel === "NXA" ? db.nxaCookies : undefined)),
-            isZenex: selected.panel === "ZENEX",
-            isNxa: selected.panel === "NXA",
-            internal_id: selected.panel === "NXA" ? internal_id : undefined
-        };
-        syncPending();
-
-       ConsoleLog.create({
-    number,
-    platform,
-    country,
-    range: selected.range,
-    carrier: selected.method,
-    status: "pending"
-}).catch(()=>{});
-        
-if (firebaseUid) {
-    History.create({
-        firebaseUid,
-
-        number,
-        platform,
-        country,
-
-        range: selected.range,
-        carrier: selected.method,
-
-        status: "pending"
-    }).catch(() => {});
-}
-        res.json({
-            success: true,
-            number,
-            country,
-            platform,
-            expiresIn: 900
-        });
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-
-});
-// =====================================
-// OTP CHECK API
-// =====================================
-
-app.get("/api/check-otp/:number", (req, res) => {
-
-    try {
-
-        let number = req.params.number;
-
-        let request = pendingRequests[number];
-
-        if (!request && !number.startsWith("+")) {
-            request = pendingRequests["+" + number];
-            if (request) number = "+" + number;
-        }
-        if (!request && number.startsWith("+")) {
-            request = pendingRequests[number.substring(1)];
-            if (request) number = number.substring(1);
-        }
-
-        if (!request) {
-            return res.json({
-                success: false,
-                status: "expired"
-            });
-        }
-
-        if (request.status === "success" || request.otp) {
-            return res.json({
-                success: true,
-                status: "success",
-                otp: request.otp,
-                message: request.message || ""
-            });
-        }
-
-        return res.json({
-            success: true,
-            status: "pending"
-        });
-
-    } catch (e) {
-
-        console.error("OTP CHECK ERROR:", e);
-         console.log("LIVE CONSOLE ERROR:", e);
-console.log("SELECTED LOG:", JSON.stringify(liveLog, null, 2));
-console.log("MSG TEXT:", msgText);
-        return res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-
-});
-app.post(
-    "/api/admin/broadcast",
-    requireAdmin,
-    async (req, res) => {
-    try {
-        const {
-            subject,
-            message,
-            category,
-            priority
-        } = req.body;
-
-        const broadcast = await Broadcast.create({
-            subject,
-            message,
-            category,
-            priority,
-            sentBy: "System",
-            isRead: false
-        });
-
-        if (db.fcmTokens && db.fcmTokens.length > 0) {
-            try {
-                const response = await admin.messaging().sendEachForMulticast({
-                    notification: {
-                        title: subject || "New Broadcast",
-                        body: message || ""
-                    },
-                    tokens: db.fcmTokens
-                });
-
-                console.log("PUSH SENT:", response.successCount);
-            } catch (err) {
-                console.error("PUSH ERROR:", err.message);
-            }
-        }
-
-        res.json({
-            success: true,
-            broadcast
-        });
-
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-app.delete(
-    "/api/admin/broadcast/:id",
-    requireAdmin,
-    async (req, res) => {
-    try {
-
-        console.log("DELETE REQUEST");
-console.log("UID:", req.query.firebaseUid);
-console.log("ID:", req.params.id);
-        const { id } = req.params;
-
-        const deleted = await Broadcast.findByIdAndDelete(id);
-
-        if (!deleted) {
-            return res.status(404).json({
-                success: false,
-                error: "Broadcast not found"
-            });
-        }
-
-        res.json({
-            success: true,
-            message: "Broadcast deleted successfully"
-        });
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-app.post("/api/fcm/register", async (req, res) => {
-    try {
-        const { token } = req.body;
-        console.log("FCM REGISTER HIT");
-console.log("TOKEN:", token?.substring(0, 20));
-
-        if (!token) {
-            return res.status(400).json({
-                success: false,
-                error: "Token required"
-            });
-        }
-
-        if (!db.fcmTokens.includes(token)) {
-            db.fcmTokens.push(token);
-            saveDb();
-        }
-
-        res.json({
-            success: true
-        });
-
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-app.get("/api/notifications", async (req, res) => {
-    try {
-        const notifications = await Broadcast.find()
-            .sort({ createdAt: -1 })
-            .lean();
-
-        res.json(notifications);
-    } catch (e) {
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-    }
-});
-app.get("/api/console", async (req, res) => {
-    try {
-        const query = req.query.q || "";
-        let filter = {};
-        if (query) {
-            const regex = new RegExp(query, "i");
-            filter = {
-                $or: [
-                    { number: regex },
-                    { platform: regex },
-                    { country: regex }
-                ]
-            };
-        }
-        const logs = await ConsoleLog.find(filter)
-            .sort({ receivedAt: -1 })
-            .select("number range platform country carrier otp fullMessage status receivedAt -_id")
-            .lean();
-
-        res.json(logs);
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-    
-bot.on("error", (err) => {
-    if (err && err.message && !err.message.includes("message is not modified"))
-        console.log("\n[Telegram Bot Error]", err.message);
-});
-
-bot.setMyCommands([
-    { command: "start", description: "Restart the bot" },
-    { command: "admin", description: "Open admin panel" }
-]);
-
-let botInfo = {};
-bot.getMe().then(info => botInfo = info).catch(console.error);
 
 const dbSchema = new mongoose.Schema({
-    balances:           Object,
-    lastAssigned:       Object,
-    adminUsernames:     Array,
-    users:              Array,
-    referred:           Object,
-    settings:           Object,
-    availableNumbers:   Object,
-    cookies:            Object,
-    stexRanges:         Object,
-    stexToken:          String,
-    mkRanges:           Object,
-    mkCookies:          String,
-    zenexRanges:        Object, 
-    zenexCookies:       String, 
-    nxaRanges:          Object,
-    nxaToken:           String,
-    nxaCookies:         String,
-    stexCreds:          Object,
-    mkCreds:            Object,
-    zenexCreds:         Object, 
-    nxaCreds:           Object,
-    savedStexAccounts:  Array,
-    savedMkAccounts:    Array,
+    balances: Object,
+    lastAssigned: Object,
+    adminUsernames: Array,
+    users: Array,
+    referred: Object,
+    settings: Object,
+    availableNumbers: Object,
+    cookies: Object,
+    stexRanges: Object,
+    stexToken: String,
+    mkRanges: Object,
+    mkCookies: String,
+    zenexRanges: Object,
+    zenexCookies: String,
+    nxaRanges: Object,
+    nxaToken: String,
+    nxaCookies: String,
+    stexCreds: Object,
+    mkCreds: Object,
+    zenexCreds: Object,
+    nxaCreds: Object,
+    savedStexAccounts: Array,
+    savedMkAccounts: Array,
     savedZenexAccounts: Array,
-    savedNxaAccounts:   Array,
-    pendingRequests:    Object
+    savedNxaAccounts: Array,
+    pendingRequests: Object,
+    fcmTokens: Array
 }, { strict: false });
-
 const BotDB = mongoose.model("BotData", dbSchema);
 
+/* ==========================================================
+GLOBAL STATE
+========================================================== */
 let db = {
-    balances:          {},
-    lastAssigned:      {},
-    adminUsernames:    [],
-    users:             [],
-    referred:          {},
-    settings:          { maxNumbers: 4, lastBroadcast: [] }, 
-    availableNumbers:  { fb: {}, ig: {}, wa: {} },
-    cookies:           {},
-    stexRanges:        { fb: {}, ig: {}, wa: {} },
-    stexToken:         "",
-    mkRanges:          { fb: {}, ig: {}, wa: {} },
-    mkCookies:         "",
-    zenexRanges:       { fb: {}, ig: {}, wa: {} }, 
-    zenexCookies:      "", 
-    nxaRanges:         { fb: {}, ig: {}, wa: {} },
-    nxaToken:          "",
-    nxaCookies:        "",
-    stexCreds:         null,
-    mkCreds:           null,
-    zenexCreds:        null, 
-    nxaCreds:          null,
-    savedStexAccounts: [],
-    savedMkAccounts:   [],
-    savedZenexAccounts:[],
-    savedNxaAccounts:  [],
-    pendingRequests:   {},
-    fcmTokens: []
+    balances: {}, lastAssigned: {}, adminUsernames: [], users: [], referred: {},
+    settings: { maxNumbers: 4, lastBroadcast: [] },
+    availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {},
+    stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "",
+    mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "",
+    zenexRanges: { fb: {}, ig: {}, wa: {} }, zenexCookies: "",
+    nxaRanges: { fb: {}, ig: {}, wa: {} }, nxaToken: "", nxaCookies: "",
+    stexCreds: null, mkCreds: null, zenexCreds: null, nxaCreds: null,
+    savedStexAccounts: [], savedMkAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
+    pendingRequests: {}, fcmTokens: []
 };
 
-let isDbLoaded             = false;
+let isDbLoaded = false;
 let latestRangesFromExtension = {};
-let pendingRequests        = {};
-let lastProcessedOTPTime   = {};
-let inUseNumbers           = {};
-let userStates             = {};
-let tempAdminData          = {};
-let activeTempMails        = {};
-let activeNumberMessages   = {};
-let activeTimeouts         = {}; 
+let pendingRequests = {};
+let lastProcessedOTPTime = {};
+let inUseNumbers = {};
+let userStates = {};
+let tempAdminData = {};
+let activeTempMails = {};
+let activeNumberMessages = {};
+let activeTimeouts = {};
 
+/* ==========================================================
+UTILITIES & HELPERS
+========================================================== */
 function syncPending() {
     db.pendingRequests = pendingRequests;
     saveDB();
@@ -1581,6 +183,7 @@ function saveDB() {
     if (!isDbLoaded) return;
     BotDB.updateOne({}, db, { upsert: true }).catch(() => {});
 }
+
 function getBalance(chatId) {
     return db.balances[chatId] || 0;
 }
@@ -1625,10 +228,7 @@ function sendJoinPrompt(chatId) {
 
     bot.sendMessage(chatId,
         `⚠️ **Access Denied!**\n\nYou must join all our official groups and channels first to use this bot. Once joined, click the check button below.`,
-        {
-            reply_markup: { inline_keyboard: inline_keyboard },
-            parse_mode: "Markdown"
-        }
+        { reply_markup: { inline_keyboard: inline_keyboard }, parse_mode: "Markdown" }
     ).catch(() => {});
 }
 
@@ -1649,15 +249,15 @@ function clearPendingForChat(chatId) {
 
 function detectPlatform(from, subject, body) {
     let str = (from + " " + subject + " " + (body || "")).toLowerCase();
-    if (str.includes("facebook"))  return "Facebook";
+    if (str.includes("facebook")) return "Facebook";
     if (str.includes("instagram")) return "Instagram";
-    if (str.includes("whatsapp"))  return "WhatsApp";
-    if (str.includes("tiktok"))    return "TikTok";
-    if (str.includes("google"))    return "Google";
+    if (str.includes("whatsapp")) return "WhatsApp";
+    if (str.includes("tiktok")) return "TikTok";
+    if (str.includes("google")) return "Google";
     if (str.includes("twitter") || str.includes("x.com")) return "X (Twitter)";
-    if (str.includes("telegram"))  return "Telegram";
-    if (str.includes("discord"))   return "Discord";
-    if (str.includes("owlproxy"))  return "OwlProxy";
+    if (str.includes("telegram")) return "Telegram";
+    if (str.includes("discord")) return "Discord";
+    if (str.includes("owlproxy")) return "OwlProxy";
 
     let domainMatch = from.match(/@([a-zA-Z0-9.-]+)\./);
     if (domainMatch) {
@@ -1668,12 +268,161 @@ function detectPlatform(from, subject, body) {
     return "Unknown Platform";
 }
 
+function extractOtp(text) {
+    if (!text) return null;
+    const patterns = [
+        /\b\d{3}\s\d{3}\b/,
+        /\b\d{3}-\d{3}\b/,
+        /\b\d{4,8}\b/,
+        /\b[A-Z0-9]{5,10}\b/i
+    ];
+    for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) {
+            return match[0].replace(/\D/g, "");
+        }
+    }
+    return null;
+}
+
+async function requireAdmin(req, res, next) {
+    try {
+        const firebaseUid = req.body?.firebaseUid || req.params?.firebaseUid || req.query?.firebaseUid;
+        if (!firebaseUid) {
+            return res.status(401).json({ success: false, error: "firebaseUid required" });
+        }
+        const user = await User.findOne({ firebaseUid });
+        if (!user) {
+            return res.status(404).json({ success: false, error: "User not found" });
+        }
+        if (user.role !== "admin" && user.role !== "superadmin") {
+            return res.status(403).json({ success: false, error: "Admin access required" });
+        }
+        next();
+    } catch (e) {
+        return res.status(500).json({ success: false, error: e.message });
+    }
+}
+
+async function requireSuperAdmin(req, res, next) {
+    const firebaseUid = req.body.firebaseUid || req.params.firebaseUid || req.query.firebaseUid;
+    const user = await User.findOne({ firebaseUid });
+    if (!user || user.role !== "superadmin") {
+        return res.status(403).json({ success: false, error: "Superadmin access required" });
+    }
+    next();
+}
+
+/* ==========================================================
+OTP FUNCTIONS
+========================================================== */
+async function processFoundOTP(number, time, message, range) {
+    let otpMatch = message.match(/\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/);
+    let otpCode = otpMatch ? otpMatch[0].replace(/\D/g, "") : null;
+
+    const otpKey = otpCode ? `${number}_${otpCode}` : `${number}_${message.trim()}`;
+    if (lastProcessedOTPTime[otpKey]) return;
+    lastProcessedOTPTime[otpKey] = Date.now();
+
+    let reqData = pendingRequests[number];
+    if (reqData && reqData.otp && reqData.otp === otpCode) return;
+
+    const cName = typeof range === "object" ? range.country : range;
+    const info = getCountryInfo(cName || "UNKNOWN");
+    const numStr = String(number);
+    const maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+
+    let platCode = reqData ? reqData.platform : "unknown";
+    let platName = platCode === "fb" ? "FACEBOOK" : platCode === "ig" ? "INSTAGRAM" : platCode === "wa" ? "WHATSAPP" : platCode.toUpperCase();
+
+    let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
+    let groupMarkup = { inline_keyboard: [] };
+    let groupButtonRow = [];
+    if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
+    if (otpCode) groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: otpCode } });
+    if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
+    
+    bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(() => {});
+
+    if (reqData) {
+        reqData.otp = otpCode;
+        reqData.message = message;
+        reqData.status = "success";
+        reqData.receivedAt = Date.now();
+        syncPending();
+
+        if (reqData.chatId) {
+            const reqInfo = getCountryInfo(cName);
+            let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
+            let userMarkup = { inline_keyboard: [] };
+            if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
+            bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(() => {});
+            addBalance(reqData.chatId, 0.50);
+            
+            try {
+                if (reqData.firebaseUid) {
+                    const user = await User.findOne({ firebaseUid: reqData.firebaseUid });
+                    if (user) {
+                        user.balance = Number(user.balance || 0) + 0.50;
+                        user.totalEarned = Number(user.totalEarned || 0) + 0.50;
+                        await user.save();
+                    }
+                }
+            } catch (e) {
+                console.log("APP REWARD ERROR:", e.message);
+            }
+        }
+    }
+    
+    History.findOneAndUpdate({ number: String(number) }, { $set: { otp: otpCode, status: "success" } }).catch(() => {});
+    ConsoleLog.findOneAndUpdate(
+        { number: String(number), status: "pending" },
+        { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
+    ).then(doc => {
+        if (!doc) {
+            ConsoleLog.create({
+                number: String(number),
+                platform: platName,
+                country: info.cleanName.toUpperCase(),
+                carrier: reqData ? reqData.carrier : "System",
+                fullMessage: message,
+                otp: otpCode,
+                status: "success",
+                receivedAt: Date.now()
+            }).catch(()=>{});
+        }
+    }).catch(()=>{});
+}
+
+/* ==========================================================
+TELEGRAM BOT SETUP & MENUS
+========================================================== */
+const bot = new TelegramBot(botToken, { webHook: true });
+bot.setWebHook(`${RENDER_URL}/bot${botToken}`);
+
+app.post(`/bot${botToken}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+bot.on("error", (err) => {
+    if (err && err.message && !err.message.includes("message is not modified"))
+        console.log("\n[Telegram Bot Error]", err.message);
+});
+
+bot.setMyCommands([
+    { command: "start", description: "Restart the bot" },
+    { command: "admin", description: "Open admin panel" }
+]);
+
+let botInfo = {};
+bot.getMe().then(info => botInfo = info).catch(console.error);
+
 function getReplyMenu(chatId, username) {
     let keyboard = [
         [{ text: "☎️ Get Number" }, { text: "📧 Temp Mail" }],
-        [{ text: "🔑 2FA" },        { text: "👤 Profile" }]
+        [{ text: "🔑 2FA" }, { text: "👤 Profile" }]
     ];
-    
     if (isAdmin(chatId, username)) {
         keyboard.push([{ text: "💬 Support" }, { text: "📈 Live Traffic" }]);
         keyboard.push([{ text: "⚙️ Admin Panel" }]);
@@ -1685,45 +434,45 @@ function getReplyMenu(chatId, username) {
 
 const platformMenu = {
     inline_keyboard: [
-        [{ text: "ⓕ Facebook",  callback_data: "menu_country_fb" }],
+        [{ text: "ⓕ Facebook", callback_data: "menu_country_fb" }],
         [{ text: "ⓘ Instagram", callback_data: "menu_country_ig" }],
-        [{ text: "✆ WhatsApp",  callback_data: "menu_country_wa" }],
+        [{ text: "✆ WhatsApp", callback_data: "menu_country_wa" }],
         [{ text: "✖ Close Menu", callback_data: "close_menu" }]
     ]
 };
 
 const adminPlatformMenu = {
     inline_keyboard: [
-        [{ text: "ⓕ Facebook",     callback_data: "admin_sel_plat_fb" }],
-        [{ text: "ⓘ Instagram",    callback_data: "admin_sel_plat_ig" }],
-        [{ text: "✆ WhatsApp",     callback_data: "admin_sel_plat_wa" }],
+        [{ text: "ⓕ Facebook", callback_data: "admin_sel_plat_fb" }],
+        [{ text: "ⓘ Instagram", callback_data: "admin_sel_plat_ig" }],
+        [{ text: "✆ WhatsApp", callback_data: "admin_sel_plat_wa" }],
         [{ text: "🗑️ Remove Number", callback_data: "admin_remove_number_menu" }],
-        [{ text: "⬅️ Back",        callback_data: "admin_panel" }]
+        [{ text: "⬅️ Back", callback_data: "admin_panel" }]
     ]
 };
 
 const manageNumberPanel = {
     inline_keyboard: [
-        [{ text: "IVA SMS 📨",    callback_data: "admin_manage_ranges" }],
-        [{ text: "Stex SMS 📩",   callback_data: "placeholder_stex" }],
-        [{ text: "MK SMS 💬",     callback_data: "placeholder_mk" }],
-        [{ text: "Zenex SMS ⚡",  callback_data: "placeholder_zenex" }],
-        [{ text: "NXA SMS 🟣",    callback_data: "placeholder_nxa" }], 
+        [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
+        [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }],
+        [{ text: "MK SMS 💬", callback_data: "placeholder_mk" }],
+        [{ text: "Zenex SMS ⚡", callback_data: "placeholder_zenex" }],
+        [{ text: "NXA SMS 🟣", callback_data: "placeholder_nxa" }], 
         [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
-        [{ text: "⬅️ Back",       callback_data: "admin_manage_numbers" }]
+        [{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]
     ]
 };
 
 function getAdminMenu(chatId) {
     let menu = [
         [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" },
-         { text: "👥 User Access",       callback_data: "admin_user_access" }],
-        [{ text: "⚙️ Manage Number",     callback_data: "admin_manage_numbers" },
-         { text: "⚙️ Manage Panel",      callback_data: "admin_manage_panel" }]
+         { text: "👥 User Access", callback_data: "admin_user_access" }],
+        [{ text: "⚙️ Manage Number", callback_data: "admin_manage_numbers" },
+         { text: "⚙️ Manage Panel", callback_data: "admin_manage_panel" }]
     ];
     if (isSuperAdmin(chatId)) {
         menu.push([{ text: "👑 Manage Admins", callback_data: "admin_manage_admins" },
-                   { text: "❌ Close Menu",    callback_data: "close_menu" }]);
+                   { text: "❌ Close Menu", callback_data: "close_menu" }]);
     } else {
         menu.push([{ text: "❌ Close Menu", callback_data: "close_menu" }]);
     }
@@ -1731,9 +480,9 @@ function getAdminMenu(chatId) {
 }
 
 function renderManageRangesMenu(chatId, messageId) {
-    const platform    = tempAdminData[chatId]?.selectedPlatform || "fb";
+    const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
     const rangesArray = tempAdminData[chatId]?.ranges || [];
-    let rangeButtons  = [];
+    let rangeButtons = [];
 
     rangesArray.forEach((r, index) => {
         let isAdded = db.availableNumbers[platform] &&
@@ -1746,12 +495,12 @@ function renderManageRangesMenu(chatId, messageId) {
     });
 
     rangeButtons.push([
-        { text: "📥 Add All",      callback_data: "togglerng_addall" },
-        { text: "🗑️ Remove All",   callback_data: "togglerng_delall" }
+        { text: "📥 Add All", callback_data: "togglerng_addall" },
+        { text: "🗑️ Remove All", callback_data: "togglerng_delall" }
     ]);
     rangeButtons.push([
         { text: "🔄 Refresh List", callback_data: "refresh_manage_ranges" },
-        { text: "⬅️ Back",         callback_data: "admin_sel_plat_fb" }
+        { text: "⬅️ Back", callback_data: "admin_sel_plat_fb" }
     ]);
 
     bot.editMessageText(
@@ -1820,9 +569,12 @@ function renderRemoveMenu(chatId, messageId) {
     ).catch(() => {});
 }
 
+/* ==========================================================
+TELEGRAM BOT HANDLERS
+========================================================== */
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     if (msg.chat.type !== "private") return;
-    const chatId   = msg.chat.id;
+    const chatId = msg.chat.id;
     const username = msg.from.username;
 
     if (!await isUserMember(msg.from.id)) return sendJoinPrompt(chatId);
@@ -1859,9 +611,9 @@ bot.onText(/\/admin/, async (msg) => {
 bot.on("message", async (msg) => {
     if (msg.chat.type !== "private") return;
 
-    const chatId   = msg.chat.id;
+    const chatId = msg.chat.id;
     const username = msg.from.username;
-    const text     = msg.text || msg.caption || "";
+    const text = msg.text || msg.caption || "";
 
     if (!db.users.includes(chatId)) { db.users.push(chatId); saveDB(); }
 
@@ -1899,7 +651,7 @@ bot.on("message", async (msg) => {
 
     if (!text || text.startsWith("/")) return;
 
-   const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "📈 Live Traffic"];
+    const restrictedWords = ["☎️ Get Number", "🔑 2FA", "👤 Profile", "💬 Support", "⚙️ Admin Panel", "📈 Live Traffic"];
     if ((restrictedWords.includes(text) || userStates[chatId]) && text !== "📧 Temp Mail" && !await isUserMember(msg.from.id)) {
         return sendJoinPrompt(chatId);
     }
@@ -1920,15 +672,15 @@ bot.on("message", async (msg) => {
                 if (!activeTempMails[chatId].otpReceived && activeTempMails[chatId].messageId)
                     bot.deleteMessage(chatId, activeTempMails[chatId].messageId).catch(() => {});
                 if (activeTempMails[chatId].interval) clearInterval(activeTempMails[chatId].interval);
-                if (activeTempMails[chatId].timeout)  clearTimeout(activeTempMails[chatId].timeout);
+                if (activeTempMails[chatId].timeout) clearTimeout(activeTempMails[chatId].timeout);
             }
 
-            const res   = await fetch("https://api.tempmail.lol/v2/inbox/create");
+            const res = await fetch("https://api.tempmail.lol/v2/inbox/create");
             if (!res.ok) throw new Error("API Server is currently unreachable.");
-            const data  = await res.json();
+            const data = await res.json();
             const email = data.address, token = data.token;
 
-            const sentMsg  = await bot.sendMessage(chatId,
+            const sentMsg = await bot.sendMessage(chatId,
                 `📧 **Your Temp Mail:**\n\`${email}\`\n\n📩 **SMS Status:** Waiting... ⏳`,
                 { parse_mode: "Markdown" }
             );
@@ -1938,26 +690,22 @@ bot.on("message", async (msg) => {
 
             activeTempMails[chatId].interval = setInterval(async () => {
                 try {
-                    const inboxRes  = await fetch(`https://api.tempmail.lol/v2/inbox?token=${token}`);
+                    const inboxRes = await fetch(`https://api.tempmail.lol/v2/inbox?token=${token}`);
                     const inboxData = await inboxRes.json();
                     if (inboxData.emails && inboxData.emails.length > 0) {
                         const latest = inboxData.emails[0];
                         const mailId = latest.date + latest.subject;
                         if (activeTempMails[chatId].lastId !== mailId) {
-                            activeTempMails[chatId].lastId    = mailId;
+                            activeTempMails[chatId].lastId = mailId;
                             activeTempMails[chatId].otpReceived = true;
 
-                            const fullText  = `${latest.subject} ${latest.body || ""} ${latest.html || ""}`;
+                            const fullText = `${latest.subject} ${latest.body || ""} ${latest.html || ""}`;
                             const plainText = fullText.replace(/<[^>]+>/g, " ");
-                            let otpMatch = plainText.match(
-    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
-);
-                            if (!otpMatch)  otpMatch = plainText.match(/\b[A-Z0-9]{5,10}\b/i);
-                           const otp = otpMatch
-    ? otpMatch[0].replace(/\D/g, "")
-    : null;
+                            let otpMatch = plainText.match(/\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/);
+                            if (!otpMatch) otpMatch = plainText.match(/\b[A-Z0-9]{5,10}\b/i);
+                            const otp = otpMatch ? otpMatch[0].replace(/\D/g, "") : null;
                             const linkMatch = fullText.match(/https?:\/\/[^\s"'<>\\]+/);
-                            const link      = linkMatch ? linkMatch[0] : null;
+                            const link = linkMatch ? linkMatch[0] : null;
                             const platformName = detectPlatform(latest.from, latest.subject, plainText);
 
                             let cleanMessage = latest.subject.replace(/[\r\n]+/g, " ").trim();
@@ -2045,7 +793,7 @@ bot.on("message", async (msg) => {
         ).catch(() => {});
     }
 
-            else if (text === "📈 Live Traffic") {
+    else if (text === "📈 Live Traffic") {
         const apiKey = db.zenexCookies;
         if (!apiKey) {
             return bot.sendMessage(chatId, "⚠️ **Panel is not logged in.**\nNo live traffic data available at the moment.", { parse_mode: "Markdown" }).catch(() => {});
@@ -2061,7 +809,6 @@ bot.on("message", async (msg) => {
                     let cleanRange = String(r.range || "").replace(/X/g, "0");
                     let info = getCountryInfo(detectCountryFromRange(cleanRange));
                     
-                    // Removed panel name and range, kept only Country, Platform, and Hits
                     replyText += `🌍 **Country:** ${info.flag} ${info.cleanName}\n`;
                     replyText += `🌐 **Platform:** ${r.service}\n`;
                     replyText += `🔥 **Hits:** ${r.hits}\n━━━━━━━━━━━━━━━━━━\n`;
@@ -2096,7 +843,7 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_MANUAL_COUNTRY" && isAdmin(chatId, username)) {
         const info = getCountryInfo(text.trim().toUpperCase());
         tempAdminData[chatId] = { ...tempAdminData[chatId], addNumberCountry: text.trim().toUpperCase() };
-        userStates[chatId]    = "WAITING_FOR_ADD_NUMBERS";
+        userStates[chatId] = "WAITING_FOR_ADD_NUMBERS";
         bot.sendMessage(chatId,
             `✅ **Country Selected:** ${info.flag} ${info.cleanName}\n\nPlease paste the numbers below (each on a new line):`,
             { parse_mode: "Markdown" }
@@ -2104,12 +851,12 @@ bot.on("message", async (msg) => {
     }
 
     else if (userStates[chatId] === "WAITING_FOR_ADD_NUMBERS" && isAdmin(chatId, username)) {
-        const country  = tempAdminData[chatId]?.addNumberCountry;
+        const country = tempAdminData[chatId]?.addNumberCountry;
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
         if (!country) { delete userStates[chatId]; return; }
 
         const numbers = text.split("\n").map(n => n.trim()).filter(n => n.length > 0);
-        if (!db.availableNumbers[platform])          db.availableNumbers[platform] = {};
+        if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
         if (!db.availableNumbers[platform][country]) db.availableNumbers[platform][country] = [];
 
         let added = 0;
@@ -2165,7 +912,7 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_STEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
+            let email = parts[0].trim();
             let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into StexSMS...").catch(() => {});
             stex.login(email, password).then(token => {
@@ -2189,12 +936,12 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_MK_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
+            let email = parts[0].trim();
             let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into MK SMS Server...").catch(() => {});
             mk.login(email, password).then(cookieStr => {
                 db.mkCookies = cookieStr;
-                db.mkCreds   = { email, password };
+                db.mkCreds = { email, password };
                 if (!db.savedMkAccounts) db.savedMkAccounts = [];
                 let existing = db.savedMkAccounts.find(a => a.email === email);
                 if (existing) existing.password = password;
@@ -2213,12 +960,12 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_ZENEX_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
+            let email = parts[0].trim();
             let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into Zenex SMS Server...").catch(() => {});
             zenex.login(email, password).then(cookieStr => {
                 db.zenexCookies = cookieStr;
-                db.zenexCreds   = { email, password };
+                db.zenexCreds = { email, password };
                 if (!db.savedZenexAccounts) db.savedZenexAccounts = [];
                 let existing = db.savedZenexAccounts.find(a => a.email === email);
                 if (existing) existing.password = password;
@@ -2237,13 +984,13 @@ bot.on("message", async (msg) => {
     else if (userStates[chatId] === "WAITING_FOR_NXA_CREDS" && isAdmin(chatId, username)) {
         const parts = text.split("|");
         if (parts.length === 2) {
-            let email    = parts[0].trim();
+            let email = parts[0].trim();
             let password = parts[1].trim();
             bot.sendMessage(chatId, "⏳ Logging into NXA SMS Server...").catch(() => {});
             nxa.login(email, password).then(authData => {
-                db.nxaToken   = authData.token;
+                db.nxaToken = authData.token;
                 db.nxaCookies = authData.cookie;
-                db.nxaCreds   = { email, password };
+                db.nxaCreds = { email, password };
                 if (!db.savedNxaAccounts) db.savedNxaAccounts = [];
                 let existing = db.savedNxaAccounts.find(a => a.email === email);
                 if (existing) existing.password = password;
@@ -2265,7 +1012,7 @@ bot.on("message", async (msg) => {
         if (range.length >= 5) {
             const country = detectCountryFromRange(range);
             tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: "stex" };
-            userStates[chatId]    = "WAITING_FOR_METHOD_NAME";
+            userStates[chatId] = "WAITING_FOR_METHOD_NAME";
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
@@ -2274,7 +1021,7 @@ bot.on("message", async (msg) => {
         if (range.length >= 5) {
             const country = detectCountryFromRange(range);
             tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: "mk" };
-            userStates[chatId]    = "WAITING_FOR_METHOD_NAME";
+            userStates[chatId] = "WAITING_FOR_METHOD_NAME";
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
@@ -2283,7 +1030,7 @@ bot.on("message", async (msg) => {
         if (range.length >= 5) {
             const country = detectCountryFromRange(range);
             tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: "zenex" };
-            userStates[chatId]    = "WAITING_FOR_METHOD_NAME";
+            userStates[chatId] = "WAITING_FOR_METHOD_NAME";
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
@@ -2292,17 +1039,17 @@ bot.on("message", async (msg) => {
         if (range.length >= 5) {
             const country = detectCountryFromRange(range);
             tempAdminData[chatId] = { ...tempAdminData[chatId], pendingRange: range, pendingCountry: country, pendingPanel: "nxa" };
-            userStates[chatId]    = "WAITING_FOR_METHOD_NAME";
+            userStates[chatId] = "WAITING_FOR_METHOD_NAME";
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
 
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
-        const method   = text.trim();
+        const method = text.trim();
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
-        const range    = tempAdminData[chatId]?.pendingRange;
-        const country  = tempAdminData[chatId]?.pendingCountry;
-        const panel    = tempAdminData[chatId]?.pendingPanel;
+        const range = tempAdminData[chatId]?.pendingRange;
+        const country = tempAdminData[chatId]?.pendingCountry;
+        const panel = tempAdminData[chatId]?.pendingPanel;
 
         if (panel === "stex") {
             if (!db.stexRanges[platform]) db.stexRanges[platform] = {};
@@ -2335,10 +1082,10 @@ bot.on("message", async (msg) => {
 bot.on("callback_query", async (query) => {
     if (query.message.chat.type !== "private") return;
 
-    const chatId    = query.message.chat.id;
+    const chatId = query.message.chat.id;
     const messageId = query.message.message_id;
-    const data      = query.data;
-    const username  = query.from.username;
+    const data = query.data;
+    const username = query.from.username;
 
     if (data === "check_join") {
         if (await isUserMember(query.from.id)) {
@@ -2449,12 +1196,12 @@ bot.on("callback_query", async (query) => {
     else if (data === "admin_manage_panel") {
         bot.editMessageText("⚙️ **Login to panel :**", {
             chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [
-                [{ text: "IVA SMS 📩",  callback_data: "placeholder_iva" }],
+                [{ text: "IVA SMS 📩", callback_data: "placeholder_iva" }],
                 [{ text: "Stex SMS 📨", callback_data: "stex_login" }],
-                [{ text: "MK SMS ✉️",  callback_data: "placeholder_mk_login" }],
+                [{ text: "MK SMS ✉️", callback_data: "placeholder_mk_login" }],
                 [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], 
                 [{ text: "NXA SMS 🟣", callback_data: "nxa_login" }], 
-                [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
+                [{ text: "⬅️ Back", callback_data: "admin_panel" }]
             ]}
         }).catch(() => {});
         bot.answerCallbackQuery(query.id);
@@ -2596,9 +1343,9 @@ bot.on("callback_query", async (query) => {
 
     else if (data === "delall_everything") {
         db.stexRanges = { fb: {}, ig: {}, wa: {} };
-        db.mkRanges   = { fb: {}, ig: {}, wa: {} };
+        db.mkRanges = { fb: {}, ig: {}, wa: {} };
         db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
-        db.nxaRanges   = { fb: {}, ig: {}, wa: {} }; 
+        db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
         db.availableNumbers = { fb: {}, ig: {}, wa: {} };
         saveDB();
         bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
@@ -2608,16 +1355,16 @@ bot.on("callback_query", async (query) => {
     }
 
     else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_") || data.startsWith("delzenexrng_") || data.startsWith("delnxarng_")) {
-        const isStex    = data.startsWith("delstexrng_");
-        const isMk      = data.startsWith("delmkrng_");
-        const isZenex   = data.startsWith("delzenexrng_"); 
-        const isNxa     = data.startsWith("delnxarng_");
+        const isStex = data.startsWith("delstexrng_");
+        const isMk = data.startsWith("delmkrng_");
+        const isZenex = data.startsWith("delzenexrng_"); 
+        const isNxa = data.startsWith("delnxarng_");
         
         const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : (isZenex ? "delzenexrng_" : (isNxa ? "delnxarng_" : "delnumrng_")));
-        const payload   = data.replace(prefixStr, "");
-        const parts     = payload.split("_");
-        const plat      = parts[0];
-        const target    = parts.slice(1).join("_");
+        const payload = data.replace(prefixStr, "");
+        const parts = payload.split("_");
+        const plat = parts[0];
+        const target = parts.slice(1).join("_");
 
         if (isStex) {
             if (db.stexRanges[plat] && db.stexRanges[plat][target]) { delete db.stexRanges[plat][target]; saveDB(); }
@@ -2656,7 +1403,7 @@ bot.on("callback_query", async (query) => {
     }
 
     else if (data.startsWith("togglerng_")) {
-        const action   = data.replace("togglerng_", "");
+        const action = data.replace("togglerng_", "");
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
         if (!db.availableNumbers[platform]) db.availableNumbers[platform] = {};
         if (!tempAdminData[chatId]?.ranges)
@@ -2703,8 +1450,8 @@ bot.on("callback_query", async (query) => {
         bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.",
             { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [
                 [{ text: "➕ Add Admin", callback_data: "admin_add_admin" },
-                 { text: "➖ Remove",    callback_data: "admin_remove_admin" }],
-                [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
+                 { text: "➖ Remove", callback_data: "admin_remove_admin" }],
+                [{ text: "⬅️ Back", callback_data: "admin_panel" }]
             ]}}
         ).catch(() => {});
         bot.answerCallbackQuery(query.id);
@@ -2738,8 +1485,8 @@ bot.on("callback_query", async (query) => {
         bot.editMessageText("👑 **Manage Admins:**\nSelect an option to add or remove bot administrators.",
             { chat_id: chatId, message_id: messageId, parse_mode: "Markdown", reply_markup: { inline_keyboard: [
                 [{ text: "➕ Add Admin", callback_data: "admin_add_admin" },
-                 { text: "➖ Remove",    callback_data: "admin_remove_admin" }],
-                [{ text: "⬅️ Back",     callback_data: "admin_panel" }]
+                 { text: "➖ Remove", callback_data: "admin_remove_admin" }],
+                [{ text: "⬅️ Back", callback_data: "admin_panel" }]
             ]}}
         ).catch(() => {});
     }
@@ -2760,19 +1507,19 @@ bot.on("callback_query", async (query) => {
 
     else if (data.startsWith("menu_country_")) {
         clearPendingForChat(chatId);
-        const platform        = data.replace("menu_country_", "");
+        const platform = data.replace("menu_country_", "");
         const availPlatformDB = db.availableNumbers[platform] || {};
         
         const finalStexDB = db.stexRanges[platform] || {};
-        const finalMkDB   = db.mkRanges?.[platform] || {};
+        const finalMkDB = db.mkRanges?.[platform] || {};
         const finalZenexDB= db.zenexRanges?.[platform] || {};
-        const finalNxaDB  = db.nxaRanges?.[platform] || {};
+        const finalNxaDB = db.nxaRanges?.[platform] || {};
 
-        const ranges         = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
+        const ranges = Object.keys(availPlatformDB).filter(k => availPlatformDB[k].length > 0);
         const stexRangesList = Object.keys(finalStexDB);
-        const mkRangesList   = Object.keys(finalMkDB);
+        const mkRangesList = Object.keys(finalMkDB);
         const zenexRangesList= Object.keys(finalZenexDB);
-        const nxaRangesList  = Object.keys(finalNxaDB);
+        const nxaRangesList = Object.keys(finalNxaDB);
 
         if (ranges.length === 0 && stexRangesList.length === 0 && mkRangesList.length === 0 && zenexRangesList.length === 0 && nxaRangesList.length === 0)
             return bot.editMessageText(`⚠️ We are currently out of stock for this platform. Please check back later.`,
@@ -2780,11 +1527,11 @@ bot.on("callback_query", async (query) => {
             ).catch(() => {});
 
         let combinedRanges = [];
-        ranges.forEach(r       => combinedRanges.push({ type: "iva",  range: r, info: getCountryInfo(r) }));
+        ranges.forEach(r => combinedRanges.push({ type: "iva", range: r, info: getCountryInfo(r) }));
         stexRangesList.forEach(r => combinedRanges.push({ type: "stex", range: r, info: getCountryInfo(typeof finalStexDB[r] === "object" ? finalStexDB[r].country : finalStexDB[r]) }));
-        mkRangesList.forEach(r   => combinedRanges.push({ type: "mk",   range: r, info: getCountryInfo(typeof finalMkDB[r]   === "object" ? finalMkDB[r].country   : finalMkDB[r]) }));
+        mkRangesList.forEach(r => combinedRanges.push({ type: "mk", range: r, info: getCountryInfo(typeof finalMkDB[r] === "object" ? finalMkDB[r].country : finalMkDB[r]) }));
         zenexRangesList.forEach(r=> combinedRanges.push({ type: "zenex",range: r, info: getCountryInfo(typeof finalZenexDB[r]=== "object" ? finalZenexDB[r].country : finalZenexDB[r]) })); 
-        nxaRangesList.forEach(r  => combinedRanges.push({ type: "nxa",  range: r, info: getCountryInfo(typeof finalNxaDB[r]  === "object" ? finalNxaDB[r].country : finalNxaDB[r]) })); 
+        nxaRangesList.forEach(r => combinedRanges.push({ type: "nxa", range: r, info: getCountryInfo(typeof finalNxaDB[r] === "object" ? finalNxaDB[r].country : finalNxaDB[r]) })); 
         
         combinedRanges.sort((a, b) => a.info.cleanName.localeCompare(b.info.cleanName));
 
@@ -2795,7 +1542,7 @@ bot.on("callback_query", async (query) => {
 
         let currentV = {}, countryButtons = [];
         combinedRanges.forEach(item => {
-            let info  = item.info;
+            let info = item.info;
             let dName = `${info.flag} ${info.cleanName}`;
             if (globalCountryCount[info.cleanName] > 1) {
                 currentV[info.cleanName] = (currentV[info.cleanName] || 0) + 1;
@@ -2816,10 +1563,10 @@ bot.on("callback_query", async (query) => {
             bot.deleteMessage(chatId, activeNumberMessages[chatId]).catch(() => {});
         delete activeNumberMessages[chatId];
         const pureData = data.replace("assign_next_", "").replace("assign_", "");
-        const parts    = pureData.split("_");
+        const parts = pureData.split("_");
         const panelType= parts[0];  
         const platform = parts[1];  
-        const sel      = parts.slice(2).join("_");
+        const sel = parts.slice(2).join("_");
 
         clearPendingForChat(chatId);
 
@@ -2830,10 +1577,10 @@ bot.on("callback_query", async (query) => {
 
         if (panelType === "nxa" && nxaEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
+            const limit = db.settings.maxNumbers || 4;
             const countryName = typeof nxaEntry === "object" ? nxaEntry.country : nxaEntry;
-            const methodName  = typeof nxaEntry === "object" ? nxaEntry.method  : "";
-            let fetchedNums   = [];
+            const methodName = typeof nxaEntry === "object" ? nxaEntry.method : "";
+            let fetchedNums = [];
 
             bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`, { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }).catch(() => {});
             
@@ -2847,7 +1594,7 @@ bot.on("callback_query", async (query) => {
                     const n = numData.number ? numData.number.replace("+", "") : "";
                     if (n) {
                         fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
+                        inUseNumbers[n] = true;
                         pendingRequests[n] = { chatId, country: countryName, carrier: methodName, isNxa: true, platform, token: tokenToUse, cookie: cookieToUse, internal_id: numData.internal_id, createdAt: Date.now() };
                         ConsoleLog.create({ number: n, platform, country: countryName, carrier: methodName, status: "pending" }).catch(()=>{});
                     }
@@ -2858,7 +1605,7 @@ bot.on("callback_query", async (query) => {
                             db.nxaToken = authData.token; db.nxaCookies = authData.cookie;
                             saveDB();
                             const retryData = await nxa.getNumber(sel, authData.token, authData.cookie);
-                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
+                            const retryN = retryData.number ? retryData.number.replace("+", "") : "";
                             if (retryN) { 
                                 fetchedNums.push(retryN); 
                                 inUseNumbers[retryN] = true; 
@@ -2876,8 +1623,8 @@ bot.on("callback_query", async (query) => {
             if (fetchedNums.length === 0)
                 return bot.editMessageText(`❌ Out of stock or error fetching the number.`, { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }).catch(() => {});
 
-            const info    = getCountryInfo(countryName);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            const info = getCountryInfo(countryName);
+            let platName = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
             let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
             if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
             replyText += `\n\n👇 _Click a number below to copy:_`;
@@ -2886,7 +1633,7 @@ bot.on("callback_query", async (query) => {
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
                 [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+                [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
             );
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
@@ -2913,17 +1660,17 @@ bot.on("callback_query", async (query) => {
 
         else if (panelType === "zenex" && zenexEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
+            const limit = db.settings.maxNumbers || 4;
             const countryName = typeof zenexEntry === "object" ? zenexEntry.country : zenexEntry;
-            const methodName  = typeof zenexEntry === "object" ? zenexEntry.method  : "";
-            let fetchedNums   = [];
+            const methodName = typeof zenexEntry === "object" ? zenexEntry.method : "";
+            let fetchedNums = [];
 
             bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
             
             const cookieToUse = db.zenexCookies;
-            const credsToUse  = db.zenexCreds;
+            const credsToUse = db.zenexCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
@@ -2931,7 +1678,7 @@ bot.on("callback_query", async (query) => {
                     const n = numData.number ? numData.number.replace("+", "") : "";
                     if (n) {
                         fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
+                        inUseNumbers[n] = true;
                         pendingRequests[n] = { chatId, country: countryName, carrier: methodName, isZenex: true, platform, cookie: cookieToUse, createdAt: Date.now() };
                         ConsoleLog.create({ number: n, platform, country: countryName, carrier: methodName, status: "pending" }).catch(()=>{});
                     }
@@ -2942,7 +1689,7 @@ bot.on("callback_query", async (query) => {
                             db.zenexCookies = newCookie;
                             saveDB();
                             const retryData = await zenex.getNumber(sel, newCookie);
-                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
+                            const retryN = retryData.number ? retryData.number.replace("+", "") : "";
                             if (retryN) { 
                                 fetchedNums.push(retryN); 
                                 inUseNumbers[retryN] = true; 
@@ -2962,8 +1709,8 @@ bot.on("callback_query", async (query) => {
                     { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
                 ).catch(() => {});
 
-            const info    = getCountryInfo(countryName);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            const info = getCountryInfo(countryName);
+            let platName = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
             let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
             if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
             replyText += `\n\n👇 _Click a number below to copy:_`;
@@ -2972,7 +1719,7 @@ bot.on("callback_query", async (query) => {
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
                 [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+                [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
             );
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
@@ -2999,17 +1746,17 @@ bot.on("callback_query", async (query) => {
 
         else if (panelType === "stex" && stexEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
+            const limit = db.settings.maxNumbers || 4;
             const countryName = typeof stexEntry === "object" ? stexEntry.country : stexEntry;
-            const methodName  = typeof stexEntry === "object" ? stexEntry.method  : "";
-            let fetchedNums   = [];
+            const methodName = typeof stexEntry === "object" ? stexEntry.method : "";
+            let fetchedNums = [];
 
             bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
 
-            const tokenToUse  = db.stexToken;
-            const credsToUse  = db.stexCreds;
+            const tokenToUse = db.stexToken;
+            const credsToUse = db.stexCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
@@ -3017,7 +1764,7 @@ bot.on("callback_query", async (query) => {
                     const n = numData.full_number || numData.number.replace("+", "");
                     if (n) {
                         fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
+                        inUseNumbers[n] = true;
                         pendingRequests[n] = { chatId, country: countryName, carrier: methodName, isStex: true, platform, token: tokenToUse, createdAt: Date.now() };
                         ConsoleLog.create({ number: n, platform, country: countryName, carrier: methodName, status: "pending" }).catch(()=>{});
                     }
@@ -3028,7 +1775,7 @@ bot.on("callback_query", async (query) => {
                             db.stexToken = newToken;
                             saveDB();
                             const retryData = await stex.getNumber(sel, newToken);
-                            const retryN    = retryData.full_number || retryData.number.replace("+", "");
+                            const retryN = retryData.full_number || retryData.number.replace("+", "");
                             if (retryN) { 
                                 fetchedNums.push(retryN); 
                                 inUseNumbers[retryN] = true; 
@@ -3048,9 +1795,9 @@ bot.on("callback_query", async (query) => {
                     { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
                 ).catch(() => {});
 
-            const info     = getCountryInfo(countryName);
-            let platName   = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
-            let replyText  = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
+            const info = getCountryInfo(countryName);
+            let platName = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
             if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
             replyText += `\n\n👇 _Click a number below to copy:_`;
 
@@ -3058,7 +1805,7 @@ bot.on("callback_query", async (query) => {
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
                 [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+                [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
             );
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
@@ -3085,17 +1832,17 @@ bot.on("callback_query", async (query) => {
 
         else if (panelType === "mk" && mkEntry) {
             bot.answerCallbackQuery(query.id, { text: "⏳ Fetching numbers...", show_alert: false });
-            const limit       = db.settings.maxNumbers || 4;
+            const limit = db.settings.maxNumbers || 4;
             const countryName = typeof mkEntry === "object" ? mkEntry.country : mkEntry;
-            const methodName  = typeof mkEntry === "object" ? mkEntry.method  : "";
-            let fetchedNums   = [];
+            const methodName = typeof mkEntry === "object" ? mkEntry.method : "";
+            let fetchedNums = [];
 
             bot.editMessageText(`⏳ **Fetching ${limit} numbers...**`,
                 { chat_id: chatId, message_id: messageId, parse_mode: "Markdown" }
             ).catch(() => {});
 
             const cookieToUse = db.mkCookies;
-            const credsToUse  = db.mkCreds;
+            const credsToUse = db.mkCreds;
 
             for (let i = 0; i < limit; i++) {
                 try {
@@ -3103,7 +1850,7 @@ bot.on("callback_query", async (query) => {
                     const n = numData.number ? numData.number.replace("+", "") : "";
                     if (n) {
                         fetchedNums.push(n);
-                        inUseNumbers[n]    = true;
+                        inUseNumbers[n] = true;
                         pendingRequests[n] = { chatId, country: countryName, carrier: methodName, isMk: true, platform, cookie: cookieToUse, createdAt: Date.now() };
                         ConsoleLog.create({ number: n, platform, country: countryName, carrier: methodName, status: "pending" }).catch(()=>{});
                     }
@@ -3114,7 +1861,7 @@ bot.on("callback_query", async (query) => {
                             db.mkCookies = newCookie;
                             saveDB();
                             const retryData = await mk.getNumber(sel, newCookie);
-                            const retryN    = retryData.number ? retryData.number.replace("+", "") : "";
+                            const retryN = retryData.number ? retryData.number.replace("+", "") : "";
                             if (retryN) { 
                                 fetchedNums.push(retryN); 
                                 inUseNumbers[retryN] = true; 
@@ -3134,8 +1881,8 @@ bot.on("callback_query", async (query) => {
                     { chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [[{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]] } }
                 ).catch(() => {});
 
-            const info    = getCountryInfo(countryName);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            const info = getCountryInfo(countryName);
+            let platName = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
             let replyText = `🤖 **${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}`;
             if (methodName) replyText += `\n📝 **Method:** ${methodName}`;
             replyText += `\n\n👇 _Click a number below to copy:_`;
@@ -3144,7 +1891,7 @@ bot.on("callback_query", async (query) => {
             fetchedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
                 [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+                [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
             );
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
@@ -3174,7 +1921,7 @@ bot.on("callback_query", async (query) => {
             if (nums.length === 0)
                 return bot.answerCallbackQuery(query.id, { text: `⚠️ This country is currently out of stock!`, show_alert: true });
 
-            const limit       = db.settings.maxNumbers || 4;
+            const limit = db.settings.maxNumbers || 4;
             const assignedNums = nums.splice(0, limit);
             db.lastAssigned[chatId] = { country: sel, nums: [...assignedNums] };
             saveDB();
@@ -3186,15 +1933,15 @@ bot.on("callback_query", async (query) => {
             });
             syncPending();
 
-            const info    = getCountryInfo(sel);
-            let platName  = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
+            const info = getCountryInfo(sel);
+            let platName = platform === "fb" ? "FACEBOOK" : platform === "ig" ? "INSTAGRAM" : "WHATSAPP";
             let replyText = `**${botInfo.first_name || "eSIM Bot"}**\n🌍 **Country:** ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 **Platform:** ${platName}\n\n👇 _Click a number below to copy:_`;
 
             let actionMenu = { inline_keyboard: [] };
             assignedNums.forEach(n => actionMenu.inline_keyboard.push([{ text: `${info.flag} +${n}`, copy_text: { text: n } }]));
             actionMenu.inline_keyboard.push(
                 [{ text: "🔄 Change", callback_data: `assign_next_${panelType}_${platform}_${sel}` }, { text: "↗️ OTP Group", url: GROUP_INVITE_LINK }],
-                [{ text: "🔙 Back",  callback_data: `menu_country_${platform}` }]
+                [{ text: "🔙 Back", callback_data: `menu_country_${platform}` }]
             );
 
             bot.editMessageText(replyText, { chat_id: chatId, message_id: messageId, reply_markup: actionMenu, parse_mode: "Markdown" }).then(() => {
@@ -3218,157 +1965,487 @@ bot.on("callback_query", async (query) => {
         }
     }
 });
-function extractOtp(text) {
+/* ==========================================================
+API ROUTES
+========================================================== */
+app.get("/api/history-debug", async (req, res) => {
+    const docs = await History.find({}).limit(5).lean();
+    res.json(docs);
+});
 
-    if (!text) return null;
-
-    const patterns = [
-        /\b\d{3}\s\d{3}\b/,
-        /\b\d{3}-\d{3}\b/,
-        /\b\d{4,8}\b/,
-        /\b[A-Z0-9]{5,10}\b/i
-    ];
-
-    for (const pattern of patterns) {
-
-        const match = text.match(pattern);
-
-        if (match) {
-            return match[0].replace(/\D/g, "");
-        }
+app.get("/api/history-test", async (req, res) => {
+    try {
+        const data = await History.find({}).sort({ createdAt: -1 }).limit(10).lean();
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
+});
 
-    return null;
-}
-async function processFoundOTP(number, time, message, range) {
-    // 1. Extract OTP code first
-   let otpMatch = message.match(
-    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
-);
+app.get("/api/test-live-console", async (req, res) => {
+    try {
+        const logs = await zenex.getLiveConsole();
+        res.json({ success: true, count: logs.length, first: logs[0] || null });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
-let otpCode = otpMatch
-    ? otpMatch[0].replace(/\D/g, "")
-    : null;
+app.get("/api/debug", (req, res) => {
+    res.json({
+        availableNumbers: db.availableNumbers,
+        stexRanges: db.stexRanges,
+        mkRanges: db.mkRanges,
+        zenexRanges: db.zenexRanges,
+        nxaRanges: db.nxaRanges
+    });
+});
 
-    // 2. OTP-based deduplication
-    // Fallback to the full message if no explicit OTP code is found to prevent spamming
-    const otpKey = otpCode ? `${number}_${otpCode}` : `${number}_${message.trim()}`;
-    
-    if (lastProcessedOTPTime[otpKey]) return;
-    lastProcessedOTPTime[otpKey] = Date.now();
+app.get("/api/ranges", (req, res) => {
+    try {
+        const ranges = [];
+        function normalizePlatform(platform) {
+            if (platform === "fb") return "Facebook";
+            if (platform === "fb_new") return "Facebook";
+            if (platform === "ig") return "Instagram";
+            if (platform === "wa") return "WhatsApp";
+            return platform;
+        }
+        function addRanges(source, panel) {
+            Object.keys(source || {}).forEach(platform => {
+                Object.keys(source[platform] || {}).forEach(range => {
+                    const item = source[platform][range];
+                    ranges.push({ panel, platform: normalizePlatform(platform), country: item.country, method: item.method, range });
+                });
+            });
+        }
+        addRanges(db.mkRanges, "MK");
+        addRanges(db.stexRanges, "STEX");
+        addRanges(db.zenexRanges, "ZENEX");
+        addRanges(db.nxaRanges, "NXA");
+        res.json(ranges);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
-    let reqData  = pendingRequests[number];
+app.get("/api/panels", (req, res) => {
+    res.json([
+        { id: "mk", name: "MK Network", connected: !!db.mkCookies, activeAccount: db.mkCreds?.email || null },
+        { id: "stex", name: "STEX SMS", connected: !!db.stexToken, activeAccount: db.stexCreds?.email || null },
+        { id: "zenex", name: "Zenex", connected: !!db.zenexCookies, activeAccount: db.zenexCreds?.email || null },
+        { id: "nxa", name: "NXA", connected: !!db.nxaToken, activeAccount: db.nxaCreds?.email || null }
+    ]);
+});
 
-    // 3. Additional safety: Don't process if the exact OTP is already assigned to this request
-    if (reqData && reqData.otp && reqData.otp === otpCode) return;
+app.post("/api/wallet/set-pin", async (req, res) => {
+    try {
+        const { firebaseUid, pin } = req.body;
+        if (!firebaseUid || !pin) return res.status(400).json({ success: false, message: "Missing data" });
+        if (!/^\d{4}$/.test(pin)) return res.status(400).json({ success: false, message: "PIN must be 4 digits" });
+        const user = await User.findOne({ firebaseUid });
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+        const hashedPin = await bcrypt.hash(pin, 10);
+        user.walletPin = hashedPin;
+        user.walletPinEnabled = true;
+        await user.save();
+        res.json({ success: true, message: "Wallet PIN set successfully" });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
-    const cName   = typeof range === "object" ? range.country : range;
-    const info    = getCountryInfo(cName || "UNKNOWN");
-    const numStr  = String(number);
-    const maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+app.post("/api/wallet/verify-pin", async (req, res) => {
+    try {
+        const { firebaseUid, pin } = req.body;
+        const user = await User.findOne({ firebaseUid });
+        if (!user || !user.walletPinEnabled) return res.status(404).json({ success: false, message: "PIN not set" });
+        const valid = await bcrypt.compare(pin, user.walletPin);
+        res.json({ success: valid });
+    } catch (e) {
+        res.status(500).json({ success: false, message: e.message });
+    }
+});
 
-    let platCode = reqData ? reqData.platform : "unknown";
-    let platName = platCode === "fb" ? "FACEBOOK" : platCode === "ig" ? "INSTAGRAM" : platCode === "wa" ? "WHATSAPP" : platCode.toUpperCase();
+app.get("/api/wallet/pin-status/:firebaseUid", async (req, res) => {
+    try {
+        const user = await User.findOne({ firebaseUid: req.params.firebaseUid });
+        res.json({ success: true, pinEnabled: !!user?.walletPinEnabled });
+    } catch (e) {
+        res.status(500).json({ success: false });
+    }
+});
 
-    let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${message}`;
-    let groupMarkup    = { inline_keyboard: [] };
-    let groupButtonRow = [];
-    if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
-    if (otpCode)           groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: otpCode } });
-    if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
-    bot.sendMessage(GROUP_CHAT_ID, groupReplyText,
-        { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }
-    ).catch(() => {});
+app.post("/api/admin/panel/login", requireAdmin, async (req, res) => {
+    try {
+        const { panel, email, password } = req.body;
+        if (!panel || !email || !password) return res.status(400).json({ success: false, error: "Missing required fields" });
+        
+        if (panel === "stex") {
+            const token = await stex.login(email, password);
+            db.stexToken = token;
+            db.stexCreds = { email, password };
+            if (!db.savedStexAccounts) db.savedStexAccounts = [];
+            if (!db.savedStexAccounts.find(a => a.email === email)) db.savedStexAccounts.push({ email, password });
+        } else if (panel === "mk") {
+            const cookieStr = await mk.login(email, password);
+            db.mkCookies = cookieStr;
+            db.mkCreds = { email, password };
+            if (!db.savedMkAccounts) db.savedMkAccounts = [];
+            if (!db.savedMkAccounts.find(a => a.email === email)) db.savedMkAccounts.push({ email, password });
+        } else if (panel === "zenex") {
+            const cookieStr = await zenex.login(email, password);
+            db.zenexCookies = cookieStr;
+            db.zenexCreds = { email, password };
+            if (!db.savedZenexAccounts) db.savedZenexAccounts = [];
+            if (!db.savedZenexAccounts.find(a => a.email === email)) db.savedZenexAccounts.push({ email, password });
+        } else if (panel === "nxa") {
+            const authData = await nxa.login(email, password);
+            db.nxaToken = authData.token;
+            db.nxaCookies = authData.cookie;
+            db.nxaCreds = { email, password };
+            if (!db.savedNxaAccounts) db.savedNxaAccounts = [];
+            if (!db.savedNxaAccounts.find(a => a.email === email)) db.savedNxaAccounts.push({ email, password });
+        } else {
+            return res.status(400).json({ success: false, error: "Invalid panel" });
+        }
+        saveDB();
+        res.json({ success: true, panel, email });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
-    if (reqData) {
-        reqData.otp = otpCode;
-        reqData.message = message;
-        reqData.status = "success";
-        reqData.receivedAt = Date.now();
+app.get("/api/dashboard", (req, res) => {
+    res.json({
+        totalUsers: db.users.length,
+        activeRequests: Object.keys(pendingRequests).length,
+        balanceUsers: Object.keys(db.balances).length,
+        maxNumbers: db.settings.maxNumbers || 4
+    });
+});
+
+app.get("/api/admin/panel/accounts", (req, res) => {
+    res.json({
+        stex: db.savedStexAccounts || [],
+        mk: db.savedMkAccounts || [],
+        zenex: db.savedZenexAccounts || [],
+        nxa: db.savedNxaAccounts || []
+    });
+});
+
+app.get("/api/admin/panel/active", (req, res) => {
+    res.json({
+        stex: db.stexCreds || null,
+        mk: db.mkCreds || null,
+        zenex: db.zenexCreds || null,
+        nxa: db.nxaCreds || null
+    });
+});
+
+app.get("/api/profile/:firebaseUid", async (req, res) => {
+    try {
+        const firebaseUid = req.params.firebaseUid;
+        const user = await User.findOne({ firebaseUid });
+        if (!user) return res.status(404).json({ success: false, error: "User not found" });
+
+        res.json({
+            firebaseUid: user.firebaseUid, fullName: user.fullName || "Unknown", email: user.email,
+            mobileNumber: user.mobileNumber || null, telegramUsername: user.telegramUsername || null,
+            country: user.country || null, referralEmail: user.referralEmail || null,
+            profilePhotoUrl: user.profilePhotoUrl || null, balance: user.balance, role: user.role, status: user.status
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+        const users = await User.find({}).select("firebaseUid fullName email role status country createdAt").sort({ createdAt: -1 }).lean();
+        res.json(users);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get("/api/admin/user-stats", requireAdmin, async (req, res) => {
+    try {
+        const total = await User.countDocuments();
+        const pending = await User.countDocuments({ status: "pending" });
+        const approved = await User.countDocuments({ status: "approved" });
+        const suspended = await User.countDocuments({ status: "suspended" });
+        const admins = await User.countDocuments({ role: "admin" });
+        const superadmins = await User.countDocuments({ role: "superadmin" });
+        res.json({ total, pending, approved, suspended, admins, superadmins });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/admin/user/approve", requireAdmin, async (req, res) => {
+    try {
+        const { targetUid } = req.body;
+        const targetUser = await User.findOne({ firebaseUid: targetUid });
+        if (targetUser && targetUser.role === "superadmin") return res.status(403).json({ success: false, error: "Cannot modify superadmin" });
+        const user = await User.findOneAndUpdate({ firebaseUid: targetUid }, { status: "approved" }, { new: true });
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/admin/user/suspend", requireAdmin, async (req, res) => {
+    try {
+        const { targetUid } = req.body;
+        const targetUser = await User.findOne({ firebaseUid: targetUid });
+        if (targetUser && targetUser.role === "superadmin") return res.status(403).json({ success: false, error: "Cannot suspend superadmin" });
+        const user = await User.findOneAndUpdate({ firebaseUid: targetUid }, { status: "suspended" }, { new: true });
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/admin/user/unsuspend", requireAdmin, async (req, res) => {
+    try {
+        const { targetUid } = req.body;
+        const user = await User.findOneAndUpdate({ firebaseUid: targetUid }, { status: "approved" }, { new: true });
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/admin/user/change-role", requireSuperAdmin, async (req, res) => {
+    try {
+        const { targetUid, role } = req.body;
+        const targetUser = await User.findOne({ firebaseUid: targetUid });
+        if (targetUser && targetUser.role === "superadmin") return res.status(403).json({ success: false, error: "Cannot modify superadmin" });
+        if (!["user", "admin"].includes(role)) return res.status(400).json({ success: false, error: "Invalid role" });
+        const user = await User.findOneAndUpdate({ firebaseUid: targetUid }, { role }, { new: true });
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get("/api/history/:firebaseUid", async (req, res) => {
+    try {
+        const history = await History.find({}).lean();
+        const filtered = history.filter(item => String(item.firebaseUid).trim() === String(req.params.firebaseUid).trim());
+        res.json(filtered);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get("/api/live-traffic", async (req, res) => {
+    try {
+        if (!db.zenexCookies) return res.json([]);
+        const routes = await zenex.getLiveTraffic(db.zenexCookies);
+        res.json(routes);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/auth/firebase", async (req, res) => {
+    try {
+        const { firebaseUid, email, fullName, mobileNumber, telegramUsername, country, referralEmail } = req.body;
+        if (!firebaseUid || !email) return res.status(400).json({ success: false, error: "Missing firebaseUid or email" });
+        
+        let user = await User.findOne({ firebaseUid });
+        if (!user) {
+            user = await User.create({
+                firebaseUid, email, fullName: fullName || "", mobileNumber: mobileNumber || "",
+                telegramUsername: telegramUsername || "", country: country || "", referralEmail: referralEmail || "",
+                profilePhotoUrl: "", balance: 0, role: "user", status: "pending"
+            });
+        }
+        if (user.status === "pending") return res.status(403).json({ success: false, status: "pending", error: "Account awaiting approval" });
+        if (user.status === "suspended") return res.status(403).json({ success: false, status: "suspended", error: "Account suspended" });
+        
+        res.json({ success: true, user });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/profile/photo", async (req, res) => {
+    try {
+        const { firebaseUid, photoUrl } = req.body;
+        if (!firebaseUid || !photoUrl) return res.status(400).json({ success: false, error: "Missing parameters" });
+        const user = await User.findOneAndUpdate({ firebaseUid }, { profilePhotoUrl: photoUrl }, { new: true, upsert: false });
+        if (!user) return res.status(404).json({ success: false, error: "User not found" });
+        res.json({ success: true, profilePhotoUrl: user.profilePhotoUrl });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.post("/api/get-number", async (req, res) => {
+    try {
+        const { firebaseUid, platform, country } = req.body;
+        let selected = null;
+        
+        function findRange(source, panelName) {
+            Object.keys(source || {}).forEach(p => {
+                Object.keys(source[p] || {}).forEach(range => {
+                    const item = source[p][range];
+                    const pName = p === "fb" || p === "fb_new" ? "Facebook" : p === "ig" ? "Instagram" : p === "wa" ? "WhatsApp" : p;
+                    if (!selected && pName === platform && item.country === country) {
+                        selected = { panel: panelName, range, method: item.method };
+                    }
+                });
+            });
+        }
+
+        findRange(db.mkRanges, "MK");
+        findRange(db.stexRanges, "STEX");
+        findRange(db.zenexRanges, "ZENEX");
+        findRange(db.nxaRanges, "NXA");
+
+        if (!selected) return res.status(404).json({ success: false, error: "No route found" });
+
+        let number = null;
+        let internal_id = null;
+
+        if (selected.panel === "MK") {
+            const data = await mk.getNumber(selected.range, db.mkCookies);
+            number = data.number;
+        } else if (selected.panel === "STEX") {
+            const data = await stex.getNumber(selected.range, db.stexToken);
+            number = data.full_number;
+        } else if (selected.panel === "ZENEX") {
+            const data = await zenex.getNumber(selected.range);
+            number = data.number;
+        } else if (selected.panel === "NXA") {
+            const data = await nxa.getNumber(selected.range, db.nxaToken, db.nxaCookies);
+            number = data.number;
+            internal_id = data.internal_id;
+        }
+
+        if (!number) return res.status(500).json({ success: false, error: "No number received" });
+        
+        number = String(number).trim();
+        if (!number.startsWith("+")) number = "+" + number;
+        inUseNumbers[number] = true;
+
+        pendingRequests[number] = {
+            firebaseUid, country, platform, carrier: selected.method, range: selected.range,
+            createdAt: Date.now(), isStex: selected.panel === "STEX",
+            token: selected.panel === "STEX" ? db.stexToken : (selected.panel === "NXA" ? db.nxaToken : undefined),
+            isMk: selected.panel === "MK",
+            cookie: selected.panel === "MK" ? db.mkCookies : (selected.panel === "ZENEX" ? db.zenexCookies : (selected.panel === "NXA" ? db.nxaCookies : undefined)),
+            isZenex: selected.panel === "ZENEX", isNxa: selected.panel === "NXA",
+            internal_id: selected.panel === "NXA" ? internal_id : undefined
+        };
         syncPending();
 
-        if (reqData.chatId) {
-            const reqInfo    = getCountryInfo(cName);
-            let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
-            let userMarkup   = { inline_keyboard: [] };
-            if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-            bot.sendMessage(reqData.chatId, userReplyText,
-                { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }
-            ).catch(() => {});
-            addBalance(reqData.chatId, 0.50);
-             try {
+        ConsoleLog.create({ number, platform, country, range: selected.range, carrier: selected.method, status: "pending" }).catch(()=>{});
+        if (firebaseUid) {
+            History.create({ firebaseUid, number, platform, country, range: selected.range, carrier: selected.method, status: "pending" }).catch(() => {});
+        }
+        res.json({ success: true, number, country, platform, expiresIn: 900 });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
-        if (reqData.firebaseUid) {
+app.get("/api/check-otp/:number", (req, res) => {
+    try {
+        let number = req.params.number;
+        let request = pendingRequests[number];
+        if (!request && !number.startsWith("+")) {
+            request = pendingRequests["+" + number];
+            if (request) number = "+" + number;
+        }
+        if (!request && number.startsWith("+")) {
+            request = pendingRequests[number.substring(1)];
+            if (request) number = number.substring(1);
+        }
+        if (!request) return res.json({ success: false, status: "expired" });
+        if (request.status === "success" || request.otp) {
+            return res.json({ success: true, status: "success", otp: request.otp, message: request.message || "" });
+        }
+        return res.json({ success: true, status: "pending" });
+    } catch (e) {
+        console.error("OTP CHECK ERROR:", e);
+        return res.status(500).json({ success: false, error: e.message });
+    }
+});
 
-            const user = await User.findOne({
-                firebaseUid: reqData.firebaseUid
-            });
-
-            if (user) {
-
-                user.balance =
-                    Number(user.balance || 0) + 0.50;
-
-                user.totalEarned =
-                    Number(user.totalEarned || 0) + 0.50;
-
-                await user.save();
-
-                console.log(
-                    `APP REWARD +0.50 -> ${user.firebaseUid}`
-                );
+app.post("/api/admin/broadcast", requireAdmin, async (req, res) => {
+    try {
+        const { subject, message, category, priority } = req.body;
+        const broadcast = await Broadcast.create({ subject, message, category, priority, sentBy: "System", isRead: false });
+        if (db.fcmTokens && db.fcmTokens.length > 0) {
+            try {
+                const response = await admin.messaging().sendEachForMulticast({
+                    notification: { title: subject || "New Broadcast", body: message || "" },
+                    tokens: db.fcmTokens
+                });
+                console.log("PUSH SENT:", response.successCount);
+            } catch (err) {
+                console.error("PUSH ERROR:", err.message);
             }
         }
-
+        res.json({ success: true, broadcast });
     } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
-        console.log(
-            "APP REWARD ERROR:",
-            e.message
-        );
+app.delete("/api/admin/broadcast/:id", requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deleted = await Broadcast.findByIdAndDelete(id);
+        if (!deleted) return res.status(404).json({ success: false, error: "Broadcast not found" });
+        res.json({ success: true, message: "Broadcast deleted successfully" });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
+app.post("/api/fcm/register", async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ success: false, error: "Token required" });
+        if (!db.fcmTokens.includes(token)) {
+            db.fcmTokens.push(token);
+            saveDB();
         }
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
-History.findOneAndUpdate(
-    {
-        number: String(number)
-    },
-    {
-        $set: {
-            otp: otpCode,
-            status: "success"
-        }
+});
+
+app.get("/api/notifications", async (req, res) => {
+    try {
+        const notifications = await Broadcast.find().sort({ createdAt: -1 }).lean();
+        res.json(notifications);
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
     }
-).catch(() => {});
-    History.findOneAndUpdate(
-    {
-        number: String(number)
-    },
-    {
-        $set: {
-            otp: otpCode,
-            status: "success"
+});
+
+app.get("/api/console", async (req, res) => {
+    try {
+        const query = req.query.q || "";
+        let filter = {};
+        if (query) {
+            const regex = new RegExp(query, "i");
+            filter = { $or: [{ number: regex }, { platform: regex }, { country: regex }] };
         }
+        const logs = await ConsoleLog.find(filter).sort({ receivedAt: -1 })
+            .select("number range platform country carrier otp fullMessage status receivedAt -_id").lean();
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-).catch(() => {});
-    ConsoleLog.findOneAndUpdate(
-        { number: String(number), status: "pending" },
-        { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
-    ).then(doc => {
-        if (!doc) {
-            ConsoleLog.create({
-                number: String(number),
-                platform: platName,
-                country: info.cleanName.toUpperCase(),
-                carrier: reqData ? reqData.carrier : "System",
-                fullMessage: message,
-                otp: otpCode,
-                status: "success",
-                receivedAt: Date.now()
-            }).catch(()=>{});
-        }
-    }).catch(()=>{});
-}
+});
 
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
@@ -3384,33 +2461,60 @@ app.post("/api/ivas-data", (req, res) => {
     res.status(400).json({ success: false });
 });
 
-app.get("/",     (req, res) => res.status(200).send("Bot is successfully running on Webhook Mode!"));
+app.post("/api/gemini-test", async (req, res) => {
+    try {
+        const { message } = req.body;
+        const prompt = `You are the official eSIM Network Support Assistant.
+About eSIM Network:
+- Users can purchase OTP numbers.
+- Supported providers: IVA, STEX, MK, Zenex, NXA.
+- Users have wallet balance, can deposit, request withdrawals, view history.
+Rules:
+- Only answer eSIM Network related questions.
+- If the question is unrelated, politely refuse.
+User message: ${message}`;
+        const result = await geminiModel.generateContent(prompt);
+        res.json({ success: true, reply: result.response.text() });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+app.get("/api/gemini-debug", async (req, res) => {
+    try {
+        const result = await geminiModel.generateContent("hello");
+        res.json({ success: true, text: result.response.text() });
+    } catch (e) {
+        res.json({ success: false, message: e.message, details: e });
+    }
+});
+
+app.get("/", (req, res) => res.status(200).send("Bot is successfully running on Webhook Mode!"));
 app.get("/ping", (req, res) => res.status(200).send("Pong! Bot is alive."));
 
+/* ==========================================================
+STARTUP SERVICES & MONGOOSE CONNECT
+========================================================== */
 async function autoLoginPanels() {
     if (!isDbLoaded) return;
-
     if (db.stexCreds && db.stexCreds.email) {
         try {
             const token = await stex.login(db.stexCreds.email, db.stexCreds.password);
             if (token) { db.stexToken = token; saveDB(); }
         } catch (e) {}
     }
-
     if (db.mkCreds && db.mkCreds.email) {
         try {
             const cookieStr = await mk.login(db.mkCreds.email, db.mkCreds.password);
             if (cookieStr) { db.mkCookies = cookieStr; saveDB(); }
         } catch (e) {}
     }
-
     if (db.zenexCreds && db.zenexCreds.email) {
         try {
             const cookieStr = await zenex.login(db.zenexCreds.email, db.zenexCreds.password);
             if (cookieStr) { db.zenexCookies = cookieStr; saveDB(); }
         } catch (e) {}
     }
-    
     if (db.nxaCreds && db.nxaCreds.email) {
         try {
             const authData = await nxa.login(db.nxaCreds.email, db.nxaCreds.password);
@@ -3433,22 +2537,22 @@ mongoose.connect(MONGODB_URI).then(async () => {
             const oldStex = { ...db.stexRanges };
             db.stexRanges = { fb: oldStex, ig: {}, wa: {} };
         }
-        if (!db.mkRanges)            db.mkRanges           = { fb: {}, ig: {}, wa: {} };
-        if (!db.zenexRanges)         db.zenexRanges        = { fb: {}, ig: {}, wa: {} }; 
-        if (!db.nxaRanges)           db.nxaRanges          = { fb: {}, ig: {}, wa: {} }; 
+        if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
+        if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
+        if (!db.nxaRanges) db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
         
-        if (!db.savedStexAccounts)   db.savedStexAccounts  = [];
-        if (!db.savedMkAccounts)     db.savedMkAccounts    = [];
-        if (!db.savedZenexAccounts)  db.savedZenexAccounts = []; 
-        if (!db.savedNxaAccounts)    db.savedNxaAccounts   = []; 
+        if (!db.savedStexAccounts) db.savedStexAccounts = [];
+        if (!db.savedMkAccounts) db.savedMkAccounts = [];
+        if (!db.savedZenexAccounts) db.savedZenexAccounts = []; 
+        if (!db.savedNxaAccounts) db.savedNxaAccounts = []; 
         
         if (db.settings.userPanelAccess !== undefined) delete db.settings.userPanelAccess;
         if (!db.settings.lastBroadcast) db.settings.lastBroadcast = []; 
 
         if (db.stexCreds?.email && db.savedStexAccounts.length === 0) db.savedStexAccounts.push(db.stexCreds);
-        if (db.mkCreds?.email   && db.savedMkAccounts.length   === 0) db.savedMkAccounts.push(db.mkCreds);
-        if (db.zenexCreds?.email&& db.savedZenexAccounts.length=== 0) db.savedZenexAccounts.push(db.zenexCreds);
-        if (db.nxaCreds?.email  && db.savedNxaAccounts.length  === 0) db.savedNxaAccounts.push(db.nxaCreds);
+        if (db.mkCreds?.email && db.savedMkAccounts.length === 0) db.savedMkAccounts.push(db.mkCreds);
+        if (db.zenexCreds?.email && db.savedZenexAccounts.length === 0) db.savedZenexAccounts.push(db.zenexCreds);
+        if (db.nxaCreds?.email && db.savedNxaAccounts.length === 0) db.savedNxaAccounts.push(db.nxaCreds);
 
         if (!db.pendingRequests) db.pendingRequests = {};
         pendingRequests = db.pendingRequests;
@@ -3459,115 +2563,59 @@ mongoose.connect(MONGODB_URI).then(async () => {
                 delete pendingRequests[num];
             }
         }
-
     } else {
         await BotDB.create(db);
     }
     
-
-
-app.post("/api/gemini-test", async (req, res) => {
-    try {
-
-        const { message } = req.body;
-
-       const prompt = `
-You are the official eSIM Network Support Assistant.
-
-About eSIM Network:
-
-- Users can purchase OTP numbers.
-- Users can receive OTP codes.
-- Supported providers:
-  IVA, STEX, MK, Zenex, NXA.
-- Users have wallet balance.
-- Users can deposit funds.
-- Users can request withdrawals.
-- Users can view order history.
-- Users can manage profiles.
-- Admins can manage users.
-- Super Admins can manage roles and broadcasts.
-- The app includes Live Console and Notifications.
-
-Rules:
-
-- Only answer eSIM Network related questions.
-- If the question is unrelated, politely refuse.
-
-User message:
-${message}
-`;
-
-        const result =
-            await geminiModel.generateContent(prompt);
-
-        const reply =
-            result.response.text();
-
-        res.json({
-            success: true,
-            reply
-        });
-
-
-    } catch (e) {
-
-        console.error("GEMINI ERROR:", e);
-
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
-});
-    app.get("/api/gemini-debug", async (req, res) => {
-    try {
-
-        const result = await geminiModel.generateContent("hello");
-
-        res.json({
-            success: true,
-            text: result.response.text()
-        });
-
-    } catch (e) {
-
-        res.json({
-            success: false,
-            message: e.message,
-            details: e
-        });
-
-    }
-});
     isDbLoaded = true;
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
 
     setTimeout(autoLoginPanels, 10000);
-
 }).catch(err => console.log(err));
+
+/* ==========================================================
+OTP POLLING SERVICES & SCHEDULERS
+========================================================== */
+const processedZenexLogs = new Set();
+setInterval(async () => {
+    try {
+        const logs = await zenex.getLiveConsole();
+        for (const log of logs) {
+            const key = String(log.number) + "_" + String(log.createdAt);
+            if (processedZenexLogs.has(key)) continue;
+            processedZenexLogs.add(key);
+
+            const exists = await ConsoleLog.findOne({ number: "+" + String(log.number), fullMessage: log.otp });
+            if (exists) continue;
+
+            const fullNumber = String(log.number);
+            const range = fullNumber.length >= 6 ? fullNumber.substring(0, 6) + "XXX" : fullNumber;
+            await ConsoleLog.create({
+                number: "+" + fullNumber, platform: log.service, country: String(log.country || "").toUpperCase(),
+                range: range, carrier: log.operator, otp: "", fullMessage: log.otp, status: "success", receivedAt: new Date(log.createdAt)
+            });
+        }
+    } catch (e) {}
+}, 10000);
 
 setInterval(autoLoginPanels, 20 * 60 * 1000);
 
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isStex && r.status !== "success");
     if (reqs.length === 0) return;
-
     const tokensToPoll = [...new Set(reqs.map(r => r.token).filter(Boolean))];
     for (const token of tokensToPoll) {
         try {
             const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
             d.setHours(d.getHours() - 4);
             const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
             const records = await stex.checkInfo(dateStr, token);
             if (Array.isArray(records)) {
                 records.forEach(rec => {
                     let num = rec.number ? String(rec.number).replace("+", "") : null;
                     if (num && pendingRequests[num] && pendingRequests[num].token === token) {
                         let status = String(rec.status || "").toLowerCase();
-                        let msg    = rec.sms || rec.message || rec.otp || rec.text;
+                        let msg = rec.sms || rec.message || rec.otp || rec.text;
                         if ((status === "success" || status === "completed" || msg) && msg) {
                             msg = String(msg);
                             if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
@@ -3584,22 +2632,18 @@ setInterval(async () => {
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isMk && r.status !== "success");
     if (reqs.length === 0) return;
-
     const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
     for (const cookie of cookiesToPoll) {
         try {
-            const d       = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
+            const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
             const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
             const records = await mk.checkInfo(dateStr, cookie);
-
             if (Array.isArray(records)) {
                 records.forEach(rec => {
-                    let rawNum      = String(rec.phone_number || rec.number || "");
+                    let rawNum = String(rec.phone_number || rec.number || "");
                     let cleanRecNum = rawNum.replace(/\D/g, "");
                     if (cleanRecNum) {
-                        let pendingKey = Object.keys(pendingRequests).find(
-                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie
-                        );
+                        let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isMk && pendingRequests[k].cookie === cookie);
                         if (pendingKey) {
                             let msg = rec.full_sms_list || rec.sms || rec.otps || rec.message || rec.text;
                             if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
@@ -3616,20 +2660,16 @@ setInterval(async () => {
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isZenex && r.status !== "success");
     if (reqs.length === 0) return;
-
     const cookiesToPoll = [...new Set(reqs.map(r => r.cookie).filter(Boolean))];
     for (const cookie of cookiesToPoll) {
         try {
             const records = await zenex.checkInfo(cookie);
-
             if (Array.isArray(records)) {
                 records.forEach(rec => {
-                    let rawNum      = String(rec.number || "");
+                    let rawNum = String(rec.number || "");
                     let cleanRecNum = rawNum.replace(/\D/g, "");
                     if (cleanRecNum) {
-                        let pendingKey = Object.keys(pendingRequests).find(
-                            k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === cookie
-                        );
+                        let pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isZenex && pendingRequests[k].cookie === cookie);
                         if (pendingKey) {
                             let msg = rec.sms;
                             if (msg && typeof msg === "string" && !msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
@@ -3646,45 +2686,29 @@ setInterval(async () => {
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isNxa && r.status !== "success");
     if (reqs.length === 0) return;
-
     const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Dhaka" }));
     d.setHours(d.getHours() - 6); 
     const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
     const authKeys = [...new Set(reqs.map(r => `${r.token}|${r.cookie}`))];
     for (const authStr of authKeys) {
         const [token, cookie] = authStr.split("|");
         try {
             const response = await nxa.checkInfo(token, cookie, dateStr);
-            
             const records = Array.isArray(response) ? response : (response?.data || []);
-
             if (Array.isArray(records)) {
                 records.forEach(rec => {
                     if (rec.allocated_at && !rec.allocated_at.startsWith(dateStr)) return;
-
-                    let pendingKey = Object.keys(pendingRequests).find(k => 
-                        pendingRequests[k].isNxa && 
-                        pendingRequests[k].token === token &&
-                        pendingRequests[k].internal_id === rec.internal_id
-                    );
-
+                    let pendingKey = Object.keys(pendingRequests).find(k => pendingRequests[k].isNxa && pendingRequests[k].token === token && pendingRequests[k].internal_id === rec.internal_id);
                     if (!pendingKey) {
                         let rawNum = String(rec.number || "");
                         let cleanRecNum = rawNum.replace(/\D/g, "");
                         if (cleanRecNum) {
-                            pendingKey = Object.keys(pendingRequests).find(k => 
-                                k.replace(/\D/g, "") === cleanRecNum && 
-                                pendingRequests[k].isNxa && 
-                                pendingRequests[k].token === token
-                            );
+                            pendingKey = Object.keys(pendingRequests).find(k => k.replace(/\D/g, "") === cleanRecNum && pendingRequests[k].isNxa && pendingRequests[k].token === token);
                         }
                     }
-
                     if (pendingKey) {
                         let status = String(rec.status || "").toLowerCase();
                         let msg = rec.message || rec.otp;
-
                         if (status === "success" && msg && typeof msg === "string") {
                             if (!msg.toLowerCase().includes("waiting") && !msg.toLowerCase().includes("pending")) {
                                 processFoundOTP(pendingKey, Date.now(), msg, pendingRequests[pendingKey].country);
@@ -3702,72 +2726,37 @@ setInterval(async () => {
     try {
         const apiKey = db.zenexCookies || db.zenexCreds?.password;
         const ranges = await zenex.getLiveTraffic(apiKey);
-        console.log("RANGES:", ranges.length);
-console.log("LIVE LOGS:", liveLogs.length);
         const liveLogs = await zenex.getLiveConsole(apiKey);
-        if (!Array.isArray(liveLogs) || liveLogs.length === 0) {
-    return;
-}
-        console.log("LIVE LOGS:", liveLogs.length);
-        const liveLog = liveLogs && liveLogs.length
-    ? liveLogs[Math.floor(Math.random() * Math.min(liveLogs.length, 10))]
-    : null;
-        if (!ranges || ranges.length === 0) {
-    console.log("NO RANGES FOUND");
-    return;
-}
-        if (ranges && ranges.length > 0) {
-            const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
-            
-            // Get Country Info
-            let cleanRange = String(randomRoute.range || "").replace(/X/g, "0");
-            let info = getCountryInfo(detectCountryFromRange(cleanRange));
+        if (!Array.isArray(liveLogs) || liveLogs.length === 0) return;
+        
+        const liveLog = liveLogs && liveLogs.length ? liveLogs[Math.floor(Math.random() * Math.min(liveLogs.length, 10))] : null;
+        if (!ranges || ranges.length === 0) return;
+        
+        const randomRoute = ranges[Math.floor(Math.random() * Math.min(ranges.length, 10))];
+        let cleanRange = String(randomRoute.range || "").replace(/X/g, "0");
+        let info = getCountryInfo(detectCountryFromRange(cleanRange));
+        let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
+        let numStr = String(fakeNum);
+        let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+        let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
+        let msgText = liveLog?.otp || "New verification message received";
+        const otpMatch = msgText.match(/\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/);
+        let fakeOtp = otpMatch ? otpMatch[0].replace(/\D/g, "") : "000000";
+        
+        let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
+        let groupMarkup = { inline_keyboard: [] };
+        let groupButtonRow = [];
+        if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
+        groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } });
+        if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
 
-            // Generate and Mask Number
-            let fakeNum = randomRoute.range.replace(/X/gi, () => Math.floor(Math.random() * 10));
-            let numStr = String(fakeNum);
-            let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
+        bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { reply_markup: groupMarkup }).catch(() => {});
 
-            let platName = randomRoute.service
-    ? randomRoute.service.toUpperCase()
-    : "UNKNOWN";
-
-let msgText = liveLog?.otp || "New verification message received";
-
-const otpMatch = msgText.match(
-    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
-);
-
-let fakeOtp = otpMatch
-    ? otpMatch[0].replace(/\D/g, "")
-    : "000000";
-            // Format SMS
-            let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
-            
-            // Add Buttons
-            let groupMarkup = { inline_keyboard: [] };
-            let groupButtonRow = [];
-            if (botInfo?.username) groupButtonRow.push({ text: "📞 Get Number", url: `https://t.me/${botInfo.username}` });
-            groupButtonRow.push({ text: `COPY OTP`, copy_text: { text: String(fakeOtp) } });
-            
-            if (groupButtonRow.length > 0) groupMarkup.inline_keyboard.push(groupButtonRow);
-
-            bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { 
-                reply_markup: groupMarkup 
-            }).catch(() => {});
-
-           ConsoleLog.create({
-    number: numStr,
-   platform: liveLog?.service || platName,
-country: (liveLog?.country || info.cleanName).toUpperCase(),
-    range: randomRoute?.range || "",
-    carrier: "Zenex",
-                fullMessage: msgText,
-                otp: String(fakeOtp),
-                status: "success",
-                receivedAt: Date.now()
-            }).catch(()=>{});
-        }
+        ConsoleLog.create({
+            number: numStr, platform: liveLog?.service || platName, country: (liveLog?.country || info.cleanName).toUpperCase(),
+            range: randomRoute?.range || "", carrier: "Zenex", fullMessage: msgText, otp: String(fakeOtp),
+            status: "success", receivedAt: Date.now()
+        }).catch(()=>{});
     } catch (e) {}
 }, 12000);
 
@@ -3787,12 +2776,9 @@ setInterval(() => {
             changed = true;
         }
     }
-    if (changed) {
-        syncPending();
-    }
+    if (changed) syncPending();
 }, 60 * 1000);
 
-// Clean up old OTP records to prevent memory bloat
 setInterval(() => {
     const now = Date.now();
     for (const key in lastProcessedOTPTime) {
@@ -3800,4 +2786,6 @@ setInterval(() => {
             delete lastProcessedOTPTime[key];
         }
     }
-}, 60 * 60 * 1000); // Runs every 1 hour
+}, 60 * 60 * 1000);
+
+
