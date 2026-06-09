@@ -38,7 +38,15 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
 },
+    totalEarned: {
+        type: Number,
+        default: 0
+    },
 
+    totalWithdrawn: {
+        type: Number,
+        default: 0
+    },
 walletPin: {
     type: String,
     default: null
@@ -3423,6 +3431,31 @@ mongoose.connect(MONGODB_URI).then(async () => {
     } else {
         await BotDB.create(db);
     }
+      await User.updateMany(
+        {
+            totalEarned: { $exists: false }
+        },
+        {
+            $set: {
+                totalEarned: 0
+            }
+        }
+    );
+
+    await User.updateMany(
+        {
+            totalWithdrawn: { $exists: false }
+        },
+        {
+            $set: {
+                totalWithdrawn: 0
+            }
+        }
+    );
+
+    console.log("User balance fields migrated");
+
+});
 app.post("/api/gemini-test", async (req, res) => {
     try {
 
