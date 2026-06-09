@@ -424,7 +424,113 @@ app.get("/api/panels", (req, res) => {
     ]);
 
 });
+app.post("/api/wallet/set-pin", async (req, res) => {
 
+    try {
+
+        const { firebaseUid, pin } = req.body;
+
+        if (!firebaseUid || !pin) {
+            return res.status(400).json({
+                success: false,
+                message: "Missing data"
+            });
+        }
+
+        if (!/^\d{4}$/.test(pin)) {
+            return res.status(400).json({
+                success: false,
+                message: "PIN must be 4 digits"
+            });
+        }
+
+        const user = await User.findOne({ firebaseUid });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
+        const hashedPin = await bcrypt.hash(pin, 10);
+
+        user.walletPin = hashedPin;
+        user.walletPinEnabled = true;
+
+        await user.save();
+
+        res.json({
+            success: true,
+            message: "Wallet PIN set successfully"
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            message: e.message
+        });
+
+    }
+
+});
+app.post("/api/wallet/verify-pin", async (req, res) => {
+
+    try {
+
+        const { firebaseUid, pin } = req.body;
+
+        const user = await User.findOne({ firebaseUid });
+
+        if (!user || !user.walletPinEnabled) {
+            return res.status(404).json({
+                success: false,
+                message: "PIN not set"
+            });
+        }
+
+        const valid = await bcrypt.compare(
+            pin,
+            user.walletPin
+        );
+
+        res.json({
+            success: valid
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            message: e.message
+        });
+
+    }
+
+});
+app.get("/api/wallet/pin-status/:firebaseUid", async (req, res) => {
+
+    try {
+
+        const user = await User.findOne({
+            firebaseUid: req.params.firebaseUid
+        });
+
+        res.json({
+            success: true,
+            pinEnabled: !!user?.walletPinEnabled
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false
+        });
+
+    }
+
+});
 app.post(
     "/api/admin/panel/login",
     requireAdmin,
