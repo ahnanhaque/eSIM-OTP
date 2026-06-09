@@ -98,40 +98,58 @@ const History = mongoose.model(
 );
 async function requireAdmin(req, res, next) {
 
-    const firebaseUid =
-        req.body.firebaseUid ||
-        req.params.firebaseUid ||
-        req.query.firebaseUid;
+    try {
 
-    if (!firebaseUid) {
-        return res.status(401).json({
-            success: false,
-            error: "firebaseUid required"
+        const firebaseUid =
+            req.body?.firebaseUid ||
+            req.params?.firebaseUid ||
+            req.query?.firebaseUid;
+
+        console.log("ADMIN UID:", firebaseUid);
+
+        if (!firebaseUid) {
+            return res.status(401).json({
+                success: false,
+                error: "firebaseUid required"
+            });
+        }
+
+        const user = await User.findOne({
+            firebaseUid
         });
+
+        console.log("ADMIN USER:", user);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            });
+        }
+
+        if (
+            user.role !== "admin" &&
+            user.role !== "superadmin"
+        ) {
+            return res.status(403).json({
+                success: false,
+                error: "Admin access required"
+            });
+        }
+
+        next();
+
+    } catch (e) {
+
+        console.error("REQUIRE ADMIN ERROR:", e);
+
+        return res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
     }
 
-    const user = await User.findOne({
-        firebaseUid
-    });
-
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            error: "User not found"
-        });
-    }
-
-    if (
-        user.role !== "admin" &&
-        user.role !== "superadmin"
-    ) {
-        return res.status(403).json({
-            success: false,
-            error: "Admin access required"
-        });
-    }
-
-    next();
 }
 
 async function requireSuperAdmin(req, res, next) {
@@ -554,12 +572,14 @@ app.get(
 
         } catch (e) {
 
-            res.status(500).json({
-                success: false,
-                error: e.message
-            });
+    console.error("USERS API ERROR:", e);
 
-        }
+    res.status(500).json({
+        success: false,
+        error: e.message
+    });
+
+}
 
     }
 );
