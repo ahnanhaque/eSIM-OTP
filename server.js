@@ -536,6 +536,202 @@ app.get("/api/profile/:firebaseUid", async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+app.get(
+    "/api/admin/users",
+    requireAdmin,
+    async (req, res) => {
+
+        try {
+
+            const users = await User.find({})
+                .select(
+                    "firebaseUid fullName email role status country createdAt"
+                )
+                .sort({ createdAt: -1 })
+                .lean();
+
+            res.json(users);
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
+app.get(
+    "/api/admin/user-stats",
+    requireAdmin,
+    async (req, res) => {
+
+        try {
+
+            const total =
+                await User.countDocuments();
+
+            const pending =
+                await User.countDocuments({
+                    status: "pending"
+                });
+
+            const approved =
+                await User.countDocuments({
+                    status: "approved"
+                });
+
+            const suspended =
+                await User.countDocuments({
+                    status: "suspended"
+                });
+
+            const admins =
+                await User.countDocuments({
+                    role: "admin"
+                });
+
+            const superadmins =
+                await User.countDocuments({
+                    role: "superadmin"
+                });
+
+            res.json({
+                total,
+                pending,
+                approved,
+                suspended,
+                admins,
+                superadmins
+            });
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
+app.post(
+    "/api/admin/user/approve",
+    requireAdmin,
+    async (req, res) => {
+
+        try {
+
+            const { targetUid } = req.body;
+
+            const user =
+                await User.findOneAndUpdate(
+                    {
+                        firebaseUid: targetUid
+                    },
+                    {
+                        status: "approved"
+                    },
+                    {
+                        new: true
+                    }
+                );
+
+            res.json({
+                success: true,
+                user
+            });
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
+app.post(
+    "/api/admin/user/suspend",
+    requireAdmin,
+    async (req, res) => {
+
+        try {
+
+            const { targetUid } = req.body;
+
+            const user =
+                await User.findOneAndUpdate(
+                    {
+                        firebaseUid: targetUid
+                    },
+                    {
+                        status: "suspended"
+                    },
+                    {
+                        new: true
+                    }
+                );
+
+            res.json({
+                success: true,
+                user
+            });
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
+app.post(
+    "/api/admin/user/unsuspend",
+    requireAdmin,
+    async (req, res) => {
+
+        try {
+
+            const { targetUid } = req.body;
+
+            const user =
+                await User.findOneAndUpdate(
+                    {
+                        firebaseUid: targetUid
+                    },
+                    {
+                        status: "approved"
+                    },
+                    {
+                        new: true
+                    }
+                );
+
+            res.json({
+                success: true,
+                user
+            });
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
 app.get("/api/history/:firebaseUid", async (req, res) => {
     try {
 
