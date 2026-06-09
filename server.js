@@ -3312,8 +3312,16 @@ ${message}
             reply
         });
 
+
     } catch (e) {
-        ...
+
+        console.error("GEMINI ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
     }
 });
     app.get("/api/gemini-debug", async (req, res) => {
