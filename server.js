@@ -3240,7 +3240,7 @@ function extractOtp(text) {
 
     return null;
 }
-function processFoundOTP(number, time, message, range) {
+async function processFoundOTP(number, time, message, range) {
     // 1. Extract OTP code first
    let otpMatch = message.match(
     /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
