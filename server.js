@@ -5,6 +5,7 @@ const { authenticator } = require("otplib");
 const stex           = require("./stex.js");
 const mk             = require("./mk.js");
 const zenex          = require("./zenex.js");
+const bcrypt = require("bcrypt");
 const nxa            = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -33,11 +34,22 @@ const userSchema = new mongoose.Schema({
     country: String,
     referralEmail: String,
     profilePhotoUrl: String,
-    balance: {
-        type: Number,
-        default: 0
-    },
-    role: {
+   balance: {
+    type: Number,
+    default: 0
+},
+
+walletPin: {
+    type: String,
+    default: null
+},
+
+walletPinEnabled: {
+    type: Boolean,
+    default: false
+},
+
+role: {
         type: String,
         enum: [
         "user",
