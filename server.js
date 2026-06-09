@@ -3465,7 +3465,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
     }
     
 
-});
+
 app.post("/api/gemini-test", async (req, res) => {
     try {
 
