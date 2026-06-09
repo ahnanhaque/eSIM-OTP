@@ -1822,9 +1822,13 @@ bot.on("message", async (msg) => {
 
                             const fullText  = `${latest.subject} ${latest.body || ""} ${latest.html || ""}`;
                             const plainText = fullText.replace(/<[^>]+>/g, " ");
-                            let otpMatch    = plainText.match(/\b\d{4,8}\b/);
+                            let otpMatch = plainText.match(
+    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
+);
                             if (!otpMatch)  otpMatch = plainText.match(/\b[A-Z0-9]{5,10}\b/i);
-                            const otp       = otpMatch ? otpMatch[0] : null;
+                           const otp = otpMatch
+    ? otpMatch[0].replace(/\D/g, "")
+    : null;
                             const linkMatch = fullText.match(/https?:\/\/[^\s"'<>\\]+/);
                             const link      = linkMatch ? linkMatch[0] : null;
                             const platformName = detectPlatform(latest.from, latest.subject, plainText);
@@ -3090,8 +3094,13 @@ bot.on("callback_query", async (query) => {
 
 function processFoundOTP(number, time, message, range) {
     // 1. Extract OTP code first
-    let otpMatch = message.match(/\b\d{5,8}\b/);
-    let otpCode  = otpMatch ? otpMatch[0] : null;
+   let otpMatch = message.match(
+    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{5,8}\b/
+);
+
+let otpCode = otpMatch
+    ? otpMatch[0].replace(/\D/g, "")
+    : null;
 
     // 2. OTP-based deduplication
     // Fallback to the full message if no explicit OTP code is found to prevent spamming
@@ -3540,8 +3549,13 @@ console.log("LIVE LOGS:", liveLogs.length);
             let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
            let msgText = liveLog?.otp || "New verification message received";
 
-const otpMatch = msgText.match(/\b\d{4,8}\b/);
-let fakeOtp = otpMatch ? otpMatch[0] : "000000";
+const otpMatch = msgText.match(
+    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
+);
+
+let fakeOtp = otpMatch
+    ? otpMatch[0].replace(/\D/g, "")
+    : "000000";
             // Format SMS
             let groupReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${info.flag} ${info.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: ${maskedGroupNumber}\n✉️ Full SMS:\n> ${msgText}`;
             
