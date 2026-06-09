@@ -32,6 +32,11 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
+        enum: [
+        "user",
+        "admin",
+        "superadmin"
+    ],
         default: "user"
     },
     status: {
@@ -730,6 +735,126 @@ app.post(
                     },
                     {
                         status: "approved"
+                    },
+                    {
+                        new: true
+                    }
+                );
+
+            res.json({
+                success: true,
+                user
+            });
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
+app.post(
+    "/api/admin/user/unsuspend",
+    requireAdmin,
+    async (req, res) => {
+
+       ...
+    }
+);
+
+// 👇 এইখানে paste করবে
+
+app.post(
+    "/api/admin/user/change-role",
+    requireSuperAdmin,
+    async (req, res) => {
+
+        try {
+
+            const { targetUid, role } = req.body;
+
+            const targetUser =
+                await User.findOne({
+                    firebaseUid: targetUid
+                });
+
+            if (
+                targetUser &&
+                targetUser.role === "superadmin"
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    error: "Cannot modify superadmin"
+                });
+            }
+
+            if (
+                !["user", "admin"].includes(role)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid role"
+                });
+            }
+
+            const user =
+                await User.findOneAndUpdate(
+                    {
+                        firebaseUid: targetUid
+                    },
+                    {
+                        role
+                    },
+                    {
+                        new: true
+                    }
+                );
+
+            res.json({
+                success: true,
+                user
+            });
+
+        } catch (e) {
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+
+    }
+);
+app.post(
+    "/api/admin/user/change-role",
+    requireSuperAdmin,
+    async (req, res) => {
+
+        try {
+
+            const { targetUid, role } = req.body;
+
+            if (
+                !["user", "admin"].includes(role)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Invalid role"
+                });
+            }
+
+            const user =
+                await User.findOneAndUpdate(
+                    {
+                        firebaseUid: targetUid
+                    },
+                    {
+                        role
                     },
                     {
                         new: true
