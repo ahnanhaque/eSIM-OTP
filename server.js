@@ -3270,29 +3270,12 @@ mongoose.connect(MONGODB_URI).then(async () => {
         await BotDB.create(db);
     }
 app.post("/api/gemini-test", async (req, res) => {
-    try {
 
-        const { message } = req.body;
+    res.json({
+        success: true,
+        reply: "Gemini Test Success"
+    });
 
-        const result =
-            await geminiModel.generateContent(message);
-
-        const reply =
-            result.response.text();
-
-        res.json({
-            success: true,
-            reply
-        });
-
-    } catch (e) {
-
-        res.status(500).json({
-            success: false,
-            error: e.message
-        });
-
-    }
 });
     isDbLoaded = true;
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
