@@ -1,6 +1,6 @@
 {
   "version": "3.0.2",
-  "forceUpdate": false,
+  "forceUpdate": true,
   "title": "New Update Available",
   "message": "A new ERA",
   "apk_url": "https://github.com/ahnanhaque/eSIM-NETWORK/releases/download/eWORLD/app.apk"
