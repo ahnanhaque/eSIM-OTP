@@ -3274,8 +3274,36 @@ app.post("/api/gemini-test", async (req, res) => {
 
         const { message } = req.body;
 
+        const prompt = `
+You are the official eSIM Network Support Assistant.
+
+Rules:
+
+1. Only answer questions related to:
+- eSIM Network app
+- OTP orders
+- Number purchase
+- Wallet
+- Deposits
+- Withdrawals
+- User accounts
+- Notifications
+- Console
+- Profile
+- Admin features
+- Supported OTP providers
+- App usage
+
+2. If the user asks anything unrelated to eSIM Network, reply exactly:
+
+Sorry, I can only assist with eSIM Network related questions.
+
+User message:
+${message}
+`;
+
         const result =
-            await geminiModel.generateContent(message);
+            await geminiModel.generateContent(prompt);
 
         const reply =
             result.response.text();
@@ -3286,15 +3314,7 @@ app.post("/api/gemini-test", async (req, res) => {
         });
 
     } catch (e) {
-
-        console.error("GEMINI ERROR:", e);
-
-        res.status(500).json({
-            success: false,
-            error: e.message,
-            stack: e.stack
-        });
-
+        ...
     }
 });
     app.get("/api/gemini-debug", async (req, res) => {
