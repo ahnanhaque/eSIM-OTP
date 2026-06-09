@@ -651,7 +651,20 @@ app.post(
         try {
 
             const { targetUid } = req.body;
+const targetUser =
+    await User.findOne({
+        firebaseUid: targetUid
+    });
 
+if (
+    targetUser &&
+    targetUser.role === "superadmin"
+) {
+    return res.status(403).json({
+        success: false,
+        error: "Cannot modify superadmin"
+    });
+}
             const user =
                 await User.findOneAndUpdate(
                     {
@@ -689,6 +702,21 @@ app.post(
         try {
 
             const { targetUid } = req.body;
+
+            const targetUser =
+                await User.findOne({
+                    firebaseUid: targetUid
+                });
+
+            if (
+                targetUser &&
+                targetUser.role === "superadmin"
+            ) {
+                return res.status(403).json({
+                    success: false,
+                    error: "Cannot suspend superadmin"
+                });
+            }
 
             const user =
                 await User.findOneAndUpdate(
