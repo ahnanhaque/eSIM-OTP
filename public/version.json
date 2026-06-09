@@ -1,6 +1,6 @@
 {
   "version": "3.0.2",
-  "forceUpdate": true,
+  "forceUpdate": false,
   "title": "New Update Available",
   "message": "Bug fixes and improvements",
   "apkUrl": "https://github.com/ahnanhaque/eSIM-NETWORK/releases/download/eWORLD/app.apk"
