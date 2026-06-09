@@ -1253,6 +1253,10 @@ app.delete(
     requireAdmin,
     async (req, res) => {
     try {
+
+        console.log("DELETE REQUEST");
+console.log("UID:", req.query.firebaseUid);
+console.log("ID:", req.params.id);
         const { id } = req.params;
 
         const deleted = await Broadcast.findByIdAndDelete(id);
