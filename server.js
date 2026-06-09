@@ -294,12 +294,18 @@ setInterval(async () => {
 
             if (exists)
                 continue;
+const fullNumber = String(log.number);
+
+const range =
+    fullNumber.length >= 6
+        ? fullNumber.substring(0, 6) + "XXX"
+        : fullNumber;
 
             await ConsoleLog.create({
                 number: "+" + String(log.number),
                 platform: log.service,
                 country: String(log.country || "").toUpperCase(),
-                range: "",
+                range: range,
                 carrier: log.operator,
                 otp: "",
                 fullMessage: log.otp,
