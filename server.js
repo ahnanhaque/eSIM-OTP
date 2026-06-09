@@ -302,7 +302,7 @@ const range =
         : fullNumber;
 
             await ConsoleLog.create({
-                number: "+" + String(log.number),
+           number: "+" + fullNumber,
                 platform: log.service,
                 country: String(log.country || "").toUpperCase(),
                 range: range,
