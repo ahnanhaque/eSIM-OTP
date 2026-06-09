@@ -935,7 +935,13 @@ if (user.status === "pending") {
         error: "Account awaiting approval"
     });
 }
-
+if (user.status === "suspended") {
+    return res.status(403).json({
+        success: false,
+        status: "suspended",
+        error: "Account suspended"
+    });
+}
 if (user.status === "suspended") {
     return res.status(403).json({
         success: false,
