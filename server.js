@@ -3091,11 +3091,32 @@ bot.on("callback_query", async (query) => {
         }
     }
 });
+function extractOtp(text) {
 
+    if (!text) return null;
+
+    const patterns = [
+        /\b\d{3}\s\d{3}\b/,
+        /\b\d{3}-\d{3}\b/,
+        /\b\d{4,8}\b/,
+        /\b[A-Z0-9]{5,10}\b/i
+    ];
+
+    for (const pattern of patterns) {
+
+        const match = text.match(pattern);
+
+        if (match) {
+            return match[0].replace(/\D/g, "");
+        }
+    }
+
+    return null;
+}
 function processFoundOTP(number, time, message, range) {
     // 1. Extract OTP code first
    let otpMatch = message.match(
-    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{5,8}\b/
+    /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
 );
 
 let otpCode = otpMatch
@@ -3546,8 +3567,11 @@ console.log("LIVE LOGS:", liveLogs.length);
             let numStr = String(fakeNum);
             let maskedGroupNumber = (numStr.length < 7) ? numStr : `${numStr.slice(0, 4)}XXXX${numStr.slice(-3)}`;
 
-            let platName = randomRoute.service ? randomRoute.service.toUpperCase() : "UNKNOWN";
-           let msgText = liveLog?.otp || "New verification message received";
+            let platName = randomRoute.service
+    ? randomRoute.service.toUpperCase()
+    : "UNKNOWN";
+
+let msgText = liveLog?.otp || "New verification message received";
 
 const otpMatch = msgText.match(
     /\b\d{3}\s\d{3}\b|\b\d{3}-\d{3}\b|\b\d{4,8}\b/
