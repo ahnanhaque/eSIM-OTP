@@ -95,6 +95,11 @@ paymentMethodsLocked: {
 const User = mongoose.model("User", userSchema);
 
 const consoleLogSchema = new mongoose.Schema({
+    receivedAt: {
+    type: Date,
+    default: Date.now,
+    index: true
+}
     number: String,
     platform: String,
     country: String,
@@ -2972,7 +2977,12 @@ app.get("/api/console", async (req, res) => {
             const regex = new RegExp(query, "i");
             filter = { $or: [{ number: regex }, { platform: regex }, { country: regex }] };
         }
-        const logs = await ConsoleLog.find(filter).sort({ receivedAt: -1 })
+    const logs = await ConsoleLog.find(filter)
+    .sort({ receivedAt: -1 })
+    .limit(1000)
+        .skip(page * 1000)
+    .select("number range platform country carrier otp fullMessage status receivedAt -_id")
+    .lean();
             .select("number range platform country carrier otp fullMessage status receivedAt -_id").lean();
         res.json(logs);
     } catch (error) {
