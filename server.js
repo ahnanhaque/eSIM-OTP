@@ -99,6 +99,53 @@ const historySchema = new mongoose.Schema({
     status: { type: String, default: "pending" },
     createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 }
 });
+const withdrawalSchema = new mongoose.Schema({
+    firebaseUid: {
+        type: String,
+        required: true
+    },
+
+    amount: {
+        type: Number,
+        required: true
+    },
+
+    method: {
+        type: String,
+        enum: ["bkash", "nagad", "rocket"],
+        required: true
+    },
+
+    accountNumber: {
+        type: String,
+        required: true
+    },
+
+    status: {
+        type: String,
+        enum: ["pending", "approved", "rejected"],
+        default: "pending"
+    },
+
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+
+    approvedAt: {
+        type: Date,
+        default: null
+    },
+
+    approvedBy: {
+        type: String,
+        default: null
+    }
+});
+const Withdrawal = mongoose.model(
+    "Withdrawal",
+    withdrawalSchema
+);
 const History = mongoose.model("History", historySchema);
 
 const broadcastSchema = new mongoose.Schema({
