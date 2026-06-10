@@ -2442,6 +2442,7 @@ app.get(
     "/api/admin/withdrawals",
     requireSuperAdmin,
     async (req, res) => {
+        console.log("ADMIN UID:", req.query.firebaseUid);
     try {
 
         const withdrawals = await Withdrawal.find()
