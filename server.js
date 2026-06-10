@@ -2623,6 +2623,85 @@ app.post(
 
     }
 });
+app.post(
+  "/api/admin/wallet/withdrawal/action",
+  requireSuperAdmin,
+  async (req,res)=>{
+      try {
+
+          const { withdrawalId, action } = req.body;
+
+          const withdrawal =
+              await Withdrawal.findById(withdrawalId);
+
+          if(!withdrawal){
+              return res.status(404).json({
+                  success:false,
+                  error:"Withdrawal not found"
+              });
+          }
+
+          if(withdrawal.status !== "pending"){
+              return res.status(400).json({
+                  success:false,
+                  error:"Already processed"
+              });
+          }
+
+          if(action === "approve"){
+
+              withdrawal.status = "approved";
+              withdrawal.approvedAt = new Date();
+
+              await withdrawal.save();
+
+              const user = await User.findOne({
+                  firebaseUid: withdrawal.firebaseUid
+              });
+
+              if(user){
+                  user.totalWithdrawn =
+                      (user.totalWithdrawn || 0) +
+                      withdrawal.amount;
+
+                  await user.save();
+              }
+
+          } else {
+
+              const user = await User.findOne({
+                  firebaseUid: withdrawal.firebaseUid
+              });
+
+              if(user){
+                  user.balance =
+                      (user.balance || 0) +
+                      withdrawal.amount;
+
+                  await user.save();
+              }
+
+              withdrawal.status = "rejected";
+              withdrawal.approvedAt = new Date();
+
+              await withdrawal.save();
+          }
+
+          res.json({
+              success:true,
+              withdrawal
+          });
+
+      } catch(e){
+
+          res.status(500).json({
+              success:false,
+              error:e.message
+          });
+
+      }
+  }
+);
 app.post("/api/admin/panel/login", requireAdmin, async (req, res) => {
     try {
         const { panel, email, password } = req.body;
