@@ -462,20 +462,24 @@ async function processFoundOTP(number, time, message, range) {
             let userMarkup = { inline_keyboard: [] };
             if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
             bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(() => {});
-            addBalance(reqData.chatId, 0.50);
-            
-            try {
-                if (reqData.firebaseUid) {
-                    const user = await User.findOne({ firebaseUid: reqData.firebaseUid });
-                    if (user) {
-                        user.balance = Number(user.balance || 0) + 0.50;
-                        user.totalEarned = Number(user.totalEarned || 0) + 0.50;
-                        await user.save();
-                    }
-                }
-            } catch (e) {
-                console.log("APP REWARD ERROR:", e.message);
-            }
+               addBalance(reqData.chatId, 0.50);
+}
+
+try {
+    if (reqData.firebaseUid) {
+        const user = await User.findOne({
+            firebaseUid: reqData.firebaseUid
+        });
+
+        if (user) {
+            user.balance = Number(user.balance || 0) + 0.50;
+            user.totalEarned = Number(user.totalEarned || 0) + 0.50;
+            await user.save();
+        }
+    }
+} catch (e) {
+    console.log("APP REWARD ERROR:", e.message);
+}
         }
     }
     
