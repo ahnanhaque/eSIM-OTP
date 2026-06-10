@@ -2191,6 +2191,32 @@ app.post("/api/wallet/withdraw", async (req, res) => {
 
     }
 });
+app.get("/api/wallet/withdraw-history/:firebaseUid", async (req, res) => {
+    try {
+
+        const { firebaseUid } = req.params;
+
+        const history = await Withdrawal.find({
+            firebaseUid
+        })
+        .sort({ createdAt: -1 });
+
+        res.json({
+            success: true,
+            history
+        });
+
+    } catch (e) {
+
+        console.error("WITHDRAW HISTORY ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.post("/api/admin/panel/login", requireAdmin, async (req, res) => {
     try {
         const { panel, email, password } = req.body;
