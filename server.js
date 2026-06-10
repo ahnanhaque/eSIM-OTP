@@ -2349,6 +2349,53 @@ app.get("/api/wallet/dashboard/:firebaseUid", async (req, res) => {
 
     }
 });
+app.post(
+    "/api/admin/unlock-payment-methods",
+    requireSuperAdmin,
+    async (req, res) => {
+        try {
+
+            const { targetFirebaseUid } = req.body;
+
+            if (!targetFirebaseUid) {
+                return res.status(400).json({
+                    success: false,
+                    error: "targetFirebaseUid required"
+                });
+            }
+
+            const user = await User.findOne({
+                firebaseUid: targetFirebaseUid
+            });
+
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    error: "User not found"
+                });
+            }
+
+            user.paymentMethodsLocked = false;
+
+            await user.save();
+
+            res.json({
+                success: true,
+                message: "Payment methods unlocked"
+            });
+
+        } catch (e) {
+
+            console.error("UNLOCK PAYMENT METHODS ERROR:", e);
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+    }
+);
 app.get("/api/wallet/withdraw-history/:firebaseUid", async (req, res) => {
     try {
 
