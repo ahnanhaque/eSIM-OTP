@@ -376,14 +376,40 @@ async function requireAdmin(req, res, next) {
 }
 
 async function requireSuperAdmin(req, res, next) {
-    const firebaseUid = req.body.firebaseUid || req.params.firebaseUid || req.query.firebaseUid;
-    const user = await User.findOne({ firebaseUid });
-    if (!user || user.role !== "superadmin") {
-        return res.status(403).json({ success: false, error: "Superadmin access required" });
-    }
-    next();
-}
+    try {
 
+        const firebaseUid =
+            req.body?.firebaseUid ||
+            req.params?.firebaseUid ||
+            req.query?.firebaseUid;
+
+        if (!firebaseUid) {
+            return res.status(401).json({
+                success: false,
+                error: "firebaseUid required"
+            });
+        }
+
+        const user = await User.findOne({ firebaseUid });
+
+        if (!user || user.role !== "superadmin") {
+            return res.status(403).json({
+                success: false,
+                error: "Superadmin access required"
+            });
+        }
+
+        next();
+
+    } catch (e) {
+
+        return res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+}
 /* ==========================================================
 OTP FUNCTIONS
 ========================================================== */
