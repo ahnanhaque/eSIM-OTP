@@ -2212,6 +2212,7 @@ app.post("/api/wallet/withdraw", async (req, res) => {
 });
 app.post("/api/wallet/save-payment-method", async (req, res) => {
     try {
+ console.log("SAVE PAYMENT METHOD BODY:", req.body);
 
         const {
             firebaseUid,
