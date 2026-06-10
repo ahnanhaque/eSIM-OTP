@@ -69,6 +69,25 @@ const userSchema = new mongoose.Schema({
     totalWithdrawn: { type: Number, default: 0 },
     walletPin: { type: String, default: null },
     walletPinEnabled: { type: Boolean, default: false },
+    bkashNumber: {
+    type: String,
+    default: ""
+},
+
+nagadNumber: {
+    type: String,
+    default: ""
+},
+
+rocketNumber: {
+    type: String,
+    default: ""
+},
+
+paymentMethodsLocked: {
+    type: Boolean,
+    default: false
+},
     role: { type: String, enum: ["user", "admin", "superadmin"], default: "user" },
     status: { type: String, default: "pending" },
     createdAt: { type: Date, default: Date.now }
@@ -2191,6 +2210,145 @@ app.post("/api/wallet/withdraw", async (req, res) => {
 
     }
 });
+app.post("/api/wallet/save-payment-method", async (req, res) => {
+    try {
+
+        const {
+            firebaseUid,
+            bkashNumber,
+            nagadNumber,
+            rocketNumber
+        } = req.body;
+
+        const user = await User.findOne({
+            firebaseUid
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            });
+        }
+
+        if (user.paymentMethodsLocked) {
+            return res.status(400).json({
+                success: false,
+                error: "Payment methods already locked"
+            });
+        }
+
+        user.bkashNumber = bkashNumber || "";
+        user.nagadNumber = nagadNumber || "";
+        user.rocketNumber = rocketNumber || "";
+
+        user.paymentMethodsLocked = true;
+
+        await user.save();
+
+        res.json({
+            success: true,
+            message: "Payment methods saved and locked"
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
+app.get("/api/wallet/payment-methods/:firebaseUid", async (req, res) => {
+    try {
+
+        const user = await User.findOne({
+            firebaseUid: req.params.firebaseUid
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false
+            });
+        }
+
+        res.json({
+            success: true,
+
+            bkashNumber: user.bkashNumber,
+
+            nagadNumber: user.nagadNumber,
+
+            rocketNumber: user.rocketNumber,
+
+            paymentMethodsLocked:
+                user.paymentMethodsLocked
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
+app.get("/api/wallet/dashboard/:firebaseUid", async (req, res) => {
+    try {
+
+        const { firebaseUid } = req.params;
+
+        const user = await User.findOne({
+            firebaseUid
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            });
+        }
+
+        const pendingWithdrawals =
+            await Withdrawal.countDocuments({
+                firebaseUid,
+                status: "pending"
+            });
+
+        res.json({
+            success: true,
+
+            balance: user.balance || 0,
+
+            totalEarned: user.totalEarned || 0,
+
+            totalWithdrawn: user.totalWithdrawn || 0,
+
+            pendingWithdrawals,
+
+            bkashNumber: user.bkashNumber || "",
+
+            nagadNumber: user.nagadNumber || "",
+
+            rocketNumber: user.rocketNumber || "",
+
+            paymentMethodsLocked:
+                user.paymentMethodsLocked || false
+        });
+
+    } catch (e) {
+
+        console.error("WALLET DASHBOARD ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/wallet/withdraw-history/:firebaseUid", async (req, res) => {
     try {
 
@@ -2209,6 +2367,192 @@ app.get("/api/wallet/withdraw-history/:firebaseUid", async (req, res) => {
     } catch (e) {
 
         console.error("WITHDRAW HISTORY ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
+app.get(
+    "/api/admin/withdrawals",
+    requireSuperAdmin,
+    async (req, res) => {
+    try {
+
+        const withdrawals = await Withdrawal.find()
+            .sort({ createdAt: -1 });
+
+        const formatted = await Promise.all(
+            withdrawals.map(async (withdrawal) => {
+
+                const user = await User.findOne({
+                    firebaseUid: withdrawal.firebaseUid
+                });
+
+                return {
+                    _id: withdrawal._id,
+
+                    firebaseUid: withdrawal.firebaseUid,
+
+                    fullName: user?.fullName || "Unknown User",
+
+                    email: user?.email || "",
+
+                    amount: withdrawal.amount,
+
+                    method: withdrawal.method,
+
+                    accountNumber: withdrawal.accountNumber,
+
+                    status: withdrawal.status,
+
+                    createdAt: withdrawal.createdAt,
+
+                    approvedAt: withdrawal.approvedAt
+                };
+            })
+        );
+
+        res.json({
+            success: true,
+            withdrawals: formatted
+        });
+
+    } catch (e) {
+
+        console.error("ADMIN WITHDRAWALS ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
+app.post(
+    "/api/admin/withdraw/approve",
+    requireSuperAdmin,
+    async (req, res) => {
+    try {
+
+        const { withdrawalId, adminId } = req.body;
+
+        if (!withdrawalId) {
+            return res.status(400).json({
+                success: false,
+                error: "Withdrawal ID required"
+            });
+        }
+
+        const withdrawal = await Withdrawal.findById(withdrawalId);
+
+        if (!withdrawal) {
+            return res.status(404).json({
+                success: false,
+                error: "Withdrawal not found"
+            });
+        }
+
+        if (withdrawal.status !== "pending") {
+            return res.status(400).json({
+                success: false,
+                error: "Withdrawal already processed"
+            });
+        }
+
+        withdrawal.status = "approved";
+        withdrawal.approvedAt = new Date();
+        withdrawal.approvedBy = adminId || "superadmin";
+
+        await withdrawal.save();
+
+        const user = await User.findOne({
+            firebaseUid: withdrawal.firebaseUid
+        });
+
+        if (user) {
+            user.totalWithdrawn =
+                (user.totalWithdrawn || 0) + withdrawal.amount;
+
+            await user.save();
+        }
+
+        res.json({
+            success: true,
+            message: "Withdrawal approved"
+        });
+
+    } catch (e) {
+
+        console.error("WITHDRAW APPROVE ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
+app.post(
+    "/api/admin/withdraw/reject",
+    requireSuperAdmin,
+    async (req, res) => {
+    try {
+
+        const { withdrawalId, adminId } = req.body;
+
+        if (!withdrawalId) {
+            return res.status(400).json({
+                success: false,
+                error: "Withdrawal ID required"
+            });
+        }
+
+        const withdrawal = await Withdrawal.findById(withdrawalId);
+
+        if (!withdrawal) {
+            return res.status(404).json({
+                success: false,
+                error: "Withdrawal not found"
+            });
+        }
+
+        if (withdrawal.status !== "pending") {
+            return res.status(400).json({
+                success: false,
+                error: "Withdrawal already processed"
+            });
+        }
+
+        const user = await User.findOne({
+            firebaseUid: withdrawal.firebaseUid
+        });
+
+        if (user) {
+
+            // Return balance back
+            user.balance =
+                (user.balance || 0) + withdrawal.amount;
+
+            await user.save();
+        }
+
+        withdrawal.status = "rejected";
+        withdrawal.approvedAt = new Date();
+        withdrawal.approvedBy = adminId || "superadmin";
+
+        await withdrawal.save();
+
+        res.json({
+            success: true,
+            message: "Withdrawal rejected and balance restored"
+        });
+
+    } catch (e) {
+
+        console.error("WITHDRAW REJECT ERROR:", e);
 
         res.status(500).json({
             success: false,
