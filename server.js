@@ -2825,9 +2825,9 @@ app.get("/api/profile/:firebaseUid", async (req, res) => {
     try {
         const firebaseUid = req.params.firebaseUid;
         const user = await User.findOne({ firebaseUid });
-        console.log(
-    "WITHDRAW USER LOOKUP:",
-    withdrawal.firebaseUid,
+   console.log(
+    "PROFILE LOOKUP:",
+    firebaseUid,
     user?.fullName,
     user?.email
 );
