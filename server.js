@@ -128,7 +128,15 @@ const withdrawalSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+fullName: {
+    type: String,
+    default: ""
+},
 
+email: {
+    type: String,
+    default: ""
+},
     amount: {
         type: Number,
         required: true
@@ -2230,12 +2238,14 @@ app.post("/api/wallet/withdraw", async (req, res) => {
 console.log("WITHDRAW ROUTE HIT");
 console.log("BODY:", req.body);
         const withdrawal = await Withdrawal.create({
-            firebaseUid,
-            amount: Number(amount),
-            method,
-            accountNumber,
-            status: "pending"
-        });
+    firebaseUid,
+    fullName: user.fullName || "",
+    email: user.email || "",
+    amount: Number(amount),
+    method,
+    accountNumber,
+    status: "pending"
+});
 
         res.json({
             success: true,
@@ -3260,23 +3270,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
     } else {
         await BotDB.create(db);
     }
-    app.get("/test-withdraw", async (req, res) => {
-    try {
-        const withdrawal = await Withdrawal.create({
-            firebaseUid: "SLToNevvhU0wpuWlt0Azzno8Bwx2",
-            amount: 100,
-            method: "bkash",
-            accountNumber: "01778200960",
-            status: "pending"
-        });
-
-        res.json(withdrawal);
-    } catch (e) {
-        res.json({
-            error: e.message
-        });
-    }
-});
+    
     isDbLoaded = true;
     
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
