@@ -449,39 +449,58 @@ async function processFoundOTP(number, time, message, range) {
     
     bot.sendMessage(GROUP_CHAT_ID, groupReplyText, { parse_mode: "Markdown", reply_markup: groupMarkup.inline_keyboard.length > 0 ? groupMarkup : undefined }).catch(() => {});
 
-    if (reqData) {
-        reqData.otp = otpCode;
-        reqData.message = message;
-        reqData.status = "success";
-        reqData.receivedAt = Date.now();
-        syncPending();
+   if (reqData) {
 
-        if (reqData.chatId) {
-            const reqInfo = getCountryInfo(cName);
-            let userReplyText = `☁️ eSIM OTP ☁️\n✉️ New OTP Received 🔥\n\n🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}\n🌐 Platform: ${platName}\n📞 Number: \`${number}\`\n✉️ Full SMS:\n> ${message}`;
-            let userMarkup = { inline_keyboard: [] };
-            if (otpCode) userMarkup.inline_keyboard.push([{ text: `COPY OTP`, copy_text: { text: otpCode } }]);
-            bot.sendMessage(reqData.chatId, userReplyText, { parse_mode: "Markdown", reply_markup: userMarkup.inline_keyboard.length > 0 ? userMarkup : undefined }).catch(() => {});
-               addBalance(reqData.chatId, 0.50);
-}
+    reqData.otp = otpCode;
+    reqData.message = message;
+    reqData.status = "success";
+    reqData.receivedAt = Date.now();
+    syncPending();
 
-try {
-    if (reqData.firebaseUid) {
-        const user = await User.findOne({
-            firebaseUid: reqData.firebaseUid
-        });
+    if (reqData.chatId) {
+        const reqInfo = getCountryInfo(cName);
 
-        if (user) {
-            user.balance = Number(user.balance || 0) + 0.50;
-            user.totalEarned = Number(user.totalEarned || 0) + 0.50;
-            await user.save();
+        let userReplyText = `...`;
+
+        let userMarkup = { inline_keyboard: [] };
+
+        if (otpCode) {
+            userMarkup.inline_keyboard.push([
+                { text: "COPY OTP", copy_text: { text: otpCode } }
+            ]);
         }
+
+        bot.sendMessage(
+            reqData.chatId,
+            userReplyText,
+            {
+                parse_mode: "Markdown",
+                reply_markup: userMarkup.inline_keyboard.length > 0
+                    ? userMarkup
+                    : undefined
+            }
+        ).catch(() => {});
+
+        addBalance(reqData.chatId, 0.50);
     }
-} catch (e) {
-    console.log("APP REWARD ERROR:", e.message);
-}
+
+    try {
+        if (reqData.firebaseUid) {
+            const user = await User.findOne({
+                firebaseUid: reqData.firebaseUid
+            });
+
+            if (user) {
+                user.balance = Number(user.balance || 0) + 0.50;
+                user.totalEarned = Number(user.totalEarned || 0) + 0.50;
+
+                await user.save();
+            }
         }
+    } catch (e) {
+        console.log("APP REWARD ERROR:", e.message);
     }
+}
     
   History.findOneAndUpdate(
     { number: String(number) },
