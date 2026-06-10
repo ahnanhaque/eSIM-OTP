@@ -12,6 +12,7 @@ const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const cron = require("node-cron");
 const admin = require("firebase-admin");
 const path = require("path");
 
@@ -3055,7 +3056,24 @@ async function autoLoginPanels() {
         } catch (e) {}
     }
 }
+async function clearConsoleLogs() {
+    try {
 
+        const result = await ConsoleLog.deleteMany({});
+
+        console.log(
+            `🧹 Console logs cleared: ${result.deletedCount}`
+        );
+
+    } catch (e) {
+
+        console.error(
+            "CONSOLE CLEANUP ERROR:",
+            e
+        );
+
+    }
+}
 mongoose.connect(MONGODB_URI).then(async () => {
     const data = await BotDB.findOne();
     if (data) {
@@ -3320,3 +3338,14 @@ setInterval(() => {
         }
     }
 }, 60 * 60 * 1000);
+cron.schedule(
+    "0 0 * * *",
+    async () => {
+
+        await clearConsoleLogs();
+
+    },
+    {
+        timezone: "Asia/Dhaka"
+    }
+);
