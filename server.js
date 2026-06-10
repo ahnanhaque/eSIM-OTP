@@ -2199,7 +2199,8 @@ app.post("/api/wallet/withdraw", async (req, res) => {
 
         user.balance -= Number(amount);
         await user.save();
-
+console.log("WITHDRAW ROUTE HIT");
+console.log("BODY:", req.body);
         const withdrawal = await Withdrawal.create({
             firebaseUid,
             amount: Number(amount),
