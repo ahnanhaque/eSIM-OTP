@@ -2122,7 +2122,75 @@ app.get("/api/wallet/pin-status/:firebaseUid", async (req, res) => {
         res.status(500).json({ success: false });
     }
 });
+app.post("/api/wallet/withdraw", async (req, res) => {
+    try {
 
+        const {
+            firebaseUid,
+            amount,
+            method,
+            accountNumber
+        } = req.body;
+
+        if (!firebaseUid || !amount || !method || !accountNumber) {
+            return res.status(400).json({
+                success: false,
+                error: "Missing required fields"
+            });
+        }
+
+        if (Number(amount) < 100) {
+            return res.status(400).json({
+                success: false,
+                error: "Minimum withdrawal is 100 BDT"
+            });
+        }
+
+        const user = await User.findOne({
+            firebaseUid
+        });
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: "User not found"
+            });
+        }
+
+        if (user.balance < Number(amount)) {
+            return res.status(400).json({
+                success: false,
+                error: "Insufficient balance"
+            });
+        }
+
+        user.balance -= Number(amount);
+        await user.save();
+
+        const withdrawal = await Withdrawal.create({
+            firebaseUid,
+            amount: Number(amount),
+            method,
+            accountNumber,
+            status: "pending"
+        });
+
+        res.json({
+            success: true,
+            withdrawal
+        });
+
+    } catch (e) {
+
+        console.error("WITHDRAW ERROR:", e);
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.post("/api/admin/panel/login", requireAdmin, async (req, res) => {
     try {
         const { panel, email, password } = req.body;
