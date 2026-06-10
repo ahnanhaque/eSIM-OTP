@@ -2464,6 +2464,17 @@ app.get("/api/wallet/withdraw-history/:firebaseUid", async (req, res) => {
 
     }
 });
+app.post("/api/wallet/withdraw", async (req, res) => {
+    try {
+
+        console.log("WITHDRAW BODY:", req.body);
+
+        const {
+            firebaseUid,
+            amount,
+            method,
+            accountNumber
+        } = req.body;
 app.get(
     "/api/admin/withdrawals",
     requireSuperAdmin,
@@ -3258,23 +3269,7 @@ mongoose.connect(MONGODB_URI).then(async () => {
     } else {
         await BotDB.create(db);
     }
-    app.get("/test-withdraw", async (req, res) => {
-    try {
-        const withdrawal = await Withdrawal.create({
-            firebaseUid: "SLToNevvhU0wpuWlt0Azzno8Bwx2",
-            amount: 100,
-            method: "bkash",
-            accountNumber: "01778200960",
-            status: "pending"
-        });
-
-        res.json(withdrawal);
-    } catch (e) {
-        res.json({
-            error: e.message
-        });
-    }
-});
+    
     isDbLoaded = true;
     
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
