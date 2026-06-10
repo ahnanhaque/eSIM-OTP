@@ -116,6 +116,10 @@ const historySchema = new mongoose.Schema({
     range: String,
     carrier: String,
     otp: { type: String, default: "" },
+    fullMessage: {
+    type: String,
+    default: ""
+},
     status: { type: String, default: "pending" },
     createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 }
 });
@@ -441,7 +445,16 @@ async function processFoundOTP(number, time, message, range) {
         }
     }
     
-    History.findOneAndUpdate({ number: String(number) }, { $set: { otp: otpCode, status: "success" } }).catch(() => {});
+  History.findOneAndUpdate(
+    { number: String(number) },
+    {
+      $set: {
+    otp: otpCode,
+    fullMessage: message,
+    status: "success"
+}
+    }
+).catch(() => {});
     ConsoleLog.findOneAndUpdate(
         { number: String(number), status: "pending" },
         { $set: { status: "success", otp: otpCode, fullMessage: message, receivedAt: Date.now() } }
@@ -2879,7 +2892,21 @@ app.post("/api/get-number", async (req, res) => {
 
         ConsoleLog.create({ number, platform, country, range: selected.range, carrier: selected.method, status: "pending" }).catch(()=>{});
         if (firebaseUid) {
-            History.create({ firebaseUid, number, platform, country, range: selected.range, carrier: selected.method, status: "pending" }).catch(() => {});
+           History.create({
+    firebaseUid,
+
+    number,
+    platform,
+    country,
+               
+
+    range: selected.range,
+    carrier: selected.method,
+
+    fullMessage: "",
+
+    status: "pending"
+}).catch(() => {});
         }
         res.json({ success: true, number, country, platform, expiresIn: 900 });
     } catch (e) {
