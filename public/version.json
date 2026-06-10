@@ -1,6 +1,6 @@
 {
   "version": "3.0.4",
-  "forceUpdate": false,
+  "forceUpdate": true,
   "title": "New Update",
   "message": "Withdraw system available",
   "apkUrl": "https://github.com/ahnanhaque/eSIM-NETWORK/releases/download/eWORLD/app.apk"
