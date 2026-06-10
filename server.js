@@ -2633,7 +2633,12 @@ app.post(
         const user = await User.findOne({
             firebaseUid: withdrawal.firebaseUid
         });
-
+console.log(
+    "WITHDRAW USER LOOKUP:",
+    withdrawal.firebaseUid,
+    user?.fullName,
+    user?.email
+);
         if (user) {
 
             // Return balance back
