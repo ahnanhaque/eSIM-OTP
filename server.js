@@ -2825,6 +2825,12 @@ app.get("/api/profile/:firebaseUid", async (req, res) => {
     try {
         const firebaseUid = req.params.firebaseUid;
         const user = await User.findOne({ firebaseUid });
+        console.log(
+    "WITHDRAW USER LOOKUP:",
+    withdrawal.firebaseUid,
+    user?.fullName,
+    user?.email
+);
         if (!user) return res.status(404).json({ success: false, error: "User not found" });
 
         res.json({
