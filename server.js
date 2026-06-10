@@ -2702,6 +2702,11 @@ app.post(
       }
   }
 );
+app.get("/api/test", (req, res) => {
+    res.json({
+        success: true
+    });
+});
 app.post("/api/admin/panel/login", requireAdmin, async (req, res) => {
     try {
         const { panel, email, password } = req.body;
