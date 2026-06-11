@@ -15,7 +15,8 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
 const admin = require("firebase-admin");
 const path = require("path");
-const serviceAccount = require("./firebase-service.json");
+const serviceAccount =
+    require("/etc/secrets/firebase-service.json");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 const botToken = process.env.BOT_TOKEN || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
