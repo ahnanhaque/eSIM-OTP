@@ -19,11 +19,11 @@ const serviceAccount =
     require("/etc/secrets/firebase-service.json");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-const botToken = process.env.BOT_TOKEN || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
-const ADMIN_ID = Number(process.env.ADMIN_ID) || 8278612952;
-const GROUP_CHAT_ID = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
-const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25vVZJswNWM1";
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
+const botToken = process.env.BOT_TOKEN;
+const ADMIN_ID = Number(process.env.ADMIN_ID);
+const GROUP_CHAT_ID = Number(process.env.GROUP_CHAT_ID);
+const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK;
+const MONGODB_URI = process.env.MONGODB_URI;
 const PORT = process.env.PORT || 3000;
 const RENDER_URL = "https://esim-otp-btup.onrender.com";
 const REQUIRED_CHANNELS = [
