@@ -11,6 +11,8 @@ const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
 const admin = require("firebase-admin");
@@ -3261,6 +3263,18 @@ async function clearConsoleLogs() {
 
     }
 }
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024
+    }
+});
 mongoose.connect(MONGODB_URI).then(async () => {
     const data = await BotDB.findOne();
     if (data) {
