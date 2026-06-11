@@ -473,7 +473,17 @@ async function processFoundOTP(number, time, message, range) {
     if (reqData.chatId) {
         const reqInfo = getCountryInfo(cName);
 
-        let userReplyText = `...`;
+        let userReplyText = `☁️ eSIM OTP ☁️
+✉️ New OTP Received 🔥
+
+🌍 Country: ${reqInfo.flag} ${reqInfo.cleanName.toUpperCase()}
+🌐 Platform: ${platName}
+📞 Number: ${number}
+
+🔑 OTP: ${otpCode || "N/A"}
+
+✉️ Full SMS:
+> ${message}`;
 
         let userMarkup = { inline_keyboard: [] };
 
