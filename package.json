@@ -15,7 +15,7 @@
     "firebase-admin": "^13.x.x",
     "@google/generative-ai": "^0.24.1",
     "node-cron": "^4.1.0",
-      "cloudinary": "^2.x.x",
-    "multer": "^2.x.x"
+    "cloudinary": "^2.7.0",
+"multer": "^2.0.1"
   }
 }
