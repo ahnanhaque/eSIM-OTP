@@ -11,17 +11,13 @@ const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
-const cloudinary = require("cloudinary").v2;
-const multer = require("multer");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
 const admin = require("firebase-admin");
 const path = require("path");
-
 const serviceAccount = require("./firebase-service.json");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
 const botToken = process.env.BOT_TOKEN || "8529122267:AAE3FhrtnyQCGZ2xR2o8XYf2ao5xxIO5VYI";
 const ADMIN_ID = Number(process.env.ADMIN_ID) || 8278612952;
 const GROUP_CHAT_ID = Number(process.env.GROUP_CHAT_ID) || -1003852968469;
@@ -29,7 +25,6 @@ const GROUP_INVITE_LINK = process.env.GROUP_INVITE_LINK || "https://t.me/+x_1_25
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb+srv://ahnanhaque_db_user:p9WFrr4y95miiOsX@cluster0.ygxl28d.mongodb.net/?appName=Cluster0";
 const PORT = process.env.PORT || 3000;
 const RENDER_URL = "https://esim-otp-btup.onrender.com";
-
 const REQUIRED_CHANNELS = [
     { id: GROUP_CHAT_ID, link: GROUP_INVITE_LINK, name: "📢 Join Group 1" },
     { id: "@eCommerce_BD", link: "https://t.me/eCommerce_BD", name: "📢 Join Channel 2" }
@@ -58,6 +53,21 @@ app.use((req, res, next) => {
 /* ==========================================================
 DATABASE MODELS
 ========================================================== */
+const cloudinary = require("cloudinary").v2;
+const multer = require("multer");
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 5 * 1024 * 1024
+    }
+});
 const userSchema = new mongoose.Schema({
     firebaseUid: { type: String, unique: true },
     email: String,
@@ -3326,18 +3336,7 @@ async function clearConsoleLogs() {
 
     }
 }
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-});
 
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: {
-        fileSize: 5 * 1024 * 1024
-    }
-});
 mongoose.connect(MONGODB_URI).then(async () => {
     const data = await BotDB.findOne();
     if (data) {
