@@ -2868,7 +2868,70 @@ app.get("/api/profile/:firebaseUid", async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+app.post(
+    "/api/profile/upload-photo",
+    upload.single("photo"),
+    async (req, res) => {
+        try {
 
+            const { firebaseUid } = req.body;
+
+            if (!firebaseUid) {
+                return res.status(400).json({
+                    success: false,
+                    error: "firebaseUid required"
+                });
+            }
+
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    error: "Photo required"
+                });
+            }
+
+            const user = await User.findOne({ firebaseUid });
+
+            if (!user) {
+                return res.status(404).json({
+                    success: false,
+                    error: "User not found"
+                });
+            }
+
+            const result = await new Promise((resolve, reject) => {
+                cloudinary.uploader.upload_stream(
+                    {
+                        folder: "esim-network/profile-photos"
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    }
+                ).end(req.file.buffer);
+            });
+
+            user.profilePhotoUrl = result.secure_url;
+
+            await user.save();
+
+            res.json({
+                success: true,
+                profilePhotoUrl: result.secure_url
+            });
+
+        } catch (e) {
+
+            console.error("PHOTO UPLOAD ERROR:", e);
+
+            res.status(500).json({
+                success: false,
+                error: e.message
+            });
+
+        }
+    }
+);
 app.get("/api/admin/users", requireAdmin, async (req, res) => {
     try {
         const users = await User.find({}).select("firebaseUid fullName email role status country createdAt").sort({ createdAt: -1 }).lean();
