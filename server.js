@@ -3564,7 +3564,25 @@ app.get("/api/live-console", async (req, res) => {
 
         const logs = await zenex.getLiveConsole();
 
-        res.json(logs);
+        const formatted = logs.map(item => {
+
+            const fullNumber = String(item.number || "");
+
+            const range =
+                fullNumber.length >= 6
+                    ? fullNumber.substring(0, 6) + "XXX"
+                    : fullNumber;
+
+            return {
+                range,
+                country: item.country,
+                platform: item.service,
+                otp: item.otp,
+                createdAt: item.createdAt
+            };
+        });
+
+        res.json(formatted);
 
     } catch (error) {
 
