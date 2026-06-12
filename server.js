@@ -136,6 +136,34 @@ const historySchema = new mongoose.Schema({
     status: { type: String, default: "pending" },
     createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 }
 });
+const dailyConsoleStatsSchema = new mongoose.Schema({
+    date: { type: String, unique: true },
+
+    facebook: {
+        type: Number,
+        default: 0
+    },
+
+    instagram: {
+        type: Number,
+        default: 0
+    },
+
+    whatsapp: {
+        type: Number,
+        default: 0
+    },
+
+    other: {
+        type: Number,
+        default: 0
+    }
+});
+
+const DailyConsoleStats = mongoose.model(
+    "DailyConsoleStats",
+    dailyConsoleStatsSchema
+);
 const withdrawalSchema = new mongoose.Schema({
     firebaseUid: {
         type: String,
@@ -533,6 +561,46 @@ async function processFoundOTP(number, time, message, range) {
     fullMessage: message,
     status: "success"
 }
+    }
+).catch(() => {});
+    const today = new Date().toLocaleDateString(
+    "en-CA",
+    {
+        timeZone: "Asia/Dhaka"
+    }
+);
+
+let field = "other";
+
+const platform = String(platName || "").toLowerCase();
+
+if (
+    platform.includes("facebook") ||
+    platform === "fb" ||
+    platform === "fb_new"
+) {
+    field = "facebook";
+} else if (
+    platform.includes("instagram") ||
+    platform === "ig"
+) {
+    field = "instagram";
+} else if (
+    platform.includes("whatsapp") ||
+    platform === "wa"
+) {
+    field = "whatsapp";
+}
+
+DailyConsoleStats.updateOne(
+    { date: today },
+    {
+        $inc: {
+            [field]: 1
+        }
+    },
+    {
+        upsert: true
     }
 ).catch(() => {});
     ConsoleLog.findOneAndUpdate(
@@ -2848,7 +2916,37 @@ app.get("/api/dashboard", (req, res) => {
         maxNumbers: db.settings.maxNumbers || 4
     });
 });
+app.get("/api/console-stats", async (req, res) => {
+    try {
 
+        const today = new Date().toLocaleDateString(
+            "en-CA",
+            {
+                timeZone: "Asia/Dhaka"
+            }
+        );
+
+        const stats = await DailyConsoleStats.findOne({
+            date: today
+        }).lean();
+
+        res.json({
+            date: today,
+            facebook: stats?.facebook || 0,
+            instagram: stats?.instagram || 0,
+            whatsapp: stats?.whatsapp || 0,
+            other: stats?.other || 0
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/admin/panel/accounts", (req, res) => {
     res.json({
         stex: db.savedStexAccounts || [],
