@@ -2262,6 +2262,7 @@ app.get("/api/ranges", (req, res) => {
             error: e.message
         });
     }
+});
 app.get("/api/panels", (req, res) => {
     res.json([
         { id: "mk", name: "MK Network", connected: !!db.mkCookies, activeAccount: db.mkCreds?.email || null },
