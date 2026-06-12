@@ -3246,8 +3246,11 @@ app.get("/api/console", async (req, res) => {
             const regex = new RegExp(query, "i");
             filter = { $or: [{ number: regex }, { platform: regex }, { country: regex }] };
         }
-        const logs = await ConsoleLog.find(filter).sort({ receivedAt: -1 })
-            .select("number range platform country carrier otp fullMessage status receivedAt -_id").lean();
+     const logs = await ConsoleLog.find(filter)
+    .sort({ receivedAt: -1 })
+    .limit(100)
+    .select("number range platform country carrier otp fullMessage status receivedAt -_id")
+    .lean();
         res.json(logs);
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
