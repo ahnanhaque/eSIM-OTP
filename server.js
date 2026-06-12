@@ -3409,10 +3409,16 @@ console.log("SELECTED:", selected);
         } else if (selected.panel === "STEX") {
             const data = await stex.getNumber(selected.range, db.stexToken);
             number = data.full_number;
-        } else if (selected.panel === "ZENEX") {
-            const data = await zenex.getNumber(selected.range);
-            number = data.number;
-        } else if (selected.panel === "NXA") {
+      } else if (selected.panel === "ZENEX") {
+
+    console.log("ZENEX RANGE:", selected.range);
+
+    const data = await zenex.getNumber(selected.range);
+
+    console.log("ZENEX RESPONSE:", data);
+
+    number = data?.number;
+}else if (selected.panel === "NXA") {
             const data = await nxa.getNumber(selected.range, db.nxaToken, db.nxaCookies);
             number = data.number;
             internal_id = data.internal_id;
