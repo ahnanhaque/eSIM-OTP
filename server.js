@@ -2232,41 +2232,36 @@ app.get("/api/debug", (req, res) => {
 app.get("/api/ranges", (req, res) => {
     try {
         const ranges = [];
-        function normalizePlatform(platform) {
-            if (platform === "fb") return "Facebook";
-            if (platform === "fb_new") return "Facebook";
-            if (platform === "ig") return "Instagram";
-            if (platform === "wa") return "WhatsApp";
-            return platform;
-        }
+
         function addRanges(source, panel) {
             Object.keys(source || {}).forEach(platform => {
-               const item = source[platform][range];
+                Object.keys(source[platform] || {}).forEach(range => {
+                    const item = source[platform][range];
 
-ranges.push({
-    panel,
-    platform: platform,
-    country:
-        typeof item === "string"
-            ? item
-            : item?.country,
-    method:
-        typeof item === "object"
-            ? item?.method
-            : null,
-    range
-});        });
+                    ranges.push({
+                        panel,
+                        platform,
+                        country: typeof item === "string"
+                            ? item
+                            : item?.country,
+                        range
+                    });
+                });
+            });
         }
+
         addRanges(db.mkRanges, "MK");
         addRanges(db.stexRanges, "STEX");
         addRanges(db.zenexRanges, "ZENEX");
         addRanges(db.nxaRanges, "NXA");
+
         res.json(ranges);
     } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
     }
-});
-
 app.get("/api/panels", (req, res) => {
     res.json([
         { id: "mk", name: "MK Network", connected: !!db.mkCookies, activeAccount: db.mkCreds?.email || null },
