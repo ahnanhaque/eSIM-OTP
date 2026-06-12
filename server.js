@@ -3397,7 +3397,7 @@ if (!selected && p === platform && itemCountry === country) {
         findRange(db.stexRanges, "STEX");
         findRange(db.zenexRanges, "ZENEX");
         findRange(db.nxaRanges, "NXA");
-
+console.log("SELECTED:", selected);
         if (!selected) return res.status(404).json({ success: false, error: "No route found" });
 
         let number = null;
@@ -3457,6 +3457,15 @@ if (!selected && p === platform && itemCountry === country) {
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
+    } else if (selected.panel === "ZENEX") {
+    console.log("ZENEX RANGE:", selected.range);
+
+    const data = await zenex.getNumber(selected.range);
+
+    console.log("ZENEX RESPONSE:", data);
+
+    number = data.number;
+}
 });
 
 app.get("/api/check-otp/:number", (req, res) => {
