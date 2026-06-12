@@ -3043,7 +3043,50 @@ app.get("/api/admin/panel/active", (req, res) => {
         nxa: db.nxaCreds || null
     });
 });
+app.get("/api/admin/ranges", requireAdmin, (req, res) => {
+    try {
 
+        const ranges = [];
+
+        const panels = [
+            { name: "stex", data: db.stexRanges || {} },
+            { name: "mk", data: db.mkRanges || {} },
+            { name: "zenex", data: db.zenexRanges || {} },
+            { name: "nxa", data: db.nxaRanges || {} }
+        ];
+
+        for (const panel of panels) {
+
+            for (const platform of Object.keys(panel.data)) {
+
+                const platformRanges = panel.data[platform] || {};
+
+                for (const range of Object.keys(platformRanges)) {
+
+                    ranges.push({
+                        panel: panel.name,
+                        platform,
+                        range,
+                        country: platformRanges[range]?.cleanName ||
+                                 platformRanges[range]?.country ||
+                                 String(platformRanges[range])
+                    });
+
+                }
+            }
+        }
+
+        res.json(ranges);
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/profile/:firebaseUid", async (req, res) => {
     try {
         const firebaseUid = req.params.firebaseUid;
