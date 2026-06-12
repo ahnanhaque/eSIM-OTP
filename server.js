@@ -2241,10 +2241,21 @@ app.get("/api/ranges", (req, res) => {
         }
         function addRanges(source, panel) {
             Object.keys(source || {}).forEach(platform => {
-                Object.keys(source[platform] || {}).forEach(range => {
-                    const item = source[platform][range];
-                    ranges.push({ panel, platform: normalizePlatform(platform), country: item.country, method: item.method, range });
-                });
+               const item = source[platform][range];
+
+ranges.push({
+    panel,
+    platform: normalizePlatform(platform),
+    country:
+        typeof item === "string"
+            ? item
+            : item?.country,
+    method:
+        typeof item === "object"
+            ? item?.method
+            : null,
+    range
+});
             });
         }
         addRanges(db.mkRanges, "MK");
