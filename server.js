@@ -2907,7 +2907,86 @@ app.post("/api/admin/panel/login", requireAdmin, async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+app.post("/api/admin/range/add", requireAdmin, async (req, res) => {
+    try {
 
+        const {
+            platform,
+            panel,
+            range
+        } = req.body;
+
+        if (!platform || !panel || !range) {
+            return res.status(400).json({
+                success: false,
+                error: "platform, panel and range are required"
+            });
+        }
+
+        const country = detectCountryFromRange(
+            String(range)
+        );
+
+        if (panel === "stex") {
+
+            if (!db.stexRanges[platform]) {
+                db.stexRanges[platform] = {};
+            }
+
+            db.stexRanges[platform][range] = country;
+
+        } else if (panel === "mk") {
+
+            if (!db.mkRanges[platform]) {
+                db.mkRanges[platform] = {};
+            }
+
+            db.mkRanges[platform][range] = country;
+
+        } else if (panel === "zenex") {
+
+            if (!db.zenexRanges[platform]) {
+                db.zenexRanges[platform] = {};
+            }
+
+            db.zenexRanges[platform][range] = country;
+
+        } else if (panel === "nxa") {
+
+            if (!db.nxaRanges[platform]) {
+                db.nxaRanges[platform] = {};
+            }
+
+            db.nxaRanges[platform][range] = country;
+
+        } else {
+
+            return res.status(400).json({
+                success: false,
+                error: "Invalid panel"
+            });
+
+        }
+
+        saveDB();
+
+        res.json({
+            success: true,
+            platform,
+            panel,
+            range,
+            country
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/dashboard", (req, res) => {
     res.json({
         totalUsers: db.users.length,
