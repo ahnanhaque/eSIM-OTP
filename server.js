@@ -3457,15 +3457,6 @@ console.log("SELECTED:", selected);
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
-    } else if (selected.panel === "ZENEX") {
-    console.log("ZENEX RANGE:", selected.range);
-
-    const data = await zenex.getNumber(selected.range);
-
-    console.log("ZENEX RESPONSE:", data);
-
-    number = data.number;
-}
 });
 
 app.get("/api/check-otp/:number", (req, res) => {
