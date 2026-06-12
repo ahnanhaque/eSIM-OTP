@@ -3087,6 +3087,65 @@ app.get("/api/admin/ranges", requireAdmin, (req, res) => {
 
     }
 });
+app.post("/api/admin/range/remove", requireAdmin, (req, res) => {
+    try {
+
+        const {
+            panel,
+            platform,
+            range
+        } = req.body;
+
+        if (!panel || !platform || !range) {
+            return res.status(400).json({
+                success: false,
+                error: "panel, platform and range required"
+            });
+        }
+
+        if (
+            panel === "stex" &&
+            db.stexRanges?.[platform]?.[range]
+        ) {
+            delete db.stexRanges[platform][range];
+        }
+
+        else if (
+            panel === "mk" &&
+            db.mkRanges?.[platform]?.[range]
+        ) {
+            delete db.mkRanges[platform][range];
+        }
+
+        else if (
+            panel === "zenex" &&
+            db.zenexRanges?.[platform]?.[range]
+        ) {
+            delete db.zenexRanges[platform][range];
+        }
+
+        else if (
+            panel === "nxa" &&
+            db.nxaRanges?.[platform]?.[range]
+        ) {
+            delete db.nxaRanges[platform][range];
+        }
+
+        saveDB();
+
+        res.json({
+            success: true
+        });
+
+    } catch (e) {
+
+        res.status(500).json({
+            success: false,
+            error: e.message
+        });
+
+    }
+});
 app.get("/api/profile/:firebaseUid", async (req, res) => {
     try {
         const firebaseUid = req.params.firebaseUid;
