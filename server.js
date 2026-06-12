@@ -3521,6 +3521,45 @@ setInterval(async () => {
                 number: "+" + fullNumber, platform: log.service, country: String(log.country || "").toUpperCase(),
                 range: range, carrier: log.operator, otp: "", fullMessage: log.otp, status: "success", receivedAt: new Date(log.createdAt)
             });
+            const today = new Date().toLocaleDateString(
+    "en-CA",
+    {
+        timeZone: "Asia/Dhaka"
+    }
+);
+
+let field = "other";
+
+const service = String(log.service || "").toLowerCase();
+
+if (
+    service.includes("facebook") ||
+    service === "fb"
+) {
+    field = "facebook";
+} else if (
+    service.includes("instagram") ||
+    service === "ig"
+) {
+    field = "instagram";
+} else if (
+    service.includes("whatsapp") ||
+    service === "wa"
+) {
+    field = "whatsapp";
+}
+
+await DailyConsoleStats.updateOne(
+    { date: today },
+    {
+        $inc: {
+            [field]: 1
+        }
+    },
+    {
+        upsert: true
+    }
+);
         }
     } catch (e) {}
 }, 10000);
