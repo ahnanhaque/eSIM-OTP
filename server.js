@@ -3559,7 +3559,22 @@ app.get("/api/console", async (req, res) => {
         res.status(500).json({ success: false, error: error.message });
     }
 });
+app.get("/api/live-console", async (req, res) => {
+    try {
 
+        const logs = await zenex.getLiveConsole();
+
+        res.json(logs);
+
+    } catch (error) {
+
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+
+    }
+});
 app.post("/api/ivas-data", (req, res) => {
     const { type, payload } = req.body;
     if (type === "RANGES") {
