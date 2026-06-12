@@ -3370,11 +3370,25 @@ app.post("/api/get-number", async (req, res) => {
         function findRange(source, panelName) {
             Object.keys(source || {}).forEach(p => {
                 Object.keys(source[p] || {}).forEach(range => {
-                    const item = source[p][range];
-                    const pName = p === "fb" || p === "fb_new" ? "Facebook" : p === "ig" ? "Instagram" : p === "wa" ? "WhatsApp" : p;
-                    if (!selected && pName === platform && item.country === country) {
-                        selected = { panel: panelName, range, method: item.method };
-                    }
+                   const item = source[p][range];
+
+const itemCountry =
+    typeof item === "string"
+        ? item
+        : item?.country;
+
+const itemMethod =
+    typeof item === "object"
+        ? item?.method
+        : null;
+
+if (!selected && p === platform && itemCountry === country) {
+    selected = {
+        panel: panelName,
+        range,
+        method: itemMethod
+    };
+}
                 });
             });
         }
