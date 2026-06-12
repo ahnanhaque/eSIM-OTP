@@ -2245,7 +2245,7 @@ app.get("/api/ranges", (req, res) => {
 
 ranges.push({
     panel,
-    platform: normalizePlatform(platform),
+    platform: platform,
     country:
         typeof item === "string"
             ? item
@@ -2255,8 +2255,7 @@ ranges.push({
             ? item?.method
             : null,
     range
-});
-            });
+});        });
         }
         addRanges(db.mkRanges, "MK");
         addRanges(db.stexRanges, "STEX");
