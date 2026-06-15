@@ -54,6 +54,20 @@ app.use((req, res, next) => {
 /* ==========================================================
 Test Route
 ========================================================== */
+app.get("/pw-version", async (req, res) => {
+  try {
+    const { chromium } = require("playwright");
+
+    res.json({
+      executable: chromium.executablePath()
+    });
+
+  } catch (e) {
+    res.json({
+      error: e.message
+    });
+  }
+});
 app.get("/playwright-debug", async (req, res) => {
   res.json({
     PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:
