@@ -15,7 +15,6 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
 const admin = require("firebase-admin");
 const path = require("path");
-const { chromium } = require("playwright");
 const serviceAccount =
     require("/etc/secrets/firebase-service.json");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -50,79 +49,6 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
-});
-/* ==========================================================
-Test Route
-========================================================== */
-app.get("/pw-version", (req, res) => {
-  try {
-      const fs = require("fs");
-
-app.get("/pw-check", (req, res) => {
-  const path = chromium.executablePath();
-
-  res.json({
-    path,
-    exists: fs.existsSync(path)
-  });
-});
-    res.json({
-      executablePath: chromium.executablePath()
-    });
-  } catch (e) {
-    res.json({
-      error: e.message
-    });
-  }
-});
-app.get("/pw-version", async (req, res) => {
-  try {
-    const { chromium } = require("playwright");
-
-    res.json({
-      executable: chromium.executablePath()
-    });
-
-  } catch (e) {
-    res.json({
-      error: e.message
-    });
-  }
-});
-
-app.get("/browser-test", async (req, res) => {
-  try {
-    const browser = await chromium.launch({
-      headless: true,
-      executablePath: chromium.executablePath(),
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox"
-      ]
-    });
-
-    const page = await browser.newPage();
-
-    await page.goto("https://example.com", {
-      waitUntil: "domcontentloaded"
-    });
-
-    const title = await page.title();
-
-    await browser.close();
-
-    res.json({
-      success: true,
-      title
-    });
-
-  } catch (e) {
-    res.json({
-      success: false,
-      error: e.message,
-      stack: e.stack
-    });
-  }
 });
 
 /* ==========================================================
