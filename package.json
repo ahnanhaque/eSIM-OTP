@@ -4,8 +4,7 @@
   "description": "",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-  "postinstall": "npx playwright install chromium"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^5.2.1",
@@ -17,7 +16,6 @@
     "@google/generative-ai": "^0.24.1",
     "node-cron": "^4.1.0",
     "cloudinary": "^2.7.0",
-"multer": "^2.0.1",
-    "playwright": "^1.54.0"
+"multer": "^2.0.1"
   }
 }
