@@ -54,11 +54,23 @@ app.use((req, res, next) => {
 /* ==========================================================
 Test Route
 ========================================================== */
+app.get("/playwright-debug", async (req, res) => {
+  res.json({
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:
+      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || null,
+    NODE_ENV: process.env.NODE_ENV || null
+  });
+});
 app.get("/browser-test", async (req, res) => {
   try {
-    const browser = await chromium.launch({
-      headless: true
-    });
+  const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox"
+  ]
+});
 
     const page = await browser.newPage();
 
