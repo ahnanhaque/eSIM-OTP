@@ -56,6 +56,16 @@ Test Route
 ========================================================== */
 app.get("/pw-version", (req, res) => {
   try {
+      const fs = require("fs");
+
+app.get("/pw-check", (req, res) => {
+  const path = chromium.executablePath();
+
+  res.json({
+    path,
+    exists: fs.existsSync(path)
+  });
+});
     res.json({
       executablePath: chromium.executablePath()
     });
