@@ -15,6 +15,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
 const admin = require("firebase-admin");
 const path = require("path");
+const { chromium } = require("playwright");
 const serviceAccount =
     require("/etc/secrets/firebase-service.json");
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -49,6 +50,35 @@ app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     next();
+});
+/* ==========================================================
+Test Route
+========================================================== */
+app.get("/browser-test", async (req, res) => {
+  try {
+    const browser = await chromium.launch({
+      headless: true
+    });
+
+    const page = await browser.newPage();
+
+    await page.goto("https://example.com");
+
+    const title = await page.title();
+
+    await browser.close();
+
+    res.json({
+      success: true,
+      title
+    });
+
+  } catch (e) {
+    res.json({
+      success: false,
+      error: e.message
+    });
+  }
 });
 
 /* ==========================================================
