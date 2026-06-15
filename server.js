@@ -79,27 +79,23 @@ app.get("/pw-version", async (req, res) => {
     });
   }
 });
-app.get("/playwright-debug", async (req, res) => {
-  res.json({
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH:
-      process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || null,
-    NODE_ENV: process.env.NODE_ENV || null
-  });
-});
+
 app.get("/browser-test", async (req, res) => {
   try {
-  const browser = await chromium.launch({
-  headless: true,
-  executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox"
-  ]
-});
+    const browser = await chromium.launch({
+      headless: true,
+      executablePath: chromium.executablePath(),
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox"
+      ]
+    });
 
     const page = await browser.newPage();
 
-    await page.goto("https://example.com");
+    await page.goto("https://example.com", {
+      waitUntil: "domcontentloaded"
+    });
 
     const title = await page.title();
 
@@ -113,7 +109,8 @@ app.get("/browser-test", async (req, res) => {
   } catch (e) {
     res.json({
       success: false,
-      error: e.message
+      error: e.message,
+      stack: e.stack
     });
   }
 });
