@@ -2341,12 +2341,38 @@ app.get("/api/ranges", (req, res) => {
     }
 });
 app.get("/api/panels", (req, res) => {
-    res.json([
-        { id: "mk", name: "MK Network", connected: !!db.mkCookies, activeAccount: db.mkCreds?.email || null },
-        { id: "stex", name: "STEX SMS", connected: !!db.stexToken, activeAccount: db.stexCreds?.email || null },
-        { id: "zenex", name: "Zenex", connected: !!db.zenexCookies, activeAccount: db.zenexCreds?.email || null },
-        { id: "nxa", name: "NXA", connected: !!db.nxaToken, activeAccount: db.nxaCreds?.email || null }
-    ]);
+res.json([
+{
+id: "mk",
+name: "MK Network",
+connected: !!db.mkCookies,
+activeAccount: db.mkCreds?.email || null
+},
+{
+id: "stex",
+name: "STEX SMS",
+connected: !!db.stexToken,
+activeAccount: db.stexCreds?.email || null
+},
+{
+id: "zenex",
+name: "Zenex",
+connected: !!db.zenexCookies,
+activeAccount: db.zenexCreds?.email || null
+},
+{
+id: "dgd",
+name: "DGD SMS",
+connected: !!db.dgdCreds,
+activeAccount: db.dgdCreds?.email || null
+},
+{
+id: "nxa",
+name: "NXA",
+connected: !!db.nxaToken,
+activeAccount: db.nxaCreds?.email || null
+}
+]);
 });
 
 app.post("/api/wallet/set-pin", async (req, res) => {
