@@ -1297,7 +1297,34 @@ bot.on("message", async (msg) => {
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
+else if (userStates[chatId] === "WAITING_FOR_DGD_RANGE" && isAdmin(chatId, username)) {
+    const range = text.trim();
 
+    if (range.length >= 5) {
+
+        const country = detectCountryFromRange(range);
+
+        tempAdminData[chatId] = {
+            ...tempAdminData[chatId],
+            pendingRange: range,
+            pendingCountry: country,
+            pendingPanel: "dgd"
+        };
+
+        userStates[chatId] = "WAITING_FOR_METHOD_NAME";
+
+        bot.sendMessage(
+            chatId,
+            `✅ Range **${range}** detected as **${country}**.\n\n📝 Now enter Method Name:`,
+            { parse_mode: "Markdown" }
+        );
+
+    } else {
+
+        bot.sendMessage(chatId,"❌ Invalid Range.");
+
+    }
+}
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
         const method = text.trim();
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -1315,7 +1342,20 @@ bot.on("message", async (msg) => {
             if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} };
             if (!db.zenexRanges[platform]) db.zenexRanges[platform] = {};
             db.zenexRanges[platform][range] = { country, method };
-        } else if (panel === "nxa") {
+        } else if (panel === "dgd") {
+
+    if (!db.dgdRanges)
+        db.dgdRanges = { fb:{}, ig:{}, wa:{} };
+
+    if (!db.dgdRanges[platform])
+        db.dgdRanges[platform] = {};
+
+    db.dgdRanges[platform][range] = {
+        country,
+        method
+    };
+}
+        else if (panel === "nxa") {
             if (!db.nxaRanges) db.nxaRanges = { fb: {}, ig: {}, wa: {} };
             if (!db.nxaRanges[platform]) db.nxaRanges[platform] = {};
             db.nxaRanges[platform][range] = { country, method };
@@ -1356,6 +1396,16 @@ bot.on("callback_query", async (query) => {
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
                        "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
+                       case "placeholder_dgd":
+
+    userStates[chatId] = "WAITING_FOR_DGD_RANGE";
+
+    bot.sendMessage(
+        chatId,
+        "📲 Send DGD Range\n\nExample:\n4473845XXX"
+    );
+
+    break;
                        "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
                        "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
