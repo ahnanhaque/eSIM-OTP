@@ -3465,6 +3465,7 @@ if (!selected && p === platform && itemCountry === country) {
         findRange(db.stexRanges, "STEX");
         findRange(db.zenexRanges, "ZENEX");
         findRange(db.nxaRanges, "NXA");
+        findRange(db.dgdRanges, "DGD");
 console.log("SELECTED:", selected);
         if (!selected) return res.status(404).json({ success: false, error: "No route found" });
 
@@ -3488,7 +3489,11 @@ console.log("SELECTED:", selected);
             const data = await nxa.getNumber(selected.range, db.nxaToken, db.nxaCookies);
             number = data.number;
             internal_id = data.internal_id;
-        }
+      
+} else if (selected.panel === "DGD") {
+    const data = await dgd.getNumber(selected.range);
+    number = data.number;
+}
 
         if (!number) return res.status(500).json({ success: false, error: "No number received" });
         
