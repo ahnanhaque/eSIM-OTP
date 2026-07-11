@@ -3436,6 +3436,7 @@ console.log("SELECTED:", selected);
             isMk: selected.panel === "MK",
             cookie: selected.panel === "MK" ? db.mkCookies : (selected.panel === "ZENEX" ? db.zenexCookies : (selected.panel === "NXA" ? db.nxaCookies : undefined)),
             isZenex: selected.panel === "ZENEX", isNxa: selected.panel === "NXA",
+            isDGD: selected.panel === "DGD",
             internal_id: selected.panel === "NXA" ? internal_id : undefined
         };
         syncPending();
@@ -3737,6 +3738,10 @@ mongoose.connect(MONGODB_URI).then(async () => {
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
 
     setTimeout(autoLoginPanels, 10000);
+    dgd.startPolling({
+    pendingRequests,
+    processFoundOTP
+});
 }).catch(err => console.log(err));
 
 /* ==========================================================
