@@ -1394,7 +1394,7 @@ bot.on("callback_query", async (query) => {
         return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined all groups yet.", show_alert: true });
 
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
-                       "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
+                       "placeholder_stex", "stex_", "stexdel_", "placeholder_dgd", "placeholder_mk", "mk_",
                        "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
                 
                        "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
@@ -1640,6 +1640,7 @@ bot.on("callback_query", async (query) => {
         db.stexRanges = { fb: {}, ig: {}, wa: {} };
         db.mkRanges = { fb: {}, ig: {}, wa: {} };
         db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
+        db.dgdRanges = { fb: {}, ig: {}, wa: {} };
         db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
         db.availableNumbers = { fb: {}, ig: {}, wa: {} };
         saveDB();
