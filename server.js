@@ -249,6 +249,7 @@ const dbSchema = new mongoose.Schema({
     mkCookies: String,
     zenexRanges: Object,
     zenexCookies: String,
+    dgdRanges: Object,
     nxaRanges: Object,
     nxaToken: String,
     nxaCookies: String,
@@ -275,6 +276,7 @@ let db = {
     stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "",
     mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "",
     zenexRanges: { fb: {}, ig: {}, wa: {} }, zenexCookies: "",
+    dgdRanges: { fb: {}, ig: {}, wa: {} },
     nxaRanges: { fb: {}, ig: {}, wa: {} }, nxaToken: "", nxaCookies: "",
     stexCreds: null, mkCreds: null, zenexCreds: null, nxaCreds: null,
     savedStexAccounts: [], savedMkAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
@@ -683,6 +685,9 @@ const adminPlatformMenu = {
 const manageNumberPanel = {
     inline_keyboard: [
         [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
+        [
+ { text:"DGD SMS 🟢", callback_data:"placeholder_dgd" }
+],
         [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }],
         [{ text: "MK SMS 💬", callback_data: "placeholder_mk" }],
         [{ text: "Zenex SMS ⚡", callback_data: "placeholder_zenex" }],
@@ -758,6 +763,26 @@ function renderRemoveMenu(chatId, messageId) {
             const cName = typeof db.zenexRanges[plat][r] === "object" ? db.zenexRanges[plat][r].country : db.zenexRanges[plat][r];
             allRanges.push({ plat, type: "zenex", r, info: getCountryInfo(cName), prefix: "Zenex" });
         });
+        const dgdList =
+    db.dgdRanges &&
+    db.dgdRanges[plat]
+        ? Object.keys(db.dgdRanges[plat])
+        : [];
+
+dgdList.forEach(r=>{
+    const cName =
+        typeof db.dgdRanges[plat][r] === "object"
+            ? db.dgdRanges[plat][r].country
+            : db.dgdRanges[plat][r];
+
+    allRanges.push({
+        plat,
+        type:"dgd",
+        r,
+        info:getCountryInfo(cName),
+        prefix:"DGD"
+    });
+});
         const nxaList = db.nxaRanges && db.nxaRanges[plat] ? Object.keys(db.nxaRanges[plat]) : []; 
         nxaList.forEach(r => {
             const cName = typeof db.nxaRanges[plat][r] === "object" ? db.nxaRanges[plat][r].country : db.nxaRanges[plat][r];
@@ -3705,6 +3730,8 @@ mongoose.connect(MONGODB_URI).then(async () => {
         }
         if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
         if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
+        if (!db.dgdRanges)
+    db.dgdRanges = { fb:{}, ig:{}, wa:{} };
         if (!db.nxaRanges) db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
         
         if (!db.savedStexAccounts) db.savedStexAccounts = [];
