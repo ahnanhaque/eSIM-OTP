@@ -10,6 +10,7 @@ const mk = require("./mk.js");
 const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
+const dgd = require("./dgd.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
