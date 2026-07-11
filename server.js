@@ -278,8 +278,17 @@ let db = {
     zenexRanges: { fb: {}, ig: {}, wa: {} }, zenexCookies: "",
     dgdRanges: { fb: {}, ig: {}, wa: {} },
     nxaRanges: { fb: {}, ig: {}, wa: {} }, nxaToken: "", nxaCookies: "",
-    stexCreds: null, mkCreds: null, zenexCreds: null, nxaCreds: null,
-    savedStexAccounts: [], savedMkAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
+   stexCreds: null,
+mkCreds: null,
+zenexCreds: null,
+dgdCreds: null,
+nxaCreds: null,
+
+savedStexAccounts: [],
+savedMkAccounts: [],
+savedZenexAccounts: [],
+savedDgdAccounts: [],
+savedNxaAccounts: [],
     pendingRequests: {}, fcmTokens: []
 };
 
