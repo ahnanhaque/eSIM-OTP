@@ -1396,16 +1396,7 @@ bot.on("callback_query", async (query) => {
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
                        "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
                        "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
-                       case "placeholder_dgd":
-
-    userStates[chatId] = "WAITING_FOR_DGD_RANGE";
-
-    bot.sendMessage(
-        chatId,
-        "📲 Send DGD Range\n\nExample:\n4473845XXX"
-    );
-
-    break;
+                
                        "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
                        "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
