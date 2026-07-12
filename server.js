@@ -10,7 +10,6 @@ const mk = require("./mk.js");
 const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
-const dgd = require("./dgd.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
@@ -249,7 +248,6 @@ const dbSchema = new mongoose.Schema({
     mkCookies: String,
     zenexRanges: Object,
     zenexCookies: String,
-    dgdRanges: Object,
     nxaRanges: Object,
     nxaToken: String,
     nxaCookies: String,
@@ -276,19 +274,9 @@ let db = {
     stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "",
     mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "",
     zenexRanges: { fb: {}, ig: {}, wa: {} }, zenexCookies: "",
-    dgdRanges: { fb: {}, ig: {}, wa: {} },
     nxaRanges: { fb: {}, ig: {}, wa: {} }, nxaToken: "", nxaCookies: "",
-   stexCreds: null,
-mkCreds: null,
-zenexCreds: null,
-dgdCreds: null,
-nxaCreds: null,
-
-savedStexAccounts: [],
-savedMkAccounts: [],
-savedZenexAccounts: [],
-savedDgdAccounts: [],
-savedNxaAccounts: [],
+    stexCreds: null, mkCreds: null, zenexCreds: null, nxaCreds: null,
+    savedStexAccounts: [], savedMkAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
     pendingRequests: {}, fcmTokens: []
 };
 
@@ -694,9 +682,6 @@ const adminPlatformMenu = {
 const manageNumberPanel = {
     inline_keyboard: [
         [{ text: "IVA SMS 📨", callback_data: "admin_manage_ranges" }],
-        [
- { text:"DGD SMS 🟢", callback_data:"placeholder_dgd" }
-],
         [{ text: "Stex SMS 📩", callback_data: "placeholder_stex" }],
         [{ text: "MK SMS 💬", callback_data: "placeholder_mk" }],
         [{ text: "Zenex SMS ⚡", callback_data: "placeholder_zenex" }],
@@ -772,26 +757,6 @@ function renderRemoveMenu(chatId, messageId) {
             const cName = typeof db.zenexRanges[plat][r] === "object" ? db.zenexRanges[plat][r].country : db.zenexRanges[plat][r];
             allRanges.push({ plat, type: "zenex", r, info: getCountryInfo(cName), prefix: "Zenex" });
         });
-        const dgdList =
-    db.dgdRanges &&
-    db.dgdRanges[plat]
-        ? Object.keys(db.dgdRanges[plat])
-        : [];
-
-dgdList.forEach(r=>{
-    const cName =
-        typeof db.dgdRanges[plat][r] === "object"
-            ? db.dgdRanges[plat][r].country
-            : db.dgdRanges[plat][r];
-
-    allRanges.push({
-        plat,
-        type:"dgd",
-        r,
-        info:getCountryInfo(cName),
-        prefix:"DGD"
-    });
-});
         const nxaList = db.nxaRanges && db.nxaRanges[plat] ? Object.keys(db.nxaRanges[plat]) : []; 
         nxaList.forEach(r => {
             const cName = typeof db.nxaRanges[plat][r] === "object" ? db.nxaRanges[plat][r].country : db.nxaRanges[plat][r];
@@ -1306,34 +1271,7 @@ bot.on("message", async (msg) => {
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
-else if (userStates[chatId] === "WAITING_FOR_DGD_RANGE" && isAdmin(chatId, username)) {
-    const range = text.trim();
 
-    if (range.length >= 5) {
-
-        const country = detectCountryFromRange(range);
-
-        tempAdminData[chatId] = {
-            ...tempAdminData[chatId],
-            pendingRange: range,
-            pendingCountry: country,
-            pendingPanel: "dgd"
-        };
-
-        userStates[chatId] = "WAITING_FOR_METHOD_NAME";
-
-        bot.sendMessage(
-            chatId,
-            `✅ Range **${range}** detected as **${country}**.\n\n📝 Now enter Method Name:`,
-            { parse_mode: "Markdown" }
-        );
-
-    } else {
-
-        bot.sendMessage(chatId,"❌ Invalid Range.");
-
-    }
-}
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
         const method = text.trim();
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -1351,20 +1289,7 @@ else if (userStates[chatId] === "WAITING_FOR_DGD_RANGE" && isAdmin(chatId, usern
             if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} };
             if (!db.zenexRanges[platform]) db.zenexRanges[platform] = {};
             db.zenexRanges[platform][range] = { country, method };
-        } else if (panel === "dgd") {
-
-    if (!db.dgdRanges)
-        db.dgdRanges = { fb:{}, ig:{}, wa:{} };
-
-    if (!db.dgdRanges[platform])
-        db.dgdRanges[platform] = {};
-
-    db.dgdRanges[platform][range] = {
-        country,
-        method
-    };
-}
-        else if (panel === "nxa") {
+        } else if (panel === "nxa") {
             if (!db.nxaRanges) db.nxaRanges = { fb: {}, ig: {}, wa: {} };
             if (!db.nxaRanges[platform]) db.nxaRanges[platform] = {};
             db.nxaRanges[platform][range] = { country, method };
@@ -1403,9 +1328,8 @@ bot.on("callback_query", async (query) => {
         return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined all groups yet.", show_alert: true });
 
     const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
-                       "placeholder_stex", "stex_", "stexdel_", "placeholder_dgd", "placeholder_mk", "mk_",
+                       "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
                        "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
-                
                        "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
                        "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
@@ -1649,7 +1573,6 @@ bot.on("callback_query", async (query) => {
         db.stexRanges = { fb: {}, ig: {}, wa: {} };
         db.mkRanges = { fb: {}, ig: {}, wa: {} };
         db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
-        db.dgdRanges = { fb: {}, ig: {}, wa: {} };
         db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
         db.availableNumbers = { fb: {}, ig: {}, wa: {} };
         saveDB();
@@ -2341,38 +2264,12 @@ app.get("/api/ranges", (req, res) => {
     }
 });
 app.get("/api/panels", (req, res) => {
-res.json([
-{
-id: "mk",
-name: "MK Network",
-connected: !!db.mkCookies,
-activeAccount: db.mkCreds?.email || null
-},
-{
-id: "stex",
-name: "STEX SMS",
-connected: !!db.stexToken,
-activeAccount: db.stexCreds?.email || null
-},
-{
-id: "zenex",
-name: "Zenex",
-connected: !!db.zenexCookies,
-activeAccount: db.zenexCreds?.email || null
-},
-{
-id: "dgd",
-name: "DGD SMS",
-connected: !!db.dgdCreds,
-activeAccount: db.dgdCreds?.email || null
-},
-{
-id: "nxa",
-name: "NXA",
-connected: !!db.nxaToken,
-activeAccount: db.nxaCreds?.email || null
-}
-]);
+    res.json([
+        { id: "mk", name: "MK Network", connected: !!db.mkCookies, activeAccount: db.mkCreds?.email || null },
+        { id: "stex", name: "STEX SMS", connected: !!db.stexToken, activeAccount: db.stexCreds?.email || null },
+        { id: "zenex", name: "Zenex", connected: !!db.zenexCookies, activeAccount: db.zenexCreds?.email || null },
+        { id: "nxa", name: "NXA", connected: !!db.nxaToken, activeAccount: db.nxaCreds?.email || null }
+    ]);
 });
 
 app.post("/api/wallet/set-pin", async (req, res) => {
@@ -3500,7 +3397,6 @@ if (!selected && p === platform && itemCountry === country) {
         findRange(db.stexRanges, "STEX");
         findRange(db.zenexRanges, "ZENEX");
         findRange(db.nxaRanges, "NXA");
-        findRange(db.dgdRanges, "DGD");
 console.log("SELECTED:", selected);
         if (!selected) return res.status(404).json({ success: false, error: "No route found" });
 
@@ -3524,11 +3420,7 @@ console.log("SELECTED:", selected);
             const data = await nxa.getNumber(selected.range, db.nxaToken, db.nxaCookies);
             number = data.number;
             internal_id = data.internal_id;
-      
-} else if (selected.panel === "DGD") {
-    const data = await dgd.getNumber(selected.range);
-    number = data.number;
-}
+        }
 
         if (!number) return res.status(500).json({ success: false, error: "No number received" });
         
@@ -3543,7 +3435,6 @@ console.log("SELECTED:", selected);
             isMk: selected.panel === "MK",
             cookie: selected.panel === "MK" ? db.mkCookies : (selected.panel === "ZENEX" ? db.zenexCookies : (selected.panel === "NXA" ? db.nxaCookies : undefined)),
             isZenex: selected.panel === "ZENEX", isNxa: selected.panel === "NXA",
-            isDGD: selected.panel === "DGD",
             internal_id: selected.panel === "NXA" ? internal_id : undefined
         };
         syncPending();
@@ -3812,8 +3703,6 @@ mongoose.connect(MONGODB_URI).then(async () => {
         }
         if (!db.mkRanges) db.mkRanges = { fb: {}, ig: {}, wa: {} };
         if (!db.zenexRanges) db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
-        if (!db.dgdRanges)
-    db.dgdRanges = { fb:{}, ig:{}, wa:{} };
         if (!db.nxaRanges) db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
         
         if (!db.savedStexAccounts) db.savedStexAccounts = [];
@@ -3847,10 +3736,6 @@ mongoose.connect(MONGODB_URI).then(async () => {
     app.listen(PORT, () => console.log(`🚀 Webhook Mode running on port ${PORT}`));
 
     setTimeout(autoLoginPanels, 10000);
-    dgd.startPolling({
-    pendingRequests,
-    processFoundOTP
-});
 }).catch(err => console.log(err));
 
 /* ==========================================================
