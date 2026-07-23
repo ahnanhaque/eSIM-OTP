@@ -50,13 +50,13 @@ password: password
 
 const res = await makeRequest("POST", "/login", body, {
     "content-type": "application/x-www-form-urlencoded",
-    "referer": "[https://yesms.online/login](https://yesms.online/login)"
+    "referer": "https://yesms.online/login"
 });
 
-if (res.status === 303 && res.headers && res.headers["set-cookie"]) {
+if ((res.status === 302 || res.status === 303) && res.headers && res.headers["set-cookie"]) {
     let sessionCookie = "";
     res.headers["set-cookie"].forEach(c => {
-        let cookiePair = c.split(";")[0];
+        let cookiePair = c.split(";")[0].trim();
         if (cookiePair.startsWith("session=")) {
             sessionCookie = cookiePair;
         }
@@ -75,14 +75,19 @@ const oldCookies = COOKIES;
 COOKIES = cookieStr;
 try {
 const res = await makeRequest("GET", "/dashboard");
-if (res.status === 302 || res.status === 303 || (res.headers && res.headers.location && res.headers.location.includes("login")) || (typeof res.data === 'string' && res.data.includes('name="identifier"'))) {
-COOKIES = oldCookies;
-throw new Error("SESSION_EXPIRED");
-}
-return true;
+
+    const isRedirect = res.status === 302 || res.status === 303;
+    const hasLoginRedirect = res.headers && res.headers.location && res.headers.location.includes("login");
+    const hasLoginHtml = typeof res.data === "string" && (res.data.includes('name="identifier"') || res.data.includes('action="/login"'));
+
+    if (isRedirect || hasLoginRedirect || hasLoginHtml) {
+        COOKIES = oldCookies;
+        throw new Error("SESSION_EXPIRED");
+    }
+    return true; 
 } catch (err) {
-COOKIES = oldCookies;
-throw err;
+    COOKIES = oldCookies;
+    throw err;
 }
 }
 
@@ -94,19 +99,31 @@ range_id: range
 const res = await makeRequest("POST", "/api/allocate_number", body, {
     "accept": "application/json",
     "content-type": "application/json",
-    "referer": "[https://yesms.online/dashboard](https://yesms.online/dashboard)",
-    "origin": "[https://yesms.online](https://yesms.online)"
+   "referer": "https://yesms.online/dashboard",
+    "origin": "https://yesms.online"
 }, customCookie);
 
-if (res.status === 302 || res.status === 303 || (res.headers && res.headers.location && res.headers.location.includes("login"))) {
+const isRedirect = res.status === 302 || res.status === 303;
+const hasLoginRedirect = res.headers && res.headers.location && res.headers.location.includes("login");
+const hasLoginHtml = typeof res.data === "string" && (res.data.includes('name="identifier"') || res.data.includes('action="/login"'));
+
+if (isRedirect || hasLoginRedirect || hasLoginHtml) {
     throw new Error("SESSION_EXPIRED");
 }
-if (res.data && res.data.success && res.data.data && res.data.data.full_number) {
-    return {
-        number: res.data.data.full_number
-    };
+
+if (res.data && typeof res.data === "object") {
+    if (res.data.success) {
+        if (res.data.data && res.data.data.full_number) {
+            return {
+                number: res.data.data.full_number
+            };
+        }
+    } else if (res.data.success === false && res.data.message) {
+        throw new Error(res.data.message);
+    }
 }
-throw new Error("SESSION_EXPIRED");
+
+throw new Error("Failed to allocate number. Invalid API response.");
 }
 
 async function checkInfo(date, customCookie = null) {
@@ -115,7 +132,11 @@ const res = await makeRequest("GET", "/api/user_numbers", null, {
 "referer": "https://yesms.online/dashboard"
 }, customCookie);
 
-if (res.status === 302 || res.status === 303 || (res.headers && res.headers.location && res.headers.location.includes("login"))) {
+const isRedirect = res.status === 302 || res.status === 303;
+const hasLoginRedirect = res.headers && res.headers.location && res.headers.location.includes("login");
+const hasLoginHtml = typeof res.data === "string" && (res.data.includes('name="identifier"') || res.data.includes('action="/login"'));
+
+if (isRedirect || hasLoginRedirect || hasLoginHtml) {
     throw new Error("SESSION_EXPIRED");
 }
 
@@ -135,4 +156,11 @@ async function getLiveConsole(customCookie = null) {
 return null;
 }
 
-module.exports = { setCookies, verifyCookies, getNumber, checkInfo, login, getLiveConsole };
+module.exports = {
+setCookies,
+verifyCookies,
+getNumber,
+checkInfo,
+login,
+getLiveConsole
+};
