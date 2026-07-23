@@ -703,6 +703,7 @@ const manageNumberPanel = {
     ]
 };
 
+
 function getAdminMenu(chatId) {
     let menu = [
         [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" },
@@ -1369,7 +1370,40 @@ else if (userStates[chatId] === "WAITING_FOR_YESMS_CREDS" && isAdmin(chatId, use
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
+else if (userStates[chatId] === "WAITING_FOR_YESMS_RANGE" && isAdmin(chatId, username)) {
 
+    const range = text.trim();
+
+    if (range.length >= 5) {
+
+        const country = detectCountryFromRange(range);
+
+        tempAdminData[chatId] = {
+            ...tempAdminData[chatId],
+            pendingRange: range,
+            pendingCountry: country,
+            pendingPanel: "yesms"
+        };
+
+        userStates[chatId] = "WAITING_FOR_METHOD_NAME";
+
+        bot.sendMessage(
+            chatId,
+            `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`,
+            {
+                parse_mode: "Markdown"
+            }
+        ).catch(() => {});
+
+    } else {
+
+        bot.sendMessage(
+            chatId,
+            "❌ Invalid format. Please provide a valid range."
+        ).catch(() => {});
+
+    }
+}
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
         const method = text.trim();
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -1436,11 +1470,15 @@ bot.on("callback_query", async (query) => {
     if (!await isUserMember(query.from.id))
         return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined all groups yet.", show_alert: true });
 
-    const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
-                       "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
-                       "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
-                       "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
-                       "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
+    const adminActs = [
+    "admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
+    "placeholder_stex", "stex_", "stexdel_",
+    "placeholder_mk", "mk_",
+    "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_",
+    "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
+    "placeholder_yesms", "yesms_", "yesmsdel_", "delyesmsrng_",
+    "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"
+];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
         return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true });
 
