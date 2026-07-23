@@ -10,6 +10,7 @@ const mk = require("./mk.js");
 const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
+const yesms = require("./yesms.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
@@ -246,6 +247,8 @@ const dbSchema = new mongoose.Schema({
     stexToken: String,
     mkRanges: Object,
     mkCookies: String,
+    yesmsRanges: Object,
+yesmsCookies: String,
     zenexRanges: Object,
     zenexCookies: String,
     nxaRanges: Object,
@@ -253,12 +256,14 @@ const dbSchema = new mongoose.Schema({
     nxaCookies: String,
     stexCreds: Object,
     mkCreds: Object,
+    yesmsCreds: Object,
     zenexCreds: Object,
     nxaCreds: Object,
     savedStexAccounts: Array,
     savedMkAccounts: Array,
     savedZenexAccounts: Array,
     savedNxaAccounts: Array,
+    savedYesmsAccounts: Array,
     pendingRequests: Object,
     fcmTokens: Array
 }, { strict: false });
@@ -273,10 +278,16 @@ let db = {
     availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {},
     stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "",
     mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "",
+    yesmsRanges: {
+    fb: {},
+    ig: {},
+    wa: {}
+},
+yesmsCookies: "",
     zenexRanges: { fb: {}, ig: {}, wa: {} }, zenexCookies: "",
     nxaRanges: { fb: {}, ig: {}, wa: {} }, nxaToken: "", nxaCookies: "",
-    stexCreds: null, mkCreds: null, zenexCreds: null, nxaCreds: null,
-    savedStexAccounts: [], savedMkAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
+    stexCreds: null, mkCreds: null, yesmsCreds: null, zenexCreds: null, nxaCreds: null,
+    savedStexAccounts: [], savedMkAccounts: [], savedYesmsAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
     pendingRequests: {}, fcmTokens: []
 };
 
@@ -1429,13 +1440,14 @@ bot.on("callback_query", async (query) => {
                 [{ text: "MK SMS ✉️", callback_data: "placeholder_mk_login" }],
                 [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], 
                 [{ text: "NXA SMS 🟣", callback_data: "nxa_login" }], 
+                [{ text: "YESMS SMS 🟢", callback_data: "yesms_login" }],
                 [{ text: "⬅️ Back", callback_data: "admin_panel" }]
             ]}
         }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
-    else if (["zenex_login", "stex_login", "placeholder_mk_login", "nxa_login"].includes(data)) {
+    else if (["zenex_login", "yesms_login", "stex_login", "placeholder_mk_login", "nxa_login"].includes(data)) {
         let panel = data.replace("_login", "").replace("placeholder_", "");
         let savedAccounts = db[`saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`] || [];
         let activeCreds = db[`${panel}Creds`];
