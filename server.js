@@ -10,7 +10,6 @@ const mk = require("./mk.js");
 const zenex = require("./zenex.js");
 const bcrypt = require("bcrypt");
 const nxa = require("./nxa.js");
-const yesms = require("./yesms.js");
 const { detectCountryFromRange, getCountryInfo } = require("./country.js");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const cron = require("node-cron");
@@ -247,8 +246,6 @@ const dbSchema = new mongoose.Schema({
     stexToken: String,
     mkRanges: Object,
     mkCookies: String,
-    yesmsRanges: Object,
-yesmsCookies: String,
     zenexRanges: Object,
     zenexCookies: String,
     nxaRanges: Object,
@@ -256,14 +253,12 @@ yesmsCookies: String,
     nxaCookies: String,
     stexCreds: Object,
     mkCreds: Object,
-    yesmsCreds: Object,
     zenexCreds: Object,
     nxaCreds: Object,
     savedStexAccounts: Array,
     savedMkAccounts: Array,
     savedZenexAccounts: Array,
     savedNxaAccounts: Array,
-    savedYesmsAccounts: Array,
     pendingRequests: Object,
     fcmTokens: Array
 }, { strict: false });
@@ -278,16 +273,10 @@ let db = {
     availableNumbers: { fb: {}, ig: {}, wa: {} }, cookies: {},
     stexRanges: { fb: {}, ig: {}, wa: {} }, stexToken: "",
     mkRanges: { fb: {}, ig: {}, wa: {} }, mkCookies: "",
-    yesmsRanges: {
-    fb: {},
-    ig: {},
-    wa: {}
-},
-yesmsCookies: "",
     zenexRanges: { fb: {}, ig: {}, wa: {} }, zenexCookies: "",
     nxaRanges: { fb: {}, ig: {}, wa: {} }, nxaToken: "", nxaCookies: "",
-    stexCreds: null, mkCreds: null, yesmsCreds: null, zenexCreds: null, nxaCreds: null,
-    savedStexAccounts: [], savedMkAccounts: [], savedYesmsAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
+    stexCreds: null, mkCreds: null, zenexCreds: null, nxaCreds: null,
+    savedStexAccounts: [], savedMkAccounts: [], savedZenexAccounts: [], savedNxaAccounts: [],
     pendingRequests: {}, fcmTokens: []
 };
 
@@ -698,11 +687,9 @@ const manageNumberPanel = {
         [{ text: "Zenex SMS ⚡", callback_data: "placeholder_zenex" }],
         [{ text: "NXA SMS 🟣", callback_data: "placeholder_nxa" }], 
         [{ text: "Add Number ➕", callback_data: "admin_add_number_manual" }],
-        [{ text: "YESMS SMS 🟢", callback_data: "placeholder_yesms" }],
         [{ text: "⬅️ Back", callback_data: "admin_manage_numbers" }]
     ]
 };
-
 
 function getAdminMenu(chatId) {
     let menu = [
@@ -1247,93 +1234,7 @@ bot.on("message", async (msg) => {
         }
         delete userStates[chatId];
     }
-else if (userStates[chatId] === "WAITING_FOR_YESMS_CREDS" && isAdmin(chatId, username)) {
 
-    const parts = text.split("|");
-
-    if (parts.length === 2) {
-
-        let email = parts[0].trim();
-        let password = parts[1].trim();
-
-        bot.sendMessage(
-            chatId,
-            "⏳ Logging into YESMS Server..."
-        ).catch(() => {});
-
-        yesms.login(email, password)
-
-        .then(cookieStr => {
-
-            db.yesmsCookies = cookieStr;
-
-            db.yesmsCreds = {
-                email,
-                password
-            };
-
-            if (!db.savedYesmsAccounts)
-                db.savedYesmsAccounts = [];
-
-            let existing =
-                db.savedYesmsAccounts.find(
-                    a => a.email === email
-                );
-
-            if (existing) {
-
-                existing.password = password;
-
-            } else {
-
-                db.savedYesmsAccounts.push({
-                    email,
-                    password
-                });
-
-                if (db.savedYesmsAccounts.length > 5)
-                    db.savedYesmsAccounts.shift();
-            }
-
-            saveDB();
-
-            bot.sendMessage(
-                chatId,
-                "✅ YESMS Login Successful! Account saved.",
-                {
-                    parse_mode: "Markdown"
-                }
-            ).catch(() => {});
-
-        })
-
-        .catch(e => {
-
-            bot.sendMessage(
-                chatId,
-                "❌ **Failed:** " + e.message,
-                {
-                    parse_mode: "Markdown"
-                }
-            ).catch(() => {});
-
-        });
-
-    } else {
-
-        bot.sendMessage(
-            chatId,
-            "❌ Invalid format. Use `email|password`",
-            {
-                parse_mode: "Markdown"
-            }
-        ).catch(() => {});
-
-    }
-
-    delete userStates[chatId];
-
-}
     else if (userStates[chatId] === "WAITING_FOR_STEX_RANGE" && isAdmin(chatId, username)) {
         const range = text.trim();
         if (range.length >= 5) {
@@ -1370,40 +1271,7 @@ else if (userStates[chatId] === "WAITING_FOR_YESMS_CREDS" && isAdmin(chatId, use
             bot.sendMessage(chatId, `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`, { parse_mode: "Markdown" }).catch(() => {});
         } else bot.sendMessage(chatId, "❌ Invalid format. Please provide a valid range.").catch(() => {});
     }
-else if (userStates[chatId] === "WAITING_FOR_YESMS_RANGE" && isAdmin(chatId, username)) {
 
-    const range = text.trim();
-
-    if (range.length >= 5) {
-
-        const country = detectCountryFromRange(range);
-
-        tempAdminData[chatId] = {
-            ...tempAdminData[chatId],
-            pendingRange: range,
-            pendingCountry: country,
-            pendingPanel: "yesms"
-        };
-
-        userStates[chatId] = "WAITING_FOR_METHOD_NAME";
-
-        bot.sendMessage(
-            chatId,
-            `✅ Range **${range}** detected as **${country}**.\n\n📝 **Now enter the Method Name:**`,
-            {
-                parse_mode: "Markdown"
-            }
-        ).catch(() => {});
-
-    } else {
-
-        bot.sendMessage(
-            chatId,
-            "❌ Invalid format. Please provide a valid range."
-        ).catch(() => {});
-
-    }
-}
     else if (userStates[chatId] === "WAITING_FOR_METHOD_NAME" && isAdmin(chatId, username)) {
         const method = text.trim();
         const platform = tempAdminData[chatId]?.selectedPlatform || "fb";
@@ -1426,18 +1294,7 @@ else if (userStates[chatId] === "WAITING_FOR_YESMS_RANGE" && isAdmin(chatId, use
             if (!db.nxaRanges[platform]) db.nxaRanges[platform] = {};
             db.nxaRanges[platform][range] = { country, method };
         }
-        else if (panel === "yesms") {
-    if (!db.yesmsRanges)
-        db.yesmsRanges = { fb: {}, ig: {}, wa: {} };
-
-    if (!db.yesmsRanges[platform])
-        db.yesmsRanges[platform] = {};
-
-    db.yesmsRanges[platform][range] = {
-        country,
-        method
-    };
-}
+        
         saveDB();
         bot.sendMessage(chatId, `✅ Successfully added ${panel.toUpperCase()} Range **${range}** for **${platform.toUpperCase()}**.\n🌍 Country: **${country}**\n📝 Method: **${method}**`, { parse_mode: "Markdown" }).catch(() => {});
 
@@ -1470,15 +1327,11 @@ bot.on("callback_query", async (query) => {
     if (!await isUserMember(query.from.id))
         return bot.answerCallbackQuery(query.id, { text: "❌ You haven't joined all groups yet.", show_alert: true });
 
-    const adminActs = [
-    "admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
-    "placeholder_stex", "stex_", "stexdel_",
-    "placeholder_mk", "mk_",
-    "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_",
-    "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
-    "placeholder_yesms", "yesms_", "yesmsdel_", "delyesmsrng_",
-    "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"
-];
+    const adminActs = ["admin_", "togglerng_", "refresh_", "deladmin_", "addnum_",
+                       "placeholder_stex", "stex_", "stexdel_", "placeholder_mk", "mk_",
+                       "placeholder_zenex", "zenex_", "zenexdel_", "delzenexrng_", 
+                       "placeholder_nxa", "nxa_", "nxadel_", "delnxarng_",
+                       "placeholder_iva", "delnumrng_", "delstexrng_", "delmkrng_", "delall_"];
     if (adminActs.some(a => data.startsWith(a)) && !isAdmin(chatId, username) && data !== "refresh_2fa")
         return bot.answerCallbackQuery(query.id, { text: "❌ Permission Denied! You do not have admin access for this action.", show_alert: true });
 
@@ -1576,14 +1429,13 @@ bot.on("callback_query", async (query) => {
                 [{ text: "MK SMS ✉️", callback_data: "placeholder_mk_login" }],
                 [{ text: "Zenex SMS ⚡", callback_data: "zenex_login" }], 
                 [{ text: "NXA SMS 🟣", callback_data: "nxa_login" }], 
-                [{ text: "YESMS SMS 🟢", callback_data: "yesms_login" }],
                 [{ text: "⬅️ Back", callback_data: "admin_panel" }]
             ]}
         }).catch(() => {});
         bot.answerCallbackQuery(query.id);
     }
 
-    else if (["zenex_login", "yesms_login", "stex_login", "placeholder_mk_login", "nxa_login"].includes(data)) {
+    else if (["zenex_login", "stex_login", "placeholder_mk_login", "nxa_login"].includes(data)) {
         let panel = data.replace("_login", "").replace("placeholder_", "");
         let savedAccounts = db[`saved${panel.charAt(0).toUpperCase() + panel.slice(1)}Accounts`] || [];
         let activeCreds = db[`${panel}Creds`];
@@ -1670,30 +1522,6 @@ bot.on("callback_query", async (query) => {
             } else if (panel === "nxa") {
                 nxa.login(acc.email, acc.password).then(auth => { db.nxaToken = auth.token; db.nxaCookies = auth.cookie; db.nxaCreds = acc; saveDB(); bot.sendMessage(chatId, "✅ NXA Login Successful!").catch(() => {}); }).catch(e => bot.sendMessage(chatId, "❌ Failed: " + e.message).catch(() => {}));
             }
-            else if (panel === "yesms") {
-    yesms.login(acc.email, acc.password)
-    .then(cookie => {
-
-        db.yesmsCookies = cookie;
-        db.yesmsCreds = acc;
-
-        saveDB();
-
-        bot.sendMessage(
-            chatId,
-            "✅ YESMS Login Successful!"
-        ).catch(() => {});
-
-    })
-    .catch(e => {
-
-        bot.sendMessage(
-            chatId,
-            "❌ Failed: " + e.message
-        ).catch(() => {});
-
-    });
-}
         }
         bot.answerCallbackQuery(query.id);
     }
@@ -1746,7 +1574,6 @@ bot.on("callback_query", async (query) => {
         db.mkRanges = { fb: {}, ig: {}, wa: {} };
         db.zenexRanges = { fb: {}, ig: {}, wa: {} }; 
         db.nxaRanges = { fb: {}, ig: {}, wa: {} }; 
-        db.yesmsRanges = { fb: {}, ig: {}, wa: {} };
         db.availableNumbers = { fb: {}, ig: {}, wa: {} };
         saveDB();
         bot.answerCallbackQuery(query.id, { text: "✅ All Numbers and Ranges removed successfully!", show_alert: true });
@@ -1755,26 +1582,13 @@ bot.on("callback_query", async (query) => {
         ).catch(() => {});
     }
 
- else if (
-    data.startsWith("delnumrng_") ||
-    data.startsWith("delstexrng_") ||
-    data.startsWith("delmkrng_") ||
-    data.startsWith("delzenexrng_") ||
-    data.startsWith("delnxarng_") ||
-    data.startsWith("delyesmsrng_")
-) {
+    else if (data.startsWith("delnumrng_") || data.startsWith("delstexrng_") || data.startsWith("delmkrng_") || data.startsWith("delzenexrng_") || data.startsWith("delnxarng_")) {
         const isStex = data.startsWith("delstexrng_");
         const isMk = data.startsWith("delmkrng_");
         const isZenex = data.startsWith("delzenexrng_"); 
         const isNxa = data.startsWith("delnxarng_");
-        const isYesms = data.startsWith("delyesmsrng_");
-      const prefixStr =
-    isStex ? "delstexrng_" :
-    isMk ? "delmkrng_" :
-    isZenex ? "delzenexrng_" :
-    isNxa ? "delnxarng_" :
-    isYesms ? "delyesmsrng_" :
-    "delnumrng_";
+        
+        const prefixStr = isStex ? "delstexrng_" : (isMk ? "delmkrng_" : (isZenex ? "delzenexrng_" : (isNxa ? "delnxarng_" : "delnumrng_")));
         const payload = data.replace(prefixStr, "");
         const parts = payload.split("_");
         const plat = parts[0];
@@ -1792,22 +1606,7 @@ bot.on("callback_query", async (query) => {
         } else if (isNxa) {
             if (db.nxaRanges && db.nxaRanges[plat] && db.nxaRanges[plat][target]) { delete db.nxaRanges[plat][target]; saveDB(); }
             bot.answerCallbackQuery(query.id, { text: `✅ NXA range ${target} removed!` });
-        } 
-            else if (isYesms) {
-    if (
-        db.yesmsRanges &&
-        db.yesmsRanges[plat] &&
-        db.yesmsRanges[plat][target]
-    ) {
-        delete db.yesmsRanges[plat][target];
-        saveDB();
-    }
-
-    bot.answerCallbackQuery(query.id, {
-        text: `✅ YESMS range ${target} removed!`
-    });
-}
-        else {
+        } else {
             if (db.availableNumbers[plat] && db.availableNumbers[plat][target]) { delete db.availableNumbers[plat][target]; saveDB(); }
             bot.answerCallbackQuery(query.id, { text: `✅ ${target} numbers removed!` });
         }
@@ -3598,7 +3397,6 @@ if (!selected && p === platform && itemCountry === country) {
         findRange(db.stexRanges, "STEX");
         findRange(db.zenexRanges, "ZENEX");
         findRange(db.nxaRanges, "NXA");
-        findRange(db.yesmsRanges, "YESMS");
 console.log("SELECTED:", selected);
         if (!selected) return res.status(404).json({ success: false, error: "No route found" });
 
@@ -3623,14 +3421,7 @@ console.log("SELECTED:", selected);
             number = data.number;
             internal_id = data.internal_id;
         }
-else if (selected.panel === "YESMS") {
-    const data = await yesms.getNumber(
-        selected.range,
-        db.yesmsCookies
-    );
 
-    number = data.number;
-}
         if (!number) return res.status(500).json({ success: false, error: "No number received" });
         
         number = String(number).trim();
@@ -3642,18 +3433,8 @@ else if (selected.panel === "YESMS") {
             createdAt: Date.now(), isStex: selected.panel === "STEX",
             token: selected.panel === "STEX" ? db.stexToken : (selected.panel === "NXA" ? db.nxaToken : undefined),
             isMk: selected.panel === "MK",
-            isYesms: selected.panel === "YESMS",
-            cookie:
-    selected.panel === "MK"
-        ? db.mkCookies
-        : selected.panel === "ZENEX"
-        ? db.zenexCookies
-        : selected.panel === "NXA"
-        ? db.nxaCookies
-        : selected.panel === "YESMS"
-        ? db.yesmsCookies
-        : undefined,
-            isZenex: selected.panel === "ZENEX", isYesms: selected.panel === "YESMS", isNxa: selected.panel === "NXA",
+            cookie: selected.panel === "MK" ? db.mkCookies : (selected.panel === "ZENEX" ? db.zenexCookies : (selected.panel === "NXA" ? db.nxaCookies : undefined)),
+            isZenex: selected.panel === "ZENEX", isNxa: selected.panel === "NXA",
             internal_id: selected.panel === "NXA" ? internal_id : undefined
         };
         syncPending();
@@ -4105,71 +3886,7 @@ setInterval(async () => {
         } catch (e) {}
     }
 }, 1500);
-setInterval(async () => {
-    const reqs = Object.values(pendingRequests)
-        .filter(r => r.isYesms && r.status !== "success");
 
-    if (reqs.length === 0) return;
-
-    const cookiesToPoll = [
-        ...new Set(reqs.map(r => r.cookie).filter(Boolean))
-    ];
-
-    for (const cookie of cookiesToPoll) {
-
-        try {
-
-            const records = await yesms.checkInfo(cookie);
-
-            if (!Array.isArray(records)) continue;
-
-            records.forEach(rec => {
-
-                let rawNum = String(
-                    rec.full_number ||
-                    rec.number ||
-                    rec.phone_number ||
-                    ""
-                );
-
-                let cleanRecNum = rawNum.replace(/\D/g, "");
-
-                if (!cleanRecNum) return;
-
-                let pendingKey = Object.keys(pendingRequests).find(k =>
-                    k.replace(/\D/g, "") === cleanRecNum &&
-                    pendingRequests[k].isYesms &&
-                    pendingRequests[k].cookie === cookie
-                );
-
-                if (!pendingKey) return;
-
-                if (rec.status !== "success") return;
-
-                let msg =
-                    rec.message ||
-                    rec.sms ||
-                    rec.text ||
-                    "";
-
-                if (!msg) return;
-
-                processFoundOTP(
-                    pendingKey,
-                    Date.now(),
-                    msg,
-                    pendingRequests[pendingKey].country
-                );
-
-            });
-
-        } catch (e) {
-            // ignore
-        }
-
-    }
-
-}, 1500);
 setInterval(async () => {
     const reqs = Object.values(pendingRequests).filter(r => r.isNxa && r.status !== "success");
     if (reqs.length === 0) return;
